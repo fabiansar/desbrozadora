@@ -33,20 +33,27 @@ extends Node3D
 @export var terreno: Terreno
 @export var semilla := 20260927
 ## Cuantas casas. Menos de cuatro queda triste, mas de catorce empieza a ser un
-## pueblo y ya no es una aldea.
-@export var num_casas := 9
-## Cuantas parcelas, con casa dentro o sin ella. Las parcelas sin casa tambien
-## se labran, y son las que de verdad dan el aire de minifundio.
-@export var num_parcelas := 18
+## pueblo y ya no es una aldea. Con 12 parcelas, cinco casas dejan siete huertos
+## vacios, y esos siete son los que hay que desbrozar: si van todos con casa, no
+## queda nada que limpiar.
+@export var num_casas := 5
+## La cuadricula de parcelas. Los muros de por medio son los que separan una de
+## otra, y se dibujan UNA vez, que es como se hace un deslinde: entre dos
+## parcelas hay un solo muro, no dos que se pisen.
+@export var columnas := 4
+@export var filas := 3
+## Las medidas de una parcela. Un minifundio de aqui son de 600 a 800 m2, y
+## el rectangulo sale de ahi: largo en la horizontal del terreno y fondo
+## subiendo la ladera.
+@export var largo_celda := 15.0
+@export var ancho_celda := 12.0
+## Numero de linea de muros por la que pasa la calle. El bloque tiene filas + 1
+## lineas, y la calle ocupa una de ellas.
+@export var calle_fila := 2
 @export var alto_muro := 0.95
 @export var grosor_muro := 0.5
-## Radio en el que se busca terreno llano. Cuanto mas grande, mas lejos esta
-## todo del centro, y mas suelta queda la aldea. A 64 el conjunto se lee como
-## una aldea; por encima de 80 ya son unas casas sueltas por la ladera.
-@export var radio_asentamiento := 64.0
-## El circulo que se deja libre en el centro. Es donde aparece el jugador, y
-## tiene que quedar despejado: aparecer dentro de un huerto cerrado con su
-## muro es una manera aspada de empezar.
+## El radio que se deja libre alrededor del punto de aparicion. La cuadricula se
+## coloca a partir de aqui para que el jugador no aparezca dentro de un huerto.
 @export var despeje_centro := 24.0
 
 # --- Estado de la generacion -------------------------------------------------
@@ -73,6 +80,13 @@ var _caras := 0
 
 var _solares: Array[Vector3] = []
 var _horreos: Array[Vector3] = []
+# La cuadricula de parcelas, ya colocada: de donde sale, con que giro va y hacia
+# que direcciones. Se guardan porque los muros de por medio hay que trazarlos en
+# las lineas de la cuadricula, no alrededor de cada parcela.
+var _giro_cuadricula := 0.0
+var _origen_cuadricula := Vector2.ZERO
+var _eje_cuadricula := Vector2.RIGHT
+var _normal_cuadricula := Vector2.UP
 var _giros: Array[float] = []
 var _parcelas: Array[Dictionary] = []
 var _caminos: Array[PackedVector3Array] = []
@@ -94,102 +108,169 @@ func _ready() -> void:
 	_generar_casas()
 	_generar_horreos()
 	_commitir()
-	print("Aldea: %d casas, %d parcelas, %d caminos, %d caras en %d mallas"
-		% [_solares.size(), _parcelas.size(), _caminos.size(), _caras, _n_mallas()])
+	print("Aldea: %d parcelas en %dx%d, %d casas, %d caminos, %d caras en %d mallas. El bloque cae en (%.0f, %.0f), girado %.0f grados"
+		% [_parcelas.size(), columnas, filas, _solares.size(), _caminos.size(), _caras,
+			_n_mallas(), _origen_cuadricula.x, _origen_cuadricula.y, rad_to_deg(_giro_cuadricula)])
 
 
 # --- Reparto -----------------------------------------------------------------
 
-## Busca los sitios. Va por orden: primero las parcelas, porque mandan sobre las
-## casas, y despues las casas, que se meten dentro de las parcelas.
+## Las parcelas son una CUADRICULA, y no por gusto. Van a ser el marco del
+## juego: un vecino te puede pedir que le desbrozes una, y para eso tiene que
+## haber forma de decir "la parcela 7" y de llegar a ella. Con los huertos
+## sueltos que habia antes no habia ni numero ni manera de señalar uno, y
+## ademas los muros de dos parcelas vecinas se cruzaban por el medio.
 ##
-## El criterio de "sitio bueno" es el mismo para todos: que el terreno sea llano.
-## Se mide el desnivel maximo en un circulo alrededor del punto, y si supera un
-## metro y medio no se construye ahi, porque una casa con las cuatro esquinas en
-## sitios distintos se cae. Las terrazas del terreno tambien valen, que para eso
-## estan: son los pisos planos de la ladera.
-##
-## Y va en tres pasadas de mas a menos exigente. El motivo es aritmetico: con
-## seis grados de pendiente, veintidos metros de lado ya son 2,3 m de desnivel
-## solo con la pendiente, sin contar la ondulacion. O sea, que el filtro estricto
-## no encuentra ni media parcela y la aldea sale con cuatro. Cada pasada
-## siguiente pide un metro y medio mas de tolerencia. Y no es que el terreno se
-## iguale: los muros de cada parcela ya bajan y suben Escalon a escalon siguiendo
-## el suelo, que es justo lo que hace un bancal. Lo que cambia es que se elige
-## antes un sitio llano y despues uno medio llano, en vez de al reves.
+## La cuadricula se gira con la horizontal del terreno, que es como se parcelan
+## las laderas: el lado largo de cada parcela va en la horizontal y el corto se
+##|sube la pendiente. Asi el bancal queda tumbado y no clavado en la ladera.
 func _reparto() -> void:
-	for holgura in [0.0, 0.8, 1.6]:
-		_reparto_pasada(1.5 + holgura, 2.2 + holgura * 1.5)
-		if _parcelas.size() >= num_parcelas:
-			break
+	_rng.seed = semilla
+	var sitio := _sitio_del_bloque()
+	var giro: float = sitio["giro"]
+	var origen: Vector2 = sitio["origen"]
+	_giro_cuadricula = giro
+	_origen_cuadricula = origen
+	_eje_cuadricula = Vector2(cos(giro), sin(giro))
+	_normal_cuadricula = Vector2(-sin(giro), cos(giro))
+	# Las parcelas, de fila en fila. El identificador es el numero que se le
+	# puede dar a un vecino, y va por filas, que es como se cuentan de verdad.
+	var id := 0
+	for f in filas:
+		for c in columnas:
+			var centro := origen \
+				+ _eje_cuadricula * ((float(c) + 0.5) * largo_celda - largo_celda * float(columnas) * 0.5) \
+				+ _normal_cuadricula * ((float(f) + 0.5) * ancho_celda - ancho_celda * float(filas) * 0.5)
+			_parcelas.append({
+				"id": id,
+				"fila": f,
+				"columna": c,
+				"centro": centro,
+				"largo": largo_celda,
+				"ancho": ancho_celda,
+				"giro": giro,
+				"casa": false,
+			})
+			id += 1
 	_elegir_casas()
 
 
-func _reparto_pasada(max_plano: float, max_plano_parcela: float) -> void:
-	_rng.seed = semilla
-	var candidatos: Array[Dictionary] = []
-	var paso := 8.0
-	var n := int(radio_asentamiento * 2.0 / paso)
+## Donde se coloca el bloque entero, y con que giro.
+##
+## No se busca un sitio llano para cada parcela por separado, que es como se
+## hacia antes y daba una aldea suelta. Se busca un sitio llano para el bloque,
+## midiendo lo que se aleja el terreno del PLANO que mejor le encaja. En una
+## ladera que es toda unplane, asi que el residuo es pequeno y da lo mismo en
+## todas partes; lo que busca es un sitio sin un bulto o un hoyo en medio, que es
+## donde los muros y las casas se descuadran.
+func _sitio_del_bloque() -> Dictionary:
+	var medio_c := float(columnas) * largo_celda * 0.5
+	var medio_f := float(filas) * ancho_celda * 0.5
+	var alcance := sqrt(medio_c * medio_c + medio_f * medio_f) + 6.0
+	var mejor := {"giro": 0.0, "origen": Vector2.ZERO, "plano": 1e9}
+	var n := 26
 	for i in n:
 		for j in n:
-			var p := Vector2(
-				-radio_asentamiento + paso * (float(i) + 0.5),
-				-radio_asentamiento + paso * (float(j) + 0.5))
-			if p.length() > radio_asentamiento:
+			var centro := Vector2(
+				-110.0 + 220.0 * (float(i) + 0.5) / float(n),
+				-110.0 + 220.0 * (float(j) + 0.5) / float(n))
+			var giro := _giro_de_horizontal(centro)
+			# Que el bloque quepa en el mapa, y que no se coma el punto de
+			# aparicion. Se mide en el sistema del bloque, que es donde estan sus
+			# lados, y no con un circulo: medirlo con un circulo obligaba a que el
+			# bloque entero cabiera en un anillo y no cabia nunca, y el bloque se
+			# quedaba en el origen, justo encima del jugador.
+			# Y con un tope de distancia. El llano mas bueno del mapa estaba a
+			# cien metros y, aunque se viera, era un paseo largo hasta el primer
+			# muro. A 62 el bloque entero queda a menos de noventa.
+			if centro.length() > 62.0:
 				continue
-			# El claro del centro se respeta aqui, con los candidatos, y no luego
-			# descartando parcelas: asi el reparto entero se reparte en el anillo
-			# de alrededor y no se amontona en un lado.
-			if p.length() < despeje_centro:
+			var u := centro.dot(Vector2(cos(giro), sin(giro)))
+			var v := centro.dot(Vector2(-sin(giro), cos(giro)))
+			if absf(u) + medio_c > 116.0 or absf(v) + medio_f > 116.0:
 				continue
-			var plano := _desnivel_around(p, 7.0)
-			if plano > max_plano:
+			var du := maxf(0.0, absf(u) - medio_c)
+			var dv := maxf(0.0, absf(v) - medio_f)
+			if sqrt(du * du + dv * dv) < despeje_centro:
 				continue
-			candidatos.append({"p": p, "plano": plano, "usado": false})
-	# Los mejores primero: por planitud y, a igualdad, por cercanía al centro,
-	# que es donde se mete el jugador.
-	candidatos.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		if absf(a["plano"] - b["plano"]) > 0.05:
-			return a["plano"] < b["plano"]
-		return a["p"].length() < b["p"].length())
-
-	var ocupadas: Array[Vector2] = []
-	for c in candidatos:
-		if _parcelas.size() >= num_parcelas:
-			break
-		if c["usado"]:
-			continue
-		var p: Vector2 = c["p"]
-		if _muy_cerca(p, ocupadas, 16.0):
-			continue
-		# La parcela tiene que caber entera en llano, no solo su centro.
-		if _desnivel_around(p, 11.0) > max_plano_parcela:
-			continue
-		ocupadas.append(p)
-		c["usado"] = true
-		_parcelas.append({
-			"centro": p,
-			"largo": _rng.randf_range(14.0, 19.0),
-			"ancho": _rng.randf_range(9.0, 13.0),
-			"giro": _giro_de_horizontal(p),
-		})
+			# Y que se VEA desde donde aparece el jugador. Sin esta comprobacion
+			# la aldea se colocaba en el sitio mas llano del mapa, que era el mas
+			# apartado, y desde el punto de aparicion se veia un tejado de nueve:
+			# el resto de la aldea quedaba detras de un lomo, y el jugador
+			# aparecia en un prado sin nada alrededor.
+			if not _se_ve_desde_el_juego(centro, giro):
+				continue
+			# Entre llanos se elige el mas CERCA. Solo con el residuo salia el
+			# sitio mas llano del mapa, que era el mas apartado del jugador. El
+			# peso es pequeno a proposito: medio metro de desnivel vale mas que
+			# veinte metros de distancia, pero no que sesenta.
+			var residuo := _residuo_del_plano(centro, giro, alcance) + centro.length() * 0.006
+			if residuo < mejor["plano"]:
+				mejor = {"giro": giro, "origen": centro, "plano": residuo}
+	return mejor
 
 
-## Las casas van en las primeras parcelas, que son las mejor situadas, y una
-## sola vez. Antes iban dentro de cada pasada del reparto, y como las parcelas
-## de una pasada se quedan para la siguiente, salian 4 casas en la primera y 9
-## mas en la segunda, sin que ninguna compruebase si su parcela ya tenia casa.
+## Si desde el punto de aparicion se ve el bloque, o si por el camino se pone
+## un lomo. Se traza la visual desde el ojo del jugador hasta lo alto de una
+## casa en el centro del bloque, y se mira que el terreno no se suba por encima
+## de esa linea.
+func _se_ve_desde_el_juego(centro: Vector2, giro: float) -> bool:
+	var ojo := Vector2(0.0, 2.5)
+	var objetivo := centro
+	var altura := terreno.cota_en(objetivo) + 3.0
+	var pasos := 20
+	for i in range(1, pasos):
+		var t := float(i) / float(pasos - 1)
+		var p := ojo.lerp(objetivo, t)
+		var linea: float = ojo.y + (altura - ojo.y) * t
+		if terreno.cota_en(p) > linea - 0.15:
+			return false
+	return true
+
+
+## Lo que se sale el terreno del plano que mejor le encaja, en los nueve puntos
+## de una malla tres por tres sobre el bloque. Con un plano de referencia queda
+## la pendiente general, y lo que sobra es lo que de verdad molesta: el bulto.
+func _residuo_del_plano(centro: Vector2, giro: float, alcance: float) -> float:
+	var eje := Vector2(cos(giro), sin(giro))
+	var normal := Vector2(-sin(giro), cos(giro))
+	var alturas: Array[float] = []
+	for j: float in [-1.0, 0.0, 1.0]:
+		for i: float in [-1.0, 0.0, 1.0]:
+			var p := centro + eje * (i * alcance * 0.8) + normal * (j * alcance * 0.8)
+			alturas.append(terreno.cota_en(p))
+	var suma := 0.0
+	for h in alturas:
+		suma += h
+	var media := suma / alturas.size()
+	var residuo := 0.0
+	for h in alturas:
+		residuo = maxf(residuo, absf(h - media))
+	return residuo
+
+
+## Las casas van en las primeras parcelas de la cuadricula, que son las del
+## borde de la bajada, que es donde se instala la gente. Una por parcela, y en
+## las que el terreno este mas llano, porque una casa con las cuatro esquinas en
+## sitios distintos se cae.
 func _elegir_casas() -> void:
-	for i in mini(num_casas, _parcelas.size()):
-		var centro: Vector2 = _parcelas[i]["centro"]
-		# La casa a un lado de la parcela, no al centro: la entrada mira a la
+	var orden: Array[Dictionary] = []
+	for parcela in _parcelas:
+		var c: Vector2 = parcela["centro"]
+		orden.append({"p": parcela, "plano": _desnivel_around(c, 7.0)})
+	orden.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a["plano"] < b["plano"])
+	for i in mini(num_casas, orden.size()):
+		var parcela: Dictionary = orden[i]["p"]
+		var c: Vector2 = parcela["centro"]
+		parcela["casa"] = true
+		# La casa a un lado de la parcela, no en el centro: la entrada mira a la
 		# bajada y detras queda el huerto, que es como se hace.
-		var sitio := centro + Vector2(_rng.randf_range(-2.5, 2.5), _rng.randf_range(-2.5, 2.5))
+		var sitio := c + Vector2(
+			_rng.randf_range(-3.0, 3.0), _rng.randf_range(-2.5, 2.5))
 		if _desnivel_around(sitio, 6.0) > 1.3:
-			sitio = centro
+			sitio = c
 		_solares.append(Vector3(sitio.x, terreno.cota_en(sitio), sitio.y))
-		# La puerta mira siempre hacia abajo de la ladera, que es donde esta lo
-		# que hay que ver.
 		_giros.append(_giro_de_horizontal(sitio) + PI * 0.5)
 
 
@@ -296,43 +377,35 @@ func dentro(p: Vector2) -> bool:
 ## empieza en la casa mas baja y cada vez tira a la mas cercana que le queda,
 ## y sale un camino serpenteante como los de verdad.
 func _generar_caminos() -> void:
-	if _solares.is_empty():
-		return
-	# duplicate() devuelve un Array sin tipo, asi que el tipo se pone a mano.
-	var quedan: Array[Vector3] = _solares.duplicate()
-	var actual: Vector3 = quedan.pop_back()
-	for s in quedan:
-		if s.y < actual.y:
-			actual = s
+	# La calle va sobre una LINEA DE MUROS de la cuadricula, y el muro de esa
+	# linea se abre a lo ancho de la calzada. Asi la calle es la linea y el muro
+	# esta a los dos lados, como en las aldeas de verdad, donde el camino
+	# central se fue abriendo y comiendose los deslindes.
+	#
+	# Antes el camino se trazaba de casa en casa con el vecino mas cercano, y
+	# con las parcelas sueltas eso salia bien. Con la cuadricula cruzaba los
+	# huertos por el medio y se pasaba por encima de los muros, que es
+	# justamente una de las cosas que faltaban por tener sentido.
+	var medio_c := float(columnas) * largo_celda * 0.5
+	var medio_f := float(filas) * ancho_celda * 0.5
+	var y := -medio_f + float(calle_fila) * ancho_celda
+	var salida := medio_c + 34.0
 	var ruta := PackedVector3Array()
-	ruta.push_back(actual)
-	while not quedan.is_empty():
-		var mejor := 0
-		var mejor_d := INF
-		for i in quedan.size():
-			var d := quedan[i].distance_squared_to(actual)
-			if d < mejor_d:
-				mejor_d = d
-				mejor = i
-		actual = quedan[mejor]
-		quedan.remove_at(mejor)
-		ruta.push_back(actual)
+	for i in 9:
+		var u := -salida + (salida * 2.0) * float(i) / 8.0
+		var p := _origen_cuadricula + _eje_cuadricula * u + _normal_cuadricula * y
+		ruta.push_back(Vector3(p.x, terreno.cota_en(p) + 0.05, p.y))
 	_caminos.append(ruta)
-	for s in _solares:
-		var puerta := s + Vector3(0, 0, 1.4)
-		var mejor := Vector3.ZERO
-		var mejor_d := INF
-		for p in ruta:
-			var d := Vector2(p.x - puerta.x, p.z - puerta.z).length_squared()
-			if d < mejor_d:
-				mejor_d = d
-				mejor = p
-		# El ramal va siempre, aunque sea corto: el camino principal pasa por
-		# el centro de la parcela y la puerta esta en la fachada, que mira a la
-		# bajada, o sea al otro lado. Sin el ramal el camino llega al solar y se
-		# queda en medio del huerto.
-		if mejor_d > 0.5:
-			_caminos.append(PackedVector3Array([puerta, mejor]))
+	# Y dos ramales fuera del bloque, que son por donde se entra y por donde se
+	# sale, para que la calle no se quede cortada en seco en el primer muro.
+	for lado: float in [-1.0, 1.0]:
+		var p0 := _origen_cuadricula + _eje_cuadricula * (lado * salida) \
+			+ _normal_cuadricula * y
+		var p1 := p0 + _normal_cuadricula * (lado * 26.0)
+		_caminos.append(PackedVector3Array([
+			Vector3(p0.x, terreno.cota_en(p0) + 0.05, p0.y),
+			Vector3(p1.x, terreno.cota_en(p1) + 0.05, p1.y),
+		]))
 
 
 # --- Las parcelas y sus muros ------------------------------------------------
@@ -429,27 +502,55 @@ func _piedrecas(p: Vector2, alto: float, grosor: float) -> void:
 ## lomos de tierra levantada, que es la labranza: cuatro hileras paralelas al
 ## lado largo de la parcela.
 func _generar_parcelas() -> void:
+	# Los muros van por LINEAS DE CUADRICULA, no alrededor de cada parcela. Es la
+	# diferencia entre un deslinde y un amasijo: con un muro por parcela, el de la
+	# parcela de al lado caia encima del de esta, los dos con su grosor, y en las
+	# juntas se veian dos paredes peleandose por el mismo metro de suelo.
+	#
+	# Asi se recorre la cuadricula entera: una pasada por las columnas de muro y
+	# otra por las filas. Cada linea se parte en los tramos de cada parcela, y ahi
+	# es donde va el paso: el hueco de una parcela es un tramo de la linea, y como
+	# el tramo es suyo y solo suyo, no hay dos parcelas pidiendo paso a la vez en el mismo muro.
+	var medio_c := float(columnas) * largo_celda * 0.5
+	var medio_f := float(filas) * ancho_celda * 0.5
+	for c in columnas + 1:
+		var x := -medio_c + float(c) * largo_celda
+		for f in filas:
+			var y0 := -medio_f + float(f) * ancho_celda
+			_muro_de_cuadricula(x, y0, x, y0 + ancho_celda, 0.0)
+	for f in filas + 1:
+		var y := -medio_f + float(f) * ancho_celda
+		# En la linea de la calle el muro se abre a lo ancho de la calzada, y en
+		# las demas lineas solo para el paso de una parcela, que es un hueco
+		# estrecho de 1,8 m.
+		var hueco := 5.0 if f == calle_fila else 1.8
+		for c in columnas:
+			var x0 := -medio_c + float(c) * largo_celda
+			_muro_de_cuadricula(x0, y, x0 + largo_celda, y, hueco)
+	# Y los lomos de labranza dentro de cada parcela, que ya no hacen falta para
+	# que la parcela se entienda: son la tierra que hay labrada.
 	for parcela in _parcelas:
 		var centro: Vector2 = parcela["centro"]
-		var largo: float = parcela["largo"]
-		var ancho: float = parcela["ancho"]
-		var giro: float = parcela["giro"]
-		var cs := cos(giro)
-		var sn := sin(giro)
-		var eje := Vector2(cs, sn)
-		var normal := Vector2(-sn, cs)
-		var esquinas := [
-			centro + eje * (largo * 0.5) + normal * (ancho * 0.5),
-			centro + eje * (largo * 0.5) - normal * (ancho * 0.5),
-			centro - eje * (largo * 0.5) - normal * (ancho * 0.5),
-			centro - eje * (largo * 0.5) + normal * (ancho * 0.5),
-		]
-		for i in 4:
-			_muro(esquinas[i], esquinas[(i + 1) % 4], alto_muro, grosor_muro, 1.8 if i == 0 else 0.0)
 		for f in 4:
 			var t := (float(f) + 0.7) / 4.4 - 0.5
-			_lomo(centro + eje * (largo * 0.42) + normal * (ancho * t),
-				centro - eje * (largo * 0.42) + normal * (ancho * t), 0.45, 0.5, _tierra)
+			_lomo(centro + _eje_cuadricula * (largo_celda * 0.42)
+					+ _normal_cuadricula * (ancho_celda * t),
+				centro - _eje_cuadricula * (largo_celda * 0.42)
+					+ _normal_cuadricula * (ancho_celda * t), 0.45, 0.5, _tierra)
+
+
+## Un tramo de muro de la cuadricula, en coordenadas de la cuadricula (x a lo
+## largo del eje, y subiendo la normal).
+##
+## El paso va solo en las lineas de fila, y por tanto cada parcela tiene uno y
+## solo uno, en el muro de arriba. En las lineas de columna no, que si no dos
+## parcelas vecinas estarian pidiendo el hueco al mismo tiempo en el mismo muro.
+## Por eso el parametro se pasa explicito en las dos pasadas y no se decide
+## aqui: el que sabe si este tramo es de fila o de columna es quien lo traza.
+func _muro_de_cuadricula(x0: float, y0: float, x1: float, y1: float, hueco: float) -> void:
+	var a := _origen_cuadricula + _eje_cuadricula * x0 + _normal_cuadricula * y0
+	var b := _origen_cuadricula + _eje_cuadricula * x1 + _normal_cuadricula * y1
+	_muro(a, b, alto_muro, grosor_muro, hueco)
 
 
 ## Una tira de tierra pegada al terreno, de `ancho`, que se eleva `alto`.
@@ -524,17 +625,30 @@ func _generar_casas() -> void:
 
 ## Los cuatro muros, cada uno con su grosor, y sin que se crucen en las
 ## esquinas: los dos largos van por dentro y los cortos por fuera.
+##
+## Los muros no son cajas. Antes lo eran: cuatro cajas planas a la altura del
+## solar, y en una ladera la esquina de abajo se hundia en el terreno y la de
+## arriba se quedaba en el aire. Ahora cada muro se traza con `_muro()`, que es
+## el mismo camino que siguen los muros de las parcelas: va mirando el suelo y
+## sube y baja a escalones. Una casa con el zocalo clavado en la ladera.
 func _muros_de_casa(solar: Vector3, giro: float, largo: float, fondo: float,
 		altura: float) -> void:
 	var grosor := 0.45
-	var eje := Vector3(cos(giro), 0.0, sin(giro))
-	var normal := Vector3(-sin(giro), 0.0, cos(giro))
+	var eje := Vector2(cos(giro), sin(giro))
+	var normal := Vector2(-sin(giro), cos(giro))
+	var centro := Vector2(solar.x, solar.z)
+	var y0 := _y0
+	# Los dos largos, por dentro, y los dos cortos por fuera, para que no se
+	# crucen en las esquinas.
 	for lado: float in [-1.0, 1.0]:
-		_caja(_piedra, solar + normal * (lado * (fondo * 0.5 - grosor * 0.5)),
-			Vector3(largo, altura, grosor), giro)
+		var linea := centro + normal * (lado * (fondo * 0.5 - grosor * 0.5))
+		_muro(linea - eje * (largo * 0.5), linea + eje * (largo * 0.5),
+			altura, grosor, 0.0)
 	for lado: float in [-1.0, 1.0]:
-		_caja(_piedra, solar + eje * (lado * (largo * 0.5 - grosor * 0.5)),
-			Vector3(grosor, altura, fondo - grosor * 2.0), giro)
+		var linea := centro + eje * (lado * (largo * 0.5 - grosor * 0.5))
+		_muro(linea - normal * (fondo * 0.5 - grosor * 0.5),
+			linea + normal * (fondo * 0.5 - grosor * 0.5), altura, grosor, 0.0)
+	_y0 = y0
 
 
 ## El tejado a dos aguas: dos faldones y dos hastiales.
@@ -553,10 +667,17 @@ func _prisma(base: Vector3, giro: float, largo: float, fondo: float, alto: float
 	for lado: float in [-1.0, 1.0]:
 		# El faldon, inclinado. El centro va a media altura del faldon, a media
 		# anchura: de ahi sale la inclinacion, y con el vuelo de sobra para que
-		# las losas se pisen en la cumbrera.
+		# los faldones se pisen en la caballera.
+		#
+		# El signo de la inclinacion es lo unico que separa un tejado de una
+		# cebada: los dos faldones tienen que CAER hacia fuera y juntarse arriba
+		# en la caballera. Con el signo al reves los dos bajan hacia el centro y
+		# se forma una V en medio, que de lejos no se lee como tejado sino como
+		# dos losas torcidas, y la caballera se queda flotando por encima sin
+		# tocar nada.
 		_caja_inclinada(t,
 			base + Vector3.UP * (alto + caballete * 0.5) + Vector3(-sin(giro), 0.0, cos(giro)) * (lado * f * 0.5),
-			Vector3(l * 2.0, 0.14, largo_faldon), giro, -lado * pendiente)
+			Vector3(l * 2.0, 0.14, largo_faldon), giro, lado * pendiente)
 		# El hastial, que es el triangulito de debajo. Va en piedra, porque el
 		# hastial se cierra con la pared. Y es un TRIANGULO de verdad, con su
 		# funcion: si se pasa como un cuadrilatero con el ultimo punto repetido,
@@ -623,11 +744,15 @@ func _generar_horreos() -> void:
 func _sitio_para_horreo() -> Vector3:
 	var mejor := Vector3.ZERO
 	var mejor_plano := 1.2
+	# Ahora los hórreos se buscan ALREDEDOR de la cuadricula, que es donde
+	# tienen sentido: en la era de la aldea, no en mitad de un huerto.
+	var medio_c := float(columnas) * largo_celda * 0.5
+	var medio_f := float(filas) * ancho_celda * 0.5
+	var alcance := sqrt(medio_c * medio_c + medio_f * medio_f) + 14.0
 	for intento in 400:
-		var p := Vector2(
-			_rng.randf_range(-radio_asentamiento, radio_asentamiento),
-			_rng.randf_range(-radio_asentamiento, radio_asentamiento))
-		if p.length() > radio_asentamiento or p.length() < despeje_centro * 0.7:
+		var p := _origen_cuadricula + Vector2(
+			_rng.randf_range(-alcance, alcance), _rng.randf_range(-alcance, alcance))
+		if p.length() > 112.0:
 			continue
 		var plano := _desnivel_around(p, 5.0)
 		if plano >= mejor_plano:

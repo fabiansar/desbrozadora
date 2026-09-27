@@ -30,22 +30,50 @@ huertos cerrados con muro de piedra seca.
 
 ### La aldea
 
-- `scripts/aldea.gd` (`class_name Aldea`) reparte 18 parcelas y 9 casas, mas dos
-  hórreos, caminos y lomos de labranza. Todo se apoya en `terreno.cota_en()`.
-- Las parcelas van cerradas con su muro de piedra seca, con hueco para el paso, y
-  el muro baja y sube escalon a escalon siguiendo el suelo, que es lo que hace
-  un bancal de verdad.
-- Los tejados van mitad de paja y mitad de pizarra, con `shaders/piedra.gdshader`
-  para la piedra: sillares, juntas, grano y musgo por la altura sobre el suelo.
-- Una malla por material (6 en total) en vez de una por casa: unas 11.600 caras
-  en seis llamadas de dibujo.
+- `scripts/aldea.gd` (`class_name Aldea`) monta la aldea como una **cuadricula de
+  12 parcelas** de 15 x 12 m, girada con la horizontal del terreno, con 5 casas y
+  dos hórreos. Todo se apoya en `terreno.cota_en()`.
+
+  Las parcelas van en cuadricula y no sueltas porque van a ser el marco del
+  juego: un vecino te puede pedir que le desbrozes una, y para eso tiene que
+  haber manera de decir "la parcela 7" y de llegar hasta ella. Cada parcela
+  guarda su `id`, su fila y su columna.
+
+- **Los muros van por lineas de cuadricula, no alrededor de cada parcela.** Con un
+  muro por parcela, el de una caia encima del de la vecina y en las juntas se
+  veian dos paredes peleandose por el mismo metro de suelo. Ahora entre dos
+  parcelas hay un solo muro. El paso va solo en las lineas de fila, para que
+  cada parcela tenga un hueco y solo uno.
+
+- **La calle va sobre una linea de muros**, con el muro abierto a lo ancho de la
+  calzada, y dos ramales fuera del bloque. Antes el camino se trazaba de casa en
+  casa con el vecino mas cercano, y con las parcelas sueltas pasaba por encima
+  de los huertos y de los muros.
+
+- Los tejados a dos aguas caian **al reves**: los dos faldones bajaban hacia el
+  centro y dejaban una V en medio, con la caballera flotando por encima sin
+  tocar nada. De lejos no se leia como tejado.
+
+- Los muros de las casas ya no son cajas planas a la altura del solar, que en
+  una ladera hundian la esquina de abajo y dejaban la de arriba en el aire. Ahora
+  se trazan con el mismo camino que los muros de las parcelas, siguiendo el
+  suelo a escalones.
+
+- La aldea se coloca en el sitio llano **y visible** desde el punto de
+  aparicion, a menos de 62 m. Antes salia en el llano mas bueno del mapa, que
+  estaba a cien metros y detras de un lomo: desde donde aparece el jugador se
+  veia un tejado de nueve y el resto no se veia. Ahora la aldea ocupa el 28,6 %
+  del cuadro.
+
+- Con 12 parcelas y 5 casas quedan siete huertos sin casa, que son los que hay
+  que desbrozar. Si van todos con casa no queda nada que limpiar.
+
 - Las cajas de colision cuelgan de un `StaticBody3D` llamado `Solidos`. Sueltas
   bajo el `Node3D` de la aldea no colisionaban con nada y Godot no avisaba.
-- El reparto va en tres pasadas de mas a menos exigencia. Con 6 grados de
-  pendiente, 22 m de lado ya son 2,3 m de desnivel, asi que el filtro estricto
-  solo encontraba 4 parcelas y la aldea salia a medias.
-- Se deja un claro de 24 m en el centro: es donde aparece el jugador y tiene que
-  quedar libre, que aparecer dentro de un huerto cerrado es empezar mal.
+
+- 7.908 caras en 6 mallas, unas 100 ms de generacion. Los muros van sin
+  colision a proposito: uno de piedra seca de un metro se salta, y un trimesh de
+  4.000 triangulos hace que la maquina se enganche en los bordes.
 
 ### Hierba y bosque sobre el terreno
 
