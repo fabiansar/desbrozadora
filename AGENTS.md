@@ -41,8 +41,11 @@ Proyecto desarrollado en Godot 4.7 (GDScript + Shaders) y pipeline con Blender.
   encuadra la máquina en la vista. **No vale con pasarle el fichero a
   Blender**: da `File format is not supported`.
   ```
-  flatpak run --filesystem=$HOME/Documentos org.blender.Blender --python tools/abrir_modelo.py -- models/desbrozadora_100x.glb
+  flatpak run --filesystem=$HOME/Documentos org.blender.Blender \
+      --python "$PWD/tools/abrir_modelo.py" -- "$PWD/models/desbrozadora_100x.glb"
   ```
+  Las rutas van con `$PWD` porque el flatpak arranca Blender en su propio
+  directorio y no encuentra el proyecto con rutas relativas.
 - Se carga el modelo tal cual, sin recolocar ni recolorear la máquina: el
   origen y la jerarquía (`Corte`, `Giro`) se respetan, porque de eso depende
   el juego.

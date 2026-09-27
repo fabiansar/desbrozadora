@@ -17,7 +17,7 @@ RUTA = "/home/n41b4f/Documentos/desarrollos/desbrozadora/models/desbrozadora.glb
 # Lo que se espera del modelo, con margen.
 ESPERADO_LARGO = (1.0, 1.5)
 ESPERADO_ANCHO = (0.15, 0.60)
-ESPERADO_CORTE_Y = (-1.25, -0.95)
+ESPERADO_CORTE_Y = (-1.05, -0.80)
 
 
 def main():
