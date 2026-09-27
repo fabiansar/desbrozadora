@@ -1,0 +1,10 @@
+# La carpeta que Godot se guarda a si mismo: la regenera sola al abrir el
+# proyecto y son 5 MB de cachés y importaciones. No tiene sentido vigilarla.
+.godot/
+
+# Igual que en el exportador: binarios ya montados. El codigo fuente, si.
+export_presets.cfg
+/build/
+/export/
+*.pck
+*.zip

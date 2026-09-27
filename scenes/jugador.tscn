@@ -1,0 +1,47 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/jugador.gd" id="1_jugador"]
+[ext_resource type="Script" path="res://scripts/camara_gopro.gd" id="2_camara"]
+[ext_resource type="PackedScene" path="res://scenes/desbrozadora.tscn" id="3_herramienta"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_cuerpo"]
+radius = 0.35
+height = 1.7
+
+; Suelo, camara y luces van en "main.tscn", no aqui. El terreno tiene que estar
+; quieto en el mundo: si cuelga del jugador se va con el y el jugador cae
+; eternamente sin llegar nunca al suelo (y aun asi da "is_on_floor" true,
+; porque esta encima de su propio suelo).
+
+; La mascara lleva el 1 del suelo y el 4 de los arboles. Con solo el 1 se
+; atravesaban los troncos como si fueran humo.
+[node name="Player" type="CharacterBody3D"]
+collision_layer = 2
+collision_mask = 5
+script = ExtResource("1_jugador")
+cabeza = NodePath("Cabeza")
+
+[node name="Colision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
+shape = SubResource("CapsuleShape3D_cuerpo")
+
+[node name="Cabeza" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.62, 0)
+
+[node name="Camara" type="Camera3D" parent="Cabeza"]
+fov = 100.0
+script = ExtResource("2_camara")
+jugador = NodePath("../..")
+
+; Las caderas. La maquina va colgada de aqui y no de la camara, porque los
+; brazos no nacen en los ojos: nacen en la cadera. Este nodo gira con retardo
+; detras de la mirada, y ese retraso es lo que hace que al girar de golpe la
+; maquina se mueva primero y las caderas vayan despues.
+[node name="Caderas" type="Node3D" parent="."]
+
+; El punto donde se sujetan las manos. OJO: la posicion y la inclinacion las
+; pone desbrozadora.gd cada fotograma en funcion de hacia donde se mira, asi
+; que aqui solo esta el origen.
+[node name="PivoteDesbrozadora" type="Node3D" parent="Caderas"]
+
+[node name="Desbrozadora" parent="Caderas/PivoteDesbrozadora" instance=ExtResource("3_herramienta")]

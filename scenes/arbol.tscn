@@ -1,0 +1,57 @@
+[gd_scene load_steps=9 format=3]
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_tronco"]
+height = 2.4
+radius = 0.3
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_tronco"]
+top_radius = 0.17
+bottom_radius = 0.24
+height = 1.8
+radial_segments = 6
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_corteza"]
+albedo_color = Color(0.267, 0.184, 0.114, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_copa_baja"]
+top_radius = 0.0
+bottom_radius = 1.25
+height = 2.2
+radial_segments = 6
+rings = 1
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_copa_alta"]
+top_radius = 0.0
+bottom_radius = 0.95
+height = 1.8
+radial_segments = 6
+rings = 1
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_hoja"]
+albedo_color = Color(0.157, 0.353, 0.129, 1)
+roughness = 0.95
+
+[node name="Arbol" type="StaticBody3D"]
+collision_layer = 4
+collision_mask = 0
+
+[node name="Colision" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 0)
+shape = SubResource("CylinderShape3D_tronco")
+
+[node name="Tronco" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+mesh = SubResource("CylinderMesh_tronco")
+surface_material_override/0 = SubResource("StandardMaterial3D_corteza")
+
+[node name="CopaBaja" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.0, 0)
+mesh = SubResource("CylinderMesh_copa_baja")
+surface_material_override/0 = SubResource("StandardMaterial3D_hoja")
+
+[node name="CopaAlta" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.1, 0)
+mesh = SubResource("CylinderMesh_copa_alta")
+surface_material_override/0 = SubResource("StandardMaterial3D_hoja")

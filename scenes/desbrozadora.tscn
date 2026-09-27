@@ -1,0 +1,24 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/desbrozadora.gd" id="1_desbrozadora"]
+[ext_resource type="PackedScene" path="res://models/desbrozadora_pro.glb" id="2_modelo"]
+[ext_resource type="AudioStream" path="res://audio/motor.wav" id="3_motor"]
+
+[node name="Desbrozadora" type="Node3D"]
+script = ExtResource("1_desbrozadora")
+modelo = NodePath("Modelo")
+giro = NodePath("Modelo/Desbrozadora/Giro")
+corte = NodePath("Modelo/Desbrozadora/Giro/Corte")
+motor_sonido = NodePath("Motor")
+
+; El modelo viene con el eje de la herramienta en +Z (tubo y cabezal hacia +Z),
+; y una camara de Godot mira hacia -Z. Por eso el giro de 180 grados en Y: sin
+; el, la desbrozadora se veria apuntando hacia atras. El giro en Y no cambia
+; la altura, asi que el cabezal sigue quedandose por debajo de las manos.
+[node name="Modelo" parent="." instance=ExtResource("2_modelo")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+
+[node name="Motor" type="AudioStreamPlayer3D" parent="."]
+stream = ExtResource("3_motor")
+unit_size = 6.0
+max_distance = 60.0
