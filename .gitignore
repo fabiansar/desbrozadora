@@ -13,3 +13,17 @@ export_presets.cfg
 # ejecutarlas. Son binarios que se regeneran solos, como los de Godot.
 __pycache__/
 *.pyc
+
+# Las piezas que aun no se usan en el juego: los cabezales de disco y de
+# hilo, y la furgoneta. estan en el proyecto para tenerlas a mano cuando
+# toque la fase de los discos o la conduccion, pero Godot no deberia
+# importarlas ni el repositorio guardarlas mientras no entren en escena.
+# Cuando una se use, se quita de aqui con git rm --cached.
+models/cabezal_disco_2p.glb
+models/cabezal_disco_2p.glb.import
+models/cabezal_disco_3p.glb
+models/cabezal_disco_3p.glb.import
+models/cabezal_hilo.glb
+models/cabezal_hilo.glb.import
+models/furgoneta.glb
+models/furgoneta.glb.import
