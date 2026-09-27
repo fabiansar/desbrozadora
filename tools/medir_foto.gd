@@ -11,6 +11,11 @@ var fase := 0
 var con_hierba: Image
 var fuera: Image
 
+## Cuantos fotogramas se da antes de medir. No es un numero de adorno: hay que
+## dar tiempo a que la siembra termine y a que los shaders se compilen. Con diez
+## fotogramas la foto salia a medio hacer.
+const ESPERA := 40
+
 
 func _initialize() -> void:
 	mundo = load("res://scenes/main.tscn").instantiate()
@@ -19,13 +24,22 @@ func _initialize() -> void:
 
 func _process(_delta: float) -> bool:
 	cuadros += 1
-	if cuadros < 10:
+	if cuadros < ESPERA:
 		return false
 	match fase:
 		0:
 			con_hierba = root.get_texture().get_image()
 			print("con hierba: %dx%d" % [con_hierba.get_width(), con_hierba.get_height()])
-			var h := mundo.get_node_or_null("Hierba") as MultiMeshInstance3D
+			# El campo de hierba es un Node3D con un MultiMeshInstance3D por
+			# cuadrante, no un MultiMeshInstance3D suelto como era antes de
+			# partirlo. Si se busca el tipo equivocado, esto revienta con un
+			# "Nil" y la foto sale siempre igual, que es justo lo que hay que
+			# comprobar.
+			var h := mundo.get_node_or_null("Hierba") as Node3D
+			if h == null:
+				push_error("no esta el campo de hierba en la escena")
+				quit(1)
+				return true
 			h.visible = false
 			fase = 1
 			cuadros = 0

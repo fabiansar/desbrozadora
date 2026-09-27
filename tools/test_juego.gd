@@ -1386,12 +1386,18 @@ func _error_de_camara(yaw_objetivo: float) -> float:
 func _captura() -> void:
 	print("\n== captura ==")
 	# En headless no hay nada que dibujar (el servidor de graficos va en dummy),
-	# asi que la comprobacion de imagen solo tiene sentido con ventana de verdad:
-	#     godot --path . --script tools/test_juego.gd
+	# asi que la comprobacion de imagen solo tiene sentido con ventana de verdad.
+	#
+	# Este aviso NO es un fallo pendiente: es el aviso de que aqui no se ha
+	# comprobado que la hierba se dibuje. Para cerrarlo hay que lanzar la
+	# herramienta de imagen, que va por separado y es mucho mas rapida que
+	# repetir toda la suite con ventana, porque mira solo lo que importa:
+	#     flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+	#       --path . --script tools/medir_foto.gd --rendering-driver vulkan
 	if DisplayServer.get_name() == "headless":
 		print("   OMITIDA: sin servidor de graficos (headless)")
 		_avisos += 1
-		print("   AVISO falta la comprobacion de imagen; ejecuta sin --headless")
+		print("   AVISO sin comprobar la imagen; se cierra con tools/medir_foto.gd")
 		return
 	await process_frame
 	await process_frame
@@ -1422,15 +1428,45 @@ func _captura() -> void:
 
 # --- Ayudantes --------------------------------------------------------
 
-## Espera un tiempo REAL. Contar fotogramas no vale: en headless el bucle corre
-## tan rapido que 40 fotogramas son 4 milisegundos, y el retardo de la camara y
-## el angular no llegan a tiempo a moverse.
+## Espera un tiempo de SIMULACION, no de reloj.
+##
+## Esto antes contaba los milisegundos del reloj del sistema, y con el
+## renderizador Vulkan eso es una trampa. Godot solo deja recuperar 8 pasos de
+## fisica por fotograma (max_physics_steps_per_frame), asi que cuando un
+## fotograma tarda medio segundo --al compilar shaders, o al dibujar el campo
+## entero la primera vez-- la simulacion se queda ATRASADA: se han simulado
+## 130 ms de los 500 que de verdad han pasado. La espera de reloj se agotaba
+## antes de tiempo, las pruebas que miden movimiento veian al jugador a medio
+## camino, y el fallo no era de la mecanica sino del reloj. En headless no se
+## notaba, porque ahi no hay tirones.
+##
+## Ahora se cuentan los fotogramas de verdad, que es lo que se quiere esperar. Se
+## cuentan LOS DOS, los de fisica (que mueven al jugador) y los de proceso (que
+## mueven el retardo de la camara y el angular), y se sale cuando han pasado los
+## dos, que es lo que hacia el bucle original. No se sale con el que llegue
+## rapido, que si no se pierde el otro.
+##
+## El tope de reloj queda, pero holgado y de seguridad: si la simulacion se
+## atasca del todo, el bucle sale igual y avisa, en vez de colgarse. Con esta
+## maquina renderizando por software a un fps, la suite entera con Vulkan
+## tardaria doce minutos, asi que el tope no sirve para ir mas rapido: para eso
+## esta la comprobacion de imagen, que va por separado.
 func _esperar(segundos: float) -> void:
+	var objetivo := int(segundos * float(Engine.physics_ticks_per_second))
+	var inicio_fisica := Engine.get_physics_frames()
+	var inicio_proceso := Engine.get_process_frames()
 	var t0 := Time.get_ticks_msec()
-	var limite := int(segundos * 1000.0)
-	while Time.get_ticks_msec() - t0 < limite:
+	var tope := maxi(int(segundos * 30000.0), 10000)
+	while true:
+		if Engine.get_physics_frames() - inicio_fisica >= objetivo \
+			and Engine.get_process_frames() - inicio_proceso >= objetivo:
+			return
 		await physics_frame
-		await process_frame
+		if Time.get_ticks_msec() - t0 > tope:
+			push_warning("esperando %.2f s solo se han simulado %.2f s"
+				% [segundos, float(Engine.get_physics_frames() - inicio_fisica)
+					/ float(Engine.physics_ticks_per_second)])
+			return
 
 
 ## La punta de arriba del cabezal, en el mundo.
@@ -1534,5 +1570,11 @@ func _fallo(texto: String) -> void:
 func _resumen() -> void:
 	print("\n=========================================")
 	print("  correctas: %d   fallos: %d   avisos: %d" % [_ok, _fallos, _avisos])
-	print("=========================================")
+	# Con un aviso hay que decir DE QUE es, o el que lee el resultado puede
+	# pensar que se ha dejado algo a medias. Aqui solo puede ser la imagen, que
+	# en headless no hay forma de mirar, y el modo de cerrarla va en el aviso.
+	if _avisos > 0:
+		print("  (el aviso es la imagen: en headless no se dibuja nada)")
+		print("  para cerrarla:  tools/medir_foto.gd --rendering-driver vulkan")
+	print("========================================")
 	quit(1 if _fallos > 0 else 0)
