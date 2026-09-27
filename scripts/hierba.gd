@@ -518,6 +518,40 @@ func uv_de_hoja(i: int) -> Vector2:
 ## hoja empezaba a buscar su celda de viento en el sitio equivocado, que es la
 ## trampa que se dejo anotada en REVISION.md. Ver refresca_uv_de_viento().
 var _radio_uv := 0.0
+## Cuantas hojas se han reescrito la ultima vez que hubo que rehacer las UV.
+## Lo miran las pruebas, y no el multimesh: leer los datos de la vuelta con
+## get_instance_custom_data() solo funciona cuando hay una GPU delante, y las
+## pruebas se suelen rodar sin ella, donde devuelve ceros siempre. Aqui la
+## verdad esta en el contador, que es de CPU y no se miente.
+var _uv_rehechas := 0
+
+
+## Cuantas hojas reescribio el ultimo refresco de UV. Las pruebas.
+func uv_rehechas() -> int:
+	return _uv_rehechas
+
+
+## El tono que se le dio a la hoja i al sembrarla, y que no cambia nunca. Lo
+## escriben las pruebas para comprobar que el refresco de UV no lo mueve: el
+## tono va con la hoja, no con el sitio donde se busca su viento.
+func tono_de(i: int) -> float:
+	return _tonos[i] if i >= 0 and i < _tonos.size() else 0.0
+
+
+## Los cuatro numeros que se le han dado a la hoja i, tal cual los lleva el
+## multimesh: (altura que le queda, uv del viento, tono).
+##
+## Se compone aqui y no se lee del multimesh con get_instance_custom_data()
+## porque eso SOLO funciona con una GPU delante: en las pruebas automaticas, que
+## van sin ventana, devuelve ceros siempre y la comprobacion no diria nada. Esta
+## es la verdad de CPU, y es justo la que se manda a la tarjeta.
+##
+## Lo piden las pruebas para verificar el reparto de canales del shader: r es lo
+## que le queda de altura, g y b son la uv del viento, a es el tono. Si al
+## refrescar las uv se tocara el tono o la altura, el cesped cambiaria de color
+## o las hojas cortadas se levantarian solas.
+func datos_de_hoja(i: int) -> Color:
+	return _color_de(i, altura_hoja(i))
 
 
 ## Vuelve a escribir la UV de todas las hojas con el radio de ahora.
@@ -535,14 +569,16 @@ var _radio_uv := 0.0
 ## llama desde _process() solo cuando el radio ha cambiado de verdad.
 func refresca_uv_de_viento() -> void:
 	_radio_uv = radio
+	_uv_rehechas = 0
 	if radio <= 0.0:
 		return
 	for i in _sembradas:
 		var nodo := _cuadrantes[_ids[_cuadrante_de[i]]]
 		nodo.multimesh.set_instance_custom_data(_dentro_de[i],
 			_color_de(i, altura_hoja(i)))
+		_uv_rehechas += 1
 	print("Hierba tipo %d: UV del viento rehecha para un radio de %.1f m (%d hojas)"
-		% [tipo, radio, _sembradas])
+		% [tipo, radio, _uv_rehechas])
 
 
 ## Si el radio del Inspector se ha movido respecto al con el que se escribieron
@@ -566,24 +602,7 @@ func gordo_de(i: int) -> float:
 	return _gordo[i]
 
 
-## Lo que de verdad se le ha metido a la hoja i en la tarjeta. Se lee de los
-## buffers, no de los arrays, porque lo que interesa es comprobar lo que ve la
-## GPU.
-##
-## Godot guarda los datos de instancia en un Color, y el reparto es el del
-## shader: r es la altura que le queda a la hoja, g y b son la uv del viento, y
-## a es el tono. No es un capricho del nombre: es como el motor reparte los
-## cuatro canales de INSTANCE_CUSTOM, asi que leerlos asi es leerlos por su
-## nombre de verdad.
-##
-## Lo piden las pruebas para verificar el contrato del shader: al cambiar el
-## radio hay que reescribir g y b y NO tocar ni r ni a, que van con la hoja y no
-## con el sitio donde se busca su viento.
-func datos_de_hoja(i: int) -> Color:
-	if i < 0 or i >= _sembradas:
-		return Color()
-	var multimesh := _cuadrantes[_ids[_cuadrante_de[i]]].multimesh
-	return multimesh.get_instance_custom_data(_dentro_de[i])
+
 
 
 ## Cuantas hojas siguen de pie dentro de un radio.

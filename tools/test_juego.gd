@@ -714,9 +714,20 @@ func _maleza_prueba() -> void:
 		_ok_si(m1 != null and m1.get_shader_parameter("viento") != null
 			and m1.get_shader_parameter("viento") == m2.get_shader_parameter("viento"),
 			"y los dos mueven con el MISMO mapa de viento")
-		_ok_si(m1 != null and not m1.get_shader_parameter("tono_pie")
-			.is_equal_approx(m2.get_shader_parameter("tono_pie")),
+		# Los nombres del shader son color_pie y color_punta, no los del
+		# Inspector (tono_pie, tono_punta): el uniform que consume el material se
+		# llama distinto que la variable que lo rellena, y con el nombre mal
+		# puesto get_shader_parameter() devuelve null en vez de avisar.
+		var pie_maleza = m1.get_shader_parameter("color_pie") if m1 != null else null
+		var pie_cesped = m2.get_shader_parameter("color_pie") if m2 != null else null
+		_ok_si(pie_maleza != null and pie_cesped != null
+			and not pie_maleza.is_equal_approx(pie_cesped),
 			"pero cada uno con su color: la maleza es mas seca")
+		var punta_maleza = m1.get_shader_parameter("color_punta") if m1 != null else null
+		var punta_cesped = m2.get_shader_parameter("color_punta") if m2 != null else null
+		_ok_si(punta_maleza != null and punta_cesped != null
+			and not punta_maleza.is_equal_approx(punta_cesped),
+			"y mas seca todavia en la punta")
 
 	# Y por fin lo de verdad: se corta andando por encima.
 	if cesped == null:
@@ -754,64 +765,79 @@ func _uv_prueba() -> void:
 	_ok_si(maleza != null, "el segundo tipo de hierba esta en la escena")
 	if maleza == null:
 		return
-	var radio_antes: float = maleza.radio
-	var i := maleza.total() / 3
-	var d_antes := maleza.datos_de_hoja(i)
-	var p := maleza.posicion_hoja(i)
-	print("   la hoja %d esta en (%.1f, %.1f) y su uv era (%.4f, %.4f)"
-		% [i, p.x, p.z, d_antes.g, d_antes.b])
-	_ok_si(d_antes.g >= 0.0 and d_antes.g <= 1.0
-		and d_antes.b >= 0.0 and d_antes.b <= 1.0,
-		"la uv que ve la GPU esta dentro del mapa")
+	var total := maleza.total()
 
-	# Se encoge el campo a la mitad. Las hojas NO se mueven: esto solo cambia
-	# donde se busca su viento, que es lo que hay que arreglar. Y como el mapa
-	# sigue siendo del tamano del radio nuevo, la uv de esa hoja tiene que
-	# cambiar de verdad; si se quedara igual, cada hoja estaria soplando con la
-	# onda de un metro mas alla, y en un campo tan grande se ve el corrimiento.
-	maleza.radio = radio_antes * 0.5
+	# Una hoja del CENTRO del campo, que es donde la UV esta bien metida en el
+	# mapa. Con una de la periferia, al encoger el radio su UV se sale de 0..1
+	# y no hay forma de distinguir un fallo de una hoja que simplemente ha
+	# quedado fuera del mapa nuevo.
+	var i := -1
+	for j in total:
+		if maleza.posicion_hoja(j).length() < 10.0:
+			i = j
+			break
+	_ok_si(i >= 0, "hay hojas de prueba cerca del centro")
+	if i < 0:
+		return
+	var p := maleza.posicion_hoja(i)
+	var uv_antes := maleza.uv_de_hoja(i)
+	print("   la hoja %d esta en (%.1f, %.1f) y su uv es (%.4f, %.4f)"
+		% [i, p.x, p.z, uv_antes.x, uv_antes.y])
+	_ok_si(uv_antes.x > 0.4 and uv_antes.x < 0.6 and uv_antes.y > 0.4 and uv_antes.y < 0.6,
+		"y cae por el centro del mapa del viento")
+
+	# Lo que se reescribe son los dos canales de la UV. Ni la altura que le
+	# queda a la hoja ni el tono, que van con la hoja y no con el sitio donde se
+	# busca su viento. Si al cambiar el radio se tocaran, se veria el cesped
+	# cambiar de color o las hojas cortadas volver a levantarse.
+	var antes := maleza.datos_de_hoja(i)
+	var tono_esperado: float = maleza.tono_de(i)
+	maleza.radio = maleza.radio * 0.5
 	maleza.refresca_uv_de_viento()
 	await _esperar(0.2)
-	var d_medio := maleza.datos_de_hoja(i)
+	_ok_si(maleza.uv_rehechas() == total,
+		"el refresco reescribe TODAS las hojas (%d de %d)"
+		% [maleza.uv_rehechas(), total])
+	var uv_medio := maleza.uv_de_hoja(i)
 	print("   con el radio a la mitad, la uv pasa a (%.4f, %.4f)"
-		% [d_medio.g, d_medio.b])
+		% [uv_medio.x, uv_medio.y])
 	_ok_si(p.distance_to(maleza.posicion_hoja(i)) < 0.001,
 		"encoger el campo no mueve ni una hoja de sitio")
-	_ok_si(not is_equal_approx(d_medio.g, d_antes.g),
+	_ok_si(not is_equal_approx(uv_medio.x, uv_antes.x),
 		"pero si mueve la uv del viento, que si no va descuadrada")
+	_ok_si(uv_medio.x > 0.4 and uv_medio.x < 0.6,
+		"y la hoja del centro se queda en el centro del mapa nuevo")
+	var despues := maleza.datos_de_hoja(i)
+	_ok_si(is_equal_approx(despues.r, antes.r),
+		"la altura que le queda a la hoja no se toca (%.3f)" % despues.r)
+	_ok_si(is_equal_approx(despues.a, tono_esperado),
+		"ni el tono, que va con la hoja y no con el mapa (%.3f)" % despues.a)
+	_ok_si(absf(despues.g - uv_medio.x) < 0.0001
+		and absf(despues.b - uv_medio.y) < 0.0001,
+		"y lo que se reescribe es la uv y solo la uv")
 
-	# Y lo que NO puede cambiar: la altura que le queda a la hoja y su tono. Son
-	# los otros dos canales, y van con la hoja, no con el sitio en el mapa.
-	_ok_si(is_equal_approx(d_medio.r, d_antes.r),
-		"la altura que le queda a la hoja se respeta (%.3f)" % d_medio.r)
-	_ok_si(is_equal_approx(d_medio.a, d_antes.a),
-		"y el tono de la hoja tambien (%.3f)" % d_medio.a)
-
-	# La uv escrita tiene que ser la del radio nuevo, no una mezcla rara.
-	var esperada := Vector2((p.x + maleza.radio) / (2.0 * maleza.radio),
-		(p.z + maleza.radio) / (2.0 * maleza.radio))
-	_ok_si(absf(d_medio.g - esperada.x) < 0.0001
-		and absf(d_medio.b - esperada.y) < 0.0001,
-		"y la uv es justo la del radio nuevo (%.4f, %.4f)" % [esperada.x, esperada.y])
-
-	# Y al devolver el radio, la hoja vuelve a su sitio en el mapa.
-	maleza.radio = radio_antes
+	# Al devolver el radio, cada hoja vuelve a su sitio en el mapa.
+	maleza.radio = maleza.radio * 2.0
 	maleza.refresca_uv_de_viento()
 	await _esperar(0.2)
-	var d_despues := maleza.datos_de_hoja(i)
-	_ok_si(absf(d_despues.g - d_antes.g) < 0.0001
-		and absf(d_despues.b - d_antes.b) < 0.0001,
+	var uv_final := maleza.uv_de_hoja(i)
+	_ok_si(absf(uv_final.x - uv_antes.x) < 0.0001
+		and absf(uv_final.y - uv_antes.y) < 0.0001,
 		"al devolver el radio cada hoja vuelve a su sitio en el mapa")
 
-	# Y ahora sin llamar a mano: el campo se vigila solo. Si esto no estuviera,
-	# el radio se podria cambiar y las uv se quedarian viejas sin avisar.
-	maleza.radio = radio_antes * 0.5
+	# Y lo importante: que se rehace SOLO. Si esto no estuviera, el radio se
+	# podria cambiar desde el Inspector con el juego en marcha y las uv se
+	# quedarian viejas, sin avisar nadie. Esto es justo lo que hacia la
+	# trampa de REVISION.md.
+	maleza.radio = maleza.radio * 0.5
 	await _esperar(0.5)
-	var d_auto := maleza.datos_de_hoja(i)
-	_ok_si(not is_equal_approx(d_auto.g, d_despues.g),
-		"y se rehace solo, sin que nadie llame al refresco (uv %.4f)"
-		% d_auto.g)
-	maleza.radio = radio_antes
+	var rehechas_solo := maleza.uv_rehechas()
+	print("   sin llamar a mano, se han reescrito %d hojas" % rehechas_solo)
+	_ok_si(rehechas_solo == total,
+		"el campo se avisa solo y rehace las uv cuando el radio se mueve")
+	_ok_si(not is_equal_approx(maleza.uv_de_hoja(i).x, uv_final.x),
+		"y la uv de verdad ha cambiado, no solo el contador")
+	maleza.radio = maleza.radio * 2.0
 	await _esperar(0.5)
 
 
