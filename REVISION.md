@@ -3,9 +3,9 @@
 Analisis del estado del proyecto tal y como esta ahora, con lo que esta bien,
 lo que esta raro y lo que falta. Para decidir el siguiente paso.
 
-Ultima revision: con la hierba alta (88 cm), los cuadrantes puestos y la camara
-encuadrando el cabezal. Suite en **131 correctas / 0 fallos** en headless y
-**133 / 0** con GPU.
+Ultima revision: con la **fase 2 hecha** (maleza alta en matas, resistencia por
+densidad y morro que sube al mirar arriba). Suite en **183 correctas / 0 fallos**
+en headless, y la imagen comprobada aparte con `tools/medir_foto.gd`.
 
 Lo que se puede jugar hoy esta en [LEEME.md](LEEME.md), el detalle por archivo en
 [DOCUMENTACION.md](DOCUMENTACION.md) y la hoja de ruta en
@@ -28,6 +28,11 @@ Lo que se puede jugar hoy esta en [LEEME.md](LEEME.md), el detalle por archivo e
   Verificado con render real, no solo con tests.
 - El campo va **por cuadrantes**, con culling por caja y por distancia, asi que
   la densidad se puede subir sin que el motor dibuje las hojas enteras.
+- **Hay dos tipos de hierba.** `MalezaAlta`, alta y seca, sale en matas con
+  claros de verdad entre medias, cuesta mas que el cesped y se corta con la misma
+  maquina. Un claro va mas rapido que un zarzal, y se nota.
+- **Mirar arriba sube la maquina**, y el cabezal llega a la parte alta de la
+  maleza sin salirse del encuadre. Antes no pasaba de 0,35 m.
 
 ## 2. Los bugs que se han resuelto, y que conviene no repetir
 
@@ -100,7 +105,8 @@ porque el WAV se importa comprimido y los bytes no son frames. Sale de
 
 Con el tocón apagado, la hierba cortada queda a 0 cm, tumbada en el suelo, y
 **desde la camara no se ve nada**: no habia ni rastro de por donde habias
-pasado. Ahora `dejar_tocon` esta en `true` con 8 cm de tocón.
+pasado. Ahora `dejar_tocon` esta en `true`: 15 cm en el cesped y 30 cm en la
+maleza, que es lo que se ve de verdad en cada una.
 
 ### g) Una llamada a una funcion que no existe
 
@@ -153,6 +159,54 @@ prueba fallo **sin que el corte hubiera cambiado nada**. Una prueba que compara
 un valor con un literal no comprueba comportamiento: comprueba que nadie haya
 tocado el Inspector.
 
+### k) La herramienta de medir la foto que no medi nada
+
+`medir_foto.gd` buscaba el campo de hierba con `get_node("Hierba")` y luego
+esperaba un `MultiMeshInstance3D`, pero desde el troceado por cuadrantes el
+campo es un `Node3D` que crea sus hijos. La comprobacion de tipo fallaba en
+cada fotograma, la foto salia siempre identica, y la herramienta **daba un
+numero sin haber comparado nada**.
+
+Es de la misma familia que (a) y (b): el codigoapia lo que era, y al cambiar la
+estructura dejo de preguntarselo al motor. **La leccion aqui es que una
+herramienta de medicion tambien es codigo que hay que actualizar**, y que si da
+un numero sin que se note que ha hecho nada, hay que sospechar de ella.
+
+### l) La cuchilla girando sobre el eje equivocado
+
+El carrete giraba con `giro.rotation.y`, y ese es el eje **a lo largo del tubo**.
+La cuchilla va tumbada, con su eje en la vertical, que en el modelo es el Z: la
+escena le da al modelo un giro de 180 grados en Y, que no toca el Z. Con el giro
+en Y la cuchilla daba vueltas de lado a lado y cortaba de canto.
+
+Lo mas incomodo es que **no se notaba jugando**, y que la suite tampoco lo
+cazaba del todo. La prueba de "el carrete gira" comparaba `giro.rotation.y`
+antes y despues: como el giro ya no pasaba por ahi, la diferencia era de cero y
+la prueba deberia haber fallado siempre. Fallaba, pero a veces el barrido movia
+un poco el nodo entre las dos lecturas y la diferencia pasaba de 0,5 rad. O
+sea, **una prueba que dependia de si el barrido se habia movido en esa
+ventana**.
+
+**La leccion: una prueba que lee un valor tiene que leer el valor que el codigo
+escribe.** Aqui las dos leian `.y` y por eso las dos podian volver a ser
+verdes sin comprobar nada. Cuando se toca un eje o un canal, hay que mirar los
+tres.
+
+### m) Las pruebas que fallaban por el reloj del sistema
+
+`_esperar()` contaba milisegundos con `Time.get_ticks_msec()`. Godot solo
+recupera 8 pasos de fisica por fotograma, asi que en un equipo sin GPU, que va a
+unos 1 fps, la simulacion se quedaba atrasada, la espera se agotaba antes de
+tiempo y las pruebas de movimiento veian al jugador **a medio camino**. En
+headless no se notaba, porque ahi no hay tirones, y por eso la suite pasaba
+limpia mientras la misma suite con ventana daba 2 o 10 fallos, sin patron.
+
+Ahora `_esperar()` cuenta fotogramas de fisica y de proceso, no de reloj. Es
+decir: el fallo era **del banco de pruebas, no del juego**, y se reconocia
+porque salian fallos de raton y de velocidad todos a la vez. Cuando varias
+pruebas de lo mismo fallan a la vez, casi nunca es que las tres cosas esten
+mal.
+
 Ahora mide contra el valor de la propia escena, y comprueba que dentro del
 ancho del cabezal no queda ni una hoja de pie. Igual con `medir_densidad.gd`,
 que antes tenia la configuracion en su lista y se quedo vieja; ahora la lee al
@@ -184,16 +238,32 @@ reconoce porque salen todos a la vez. Se comprueba con `pgrep -af godot`: si sal
 
 ## 4. Debilidades del codigo, por orden de importancia
 
-### 4.1 El viento depende del radio, y la UV se calcula al sembrar
+### 4.1 El viento dependia del radio, y la UV se calcula al sembrar  _(resuelto)_
 
-`viento.gd` recalcula `lado_celda = radio * 2 / celdas` leyendo el `radio` de
-la hierba, y la hoja calcula su UV **en el momento de sembrarse**. Si se cambia
+`viento.gd` recalcula `lado_celda = radio * 2 / celdas` leyendo el `radio` de la
+hierba, y la hoja calcula su UV **en el momento de sembrarse**. Si se cambia
 `radio` en caliente, la UV queda desfasada respecto al mapa. No se nota jugando
-porque `radio` no cambia en ejecucion, pero es una trampa: las pruebas de
+porque `radio` no cambia en ejecucion, pero era una trampa: las pruebas de
 densidad si cambian la hierba en caliente.
 
-**Sigue pendiente.** Es un cambio pequeño, pero importante antes de tocar el
-viento otra vez.
+**Resuelto en la fase 2.** `Hierba` guarda aparte el radio con el que estan
+escritas las uv (`_radio_uv`), y en `_process()` compara. Si ha cambiado,
+reescribe las uv de todas las hojas y vuelve a apuntar `_radio_uv`. Para no
+tocar los otros dos canales de `INSTANCE_CUSTOM`, la altura que le queda a la
+hoja y su tono se recuperan de los arrays, no del `MultiMesh`.
+
+Lo que se reescribe al cambiar el radio son solo los canales `g` y `b` (la uv); el `r` (altura
+restante) y el `a` (tono) van con la hoja, no con el sitio donde se busca su
+viento, y no se tocan. Hay pruebas que lo comprueban, contando las hojas
+reescritas con `uv_rehechas()`.
+
+> Al escribir las pruebas de esto aparecio un detalle que no estaba previsto:
+> `get_instance_custom_data()` **no lee nada util sin GPU delante**. En headless
+> devuelve ceros, asi que comprobar el contrato del shader leyendo el `MultiMesh`
+> no vale. Lo que se usa es `datos_de_hoja()`, que compone el color en CPU con la
+> misma funcion que se manda a la tarjeta. Si alguna vez hay que comprobar algo
+> que solo existe en la GPU, esa comprobacion tiene que ir en `medir_foto.gd`,
+> no en la suite.
 
 ### 4.2 `velocidad_corte()` no sirve todavia para lo que hara falta
 
@@ -207,30 +277,55 @@ Hay `get_rpm()` / `get_cortando()` y ademas `var rpm` / `var cortando`
 publicos. Son la misma cosa por dos caminos. No es un bug, pero invita a
 cambiar uno y no el otro.
 
-### 4.4 `ladeo_herramienta` esta cableado en los dos sentidos
+### 4.4 `ladeo_herramienta` estaba cableado en los dos sentidos  _(resuelto)_
 
-`camara_gopro.gd` lo expone como `@export` y `desbrozadora.gd` se lo pone cada
-fotograma. Funciona, pero es un `@export` que no se debe tocar a mano, y en el
-Inspector aparece como si se pudiera.
+`camara_gopro.gd` lo exponia como `@export` y `desbrozadora.gd` se lo ponia cada
+fotograma. Funcionaba, pero era un `@export` que no se debe tocar a mano, y en el
+Inspector aparecia como si se pudiera.
 
-### 4.5 Los valores de la hierba estan en dos sitios
+**Resuelto en la fase 2.** Ahora es una variable normal, y la maqueta se la
+pone. Lo que si se exporta es `tope_ladeo_herramienta`, que si es del jugador.
+
+De paso se arreglo el propio ladeo, que estaba multiplicado por 6
+(`rad_to_deg(_barrido * 6.0)`): un barrido de 96 grados se traducía en un ladeo
+absurdo. Ahora la ganancia es de 0,07 y hay un tope de 8 grados.
+
+### 4.5 Los valores de la hierba estan en dos sitios, y ademas son dos campos
 
 Los `@export` de `scripts/hierba.gd` (0,38 m de alto, 30/m2) **no** son los que
-se juegan: `scenes/main.tscn` los sobrescribe (0,88 m, 53/m2). Es lo correcto
-para explorar, pero hace que los valores por defecto y los reales divergan, y
-que cualquier cifra escrita en un documento se pueda quedar vieja. Esta
-documentado en `DOCUMENTACION.md`, se ha atualizado `medir_densidad.gd` para que
-lea los de la escena, y las pruebas evitan literales. Sigue siendo la fuente de
-errores mas probable del proyecto.
+se juegan: los sobrescriben las dos instancias de `scenes/main.tscn`. Es lo
+correcto para explorar, pero hace que los valores por defecto y los reales
+divergan, y que cualquier cifra escrita en un documento se pueda quedar vieja.
+
+Con la fase 2 esto ha empeorado un poco mas: ya no es un campo con sus valores,
+son **dos campos con valores distintos cada uno** (cesped de 71 cm y 60/m2,
+maleza de 145 cm y 18/m2 en matas). Cualquier cifra que este escrita en singular
+ya esta mal antes de quedar vieja.
+
+Esta documentado en `DOCUMENTACION.md` con las tres columnas (por defecto, cesped
+y maleza), `medir_densidad.gd` lee los de la escena al arrancar en vez de tenerlos
+en su lista, y las pruebas evitan literales. Sigue siendo la fuente de errores
+mas probable del proyecto, y **es lo primero que hay que actualizar cuando se
+toque un valor de la hierba**: si no, los tres documentos mienten a la vez.
 
 ### 4.6 `capturas/` se genera y no se versiona
 
 Las herramientas de medicion crean la carpeta. Las imagenes generadas
 (`paso1_de_pie.png` etc) son de diagnostico, no del juego.
 
+**Nota:** las tres capturas que hay ahora si estan versionadas, porque se
+guardaron a mano para comparar. Las que generan las herramientas
+(`comparada_con_hierba.png` etc) no deberian subirse. Si la carpeta llega a
+ensuciarse, la solucion es un `capturas/*.png` en el `.gitignore` con las
+importantes sacadas antes a mano.
+
 ## 5. Lo que no esta hecho
 
-- **Tipo 2 de hierba.** El campo `tipo` ya existe en `scripts/hierba.gd` y vale
+- ~~**Tipo 2 de hierba.**~~ **Hecho en la fase 2**: `MalezaAlta` en
+  `main.tscn`, con `formacion`, `dureza` y colores propios. La estructura era la
+  misma que se ve a continuacion, y se dejo como estaba al empezar:
+
+  > El campo `tipo` ya existe en `scripts/hierba.gd` y vale
   1, pero no hay segundo tipo. Cuando se haga, la estructura ya esta: mismo
   nodo, mismos cuadrantes, otro `material_override` y otra semilla.
 - **Recoger la hierba cortada.** Ahora se aplana y se queda. Acumular los
@@ -258,12 +353,17 @@ no dibuje nada.
 Configuracion real del juego, sacada de `main.tscn` (**no** de los valores por
 defecto del script, que son otros):
 
-- **192.454 hojas** = 1.154.724 triangulos, en **71 cuadrantes** de 8 m.
-- 53 hojas/m2, 88 cm de alto, 0,145 m de grosor, en 34 m de radio.
-- Recorte por distancia a 22 m, y con culling por caja de cada cuadrante.
-- Mediana de **8,3 ms** (tope de vsync a 120 fps) y **8,3 ms** en el peor
-  fotograma. El campo va sobrado.
-- Campo de pie: **35,3 %** del frame. Cortado: **3,8 %**. Sin hierba: 0 %.
+- **Cesped:** 471.239 hojas en 146 cuadrados de 8 m. 60 hojas/m2, 71 cm de alto,
+  0,145 m de grosor, en 50 m de radio, recorte a 22 m.
+- **Maleza:** 31.162 hojas en 62 cuadrados de 12 m. 18 hojas/m2 sembradas, pero
+  en el 34 % del terreno, con dureza 1,8 y recorte a 16 m.
+- Las medidas de rendimiento de abajo son **anteriores a la fase 2**, cuando el
+  campo era de 192.454 hojas en 34 m. Ahora hay mas del doble de hojas y el
+  radio es mayor, asi que **hay que volver a medirlas** con
+  `tools/medir_densidad.gd` antes de fiarse de ellas.
+- Ultima medicion que hay (campo viejo): mediana de **8,3 ms** (tope de vsync a
+  120 fps) y **8,3 ms** en el peor fotograma. Campo de pie: **35,3 %** del frame.
+  Cortado: **3,8 %**. Sin hierba: 0 %.
 
 > **Ojo con el metrico "ocupa el X %":** sale a veces 18,9 % y a veces 75,2 %
 > con la misma semilla, porque la captura coge el fotograma a medio renderizar.
@@ -276,17 +376,29 @@ rompe: 100/m2 en 20 m son 125.664 hojas y sigue a 8,3 ms; 160/m2 en 20 m son
 
 ## 8. Propuesta de siguiente paso
 
-**El tipo 2 de hierba.** Es lo que mas trabajo da ahora mismo y lo que mas
-engana al jugador, porque con un solo tipo el campo es una alfombra uniforme. El
-sitio esta preparado: mismo nodo, mismos cuadrantes, `material_override` distinto
-y otra semilla.
+Lo de la fase 2 esta hecho, asi que esto es lo que queda de la hoja de ruta, en
+el orden en que haria falta.
 
-Y antes, dos cosas que no son juego pero evitan perder tiempo luego:
+1. **Volver a medir el rendimiento.** Las cifras de la seccion 7 son del campo
+   de antes de la fase 2, con 192.000 hojas en 34 m. Ahora hay 502.000 hojas en
+   50 m. Con la GPU por software de esta maquina no se puede measuring bien, pero
+   con la de verdad si, y hay que saber cuanto cuesta ahora antes de añadir mas.
+2. **Recoger la hierba cortada.** Ahora se aplana y se queda, y se queda para
+   siempre. El shader ya calcula el corte, asi que podria amontonarse.
+3. **Sonido de corte.** Ahora solo suena el motor, y con la resistencia ya
+   funcionando el motor baja de vueltas: el sonido deberia notarlo.
+4. **Terreno con desnivel de verdad.** Es lo que haria que el terreno oponga
+   resistencia de verdad y no solo las matas. Con el terreno llano que hay, la
+   densidad es lo unico que puede oponer algo.
+5. **Discos, desgaste y combustible.** De la fase 2, pero a proposito postponed:
+   sin disco al que afilar, el desgaste no tiene a que desgastar.
 
-1. Que el cambio de `radio` recalcule las UV de la hierba (punto 4.1).
-2. Dejar de exponer `ladeo_herramienta` como `@export` si nadie lo va a tocar a
-   mano (punto 4.4).
+Y una cosa que no es juego pero ya ha costado tiempo:
+
+6. **`capturas/` se ensucia.** Las herramientas generan PNG en la carpeta del
+   proyecto y se quedan. Falta decidir si se ignoran (punto 4.6).
 
 Ojo con una cosa al tocar la hierba: la suite **con ventana** necesita el juego
-cerrado, y sin ventana (headless) no se ve nada de lo visual. Las dos cosas juntas
-hacen que "lo he tocado y se ve bien" exija un poco de cuidado.
+cerrado, y sin ventana (headless) no se ve nada de lo visual. Con la GPU por
+software de esta maquina, ademas, la suite con ventana tarda doce minutos, asi
+que para lo visual lo indicado es `tools/medir_foto.gd`, que va en 3 segundos.

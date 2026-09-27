@@ -130,24 +130,19 @@ Lo que hace que el nucleo se sienta bien antes de ponerle nada alrededor.
       la maquina.
 - [x] Apoyo del cabezal en el suelo al trabajar.
 - [x] Camara: cabeceo al trabajar e inclinacion lateral por el barrido.
-- [x] **El cabezal no se pierde de vista.** Con la hierba alta (88 cm) hacia
-      falta para cortar zarza de verdad: la camara baja sola lo justo para que
-      la herramienta siga en el encuadre, y el jugador puede mirar hasta 55
-      grados hacia arriba. Sin esto, trabajar de pie era mirar al suelo.
+- [x] **El cabezal no se pierde de vista.** Con la hierba alta hacia falta para
+      cortar zarza de verdad: la camara baja sola lo justo para que la
+      herramienta siga en el encuadre, y el jugador puede mirar hasta 55 grados
+      hacia arriba. Sin esto, trabajar de pie era mirar al suelo.
 - [x] **Andar hacia atras sin que el mundo gire.** La camara cuelga del cuerpo,
       y con `S` el cuerpo se daba media vuelta y arrastraba la vista. Ahora la
       camara mide su giro en el mundo.
-- [x] Hierba por cuadrantes (chunking). El `MultiMesh` se trocea en 71
-      cuadrados de 8 m con su caja ajustada, mas un recorte por distancia. Sin
-      esto el motor dibujaba las hojas enteras siempre y la densidad no se podia
-      subir; ahora el campo va con 192.454 hojas a 120 fps.
+- [x] Hierba por cuadrantes (chunking). El `MultiMesh` se trocea en cuadrados
+      de 8 m con su caja ajustada, mas un recorte por distancia. Sin esto el
+      motor dibujaba las hojas enteras siempre y la densidad no se podia subir.
 - [x] Limpiar el `Cube` que sobra en el modelo de la desbrozadora.
-- [x] Suite de pruebas que fija el comportamiento (131 comprobaciones en
-      headless, 133 con GPU).
-- [ ] **Segundo tipo de hierba.** Sigue pendiente y es lo primero de la fase 2:
-      con un solo tipo el campo es una alfombra uniforme. El sitio esta
-      preparado (mismo nodo, mismos cuadrantes, otro `material_override` y otra
-      semilla).
+- [x] Suite de pruebas que fija el comportamiento. Empezo en 131 comprobaciones
+      en headless; hoy son **183**.
 
 > La fase 1 se cierra con lo de la camara y el chunking, que no estaban
 > previstos aqui y salieron de jugar: el primero de mirar arriba y perder la
@@ -155,22 +150,38 @@ Lo que hace que el nucleo se sienta bien antes de ponerle nada alrededor.
 > `MultiMesh`. Los dos cumplen el criterio de la seccion 6: se notan en las
 > manos y se pueden medir.
 
-### Fase 2 - El corte que cuesta  _(siguiente)_
+### Fase 2 - El corte que cuesta  _(hecha)_
 
 Aqui el terreno empieza a oponer resistencia, y la desbrozadora deja de ser la
 misma segun donde estes.
 
-Empieza por el **segundo tipo de hierba**: es lo que mas se nota sin tocar
-economia, y ya esta montado en la estructura.
+Empezo por el **segundo tipo de hierba**, que es lo que mas se nota sin tocar
+economia, y de ahi salieron la resistencia y el morro: la maleza alta no sirve
+de nada si la maquina no nota que hay algo delante ni si llega a cortarlo.
 
-- [ ] **Resistencia segun densidad de maleza.** La zona no se limpia igual de
+- [x] **Segundo tipo de hierba, en matas.** `MalezaAlta`, con su semilla, su
+      material y su dureza. Sale en claros y no como una alfombra, y se corta
+      con la misma maquina que el cesped.
+- [x] **Resistencia segun densidad de maleza.** La zona no se limpia igual de
       rapido en un claro que en un zarzal. La maquina tiene que trabajar mas
-      lento donde hay mas.
+      lento donde hay mas, y ahora lo hace con lo que tiene **de pie** por
+      delante, no con lo que se sembró: lo que se nota es lo que queda.
+- [x] **El morro sube al mirar arriba.** Sin esto, la maleza alta era un muro:
+      el cabezal no pasaba de 0,35 m y no habia forma de cortar nada por encima
+      de la rodilla.
 - [ ] **Discos y hilo.** Mata, hilo de nylon, cuchilla. Cada uno para un tipo de
       maleza, con su desgaste y sus limites.
 - [ ] **Consumo de combustible y RPMs.** El acelerador pasa a ser un recurso que
       se gasta y un sonido que cambia con las vueltas.
 - [ ] **Desgaste y afilado.** La cuchilla pierde filo y hay que revisarla.
+
+> **Lo que queda de esta fase y por que.** El desgaste, el combustible y los
+> discos no se han hecho, y a proposito: son sistemas que se notan mucho cuando
+> estan a medias, y sin un disco el afilado no tiene a que desgastar. Lo primero que
+> haria falta no es el desgaste sino el **terreno con desnivel de verdad**, que
+> es lo que haria que el terreno de verdad oponga resistencia y no solo las
+> matas. Con el terreno llano que hay, la densidad es lo unico que puede oponer
+> algo, y ya se nota.
 
 ### Fase 3 - Conduccion
 
@@ -208,10 +219,11 @@ Se dejan escritas para que no se rediscutan en cada cambio.
 | **El cabezal se ve siempre; la camara se acomoda** | Va 47 grados por debajo del horizonte y solo entran 34. Un tope de inclinacion de 85 arriba habria bastado para no mirar de frente, pero obligaria a apuntar al suelo para trabajar. Bajando la camara, el jugador mira libre y la herramienta no se pierde. |
 | **Los topes de inclinacion son asimetricos** (85 abajo, 55 arriba) | Es lo que deja que la camara tenga sitio para encuadrar el cabezal al mirar arriba, sin que el jugador note el limite. |
 | **La camara mide su giro en el mundo, no en local** | Cuelga del cuerpo, y el cuerpo se vuelve hacia donde camina. En local el giro del cuerpo se le sumaba y `S` daba un tiron de 180 grados. |
-| **La hierba va por cuadrantes, no en un `MultiMesh` entero** | Con una sola caja de 68 m el motor no descarta nada y dibuja todas las hojas siempre. Troceada, cada cuadrado se descarta solo y la densidad se puede subir. |
+| **La hierba va por cuadrantes, no en un `MultiMesh` entero** | Con una sola caja de 100 m el motor no descarta nada y dibuja todas las hojas siempre. Troceada, cada cuadrado se descarta solo y la densidad se puede subir. |
+| **El viento es un nodo del mundo, no de cada campo** | Con dos tipos de hierba, un `Viento` por campo significaba dos mapas peleandose por los mismos materiales. El viento es una cosa del prado, y por eso usa el radio mayor de todos los campos. |
 | La suite va en headless y es obligatoria antes de dar algo por bueno | Es lo que permite seguir tocando fisicas sin depender de que alguien mire. |
 | **La suite con ventana no se lanza con el juego abierto** | Godot se queda con el foco y la entrada, y salen fallos falsos de raton y de movimiento. En headless no hay ese problema. |
-| Los valores de la hierba del juego viven en `main.tscn`, no en el script | La yerba se ajusta a ojo en el Inspector mientras se juega; si estuvieran en el codigo habria que recompilar para cambiar la densidad. |
+| Los valores de la hierba del juego viven en `main.tscn`, no en el script | La hierba se ajusta a ojo en el Inspector mientras se juega; si estuvieran en el codigo habria que recompilar para cambiar la densidad. Ademas son **dos campos con valores distintos** (`Hierba` y `MalezaAlta`), no uno con parametros. |
 | Los valores de feltro van en el Inspector, no en el codigo | `max_left_angle`, `max_right_angle`, `sweep_speed`, `inertia_smoothness`, `masa_izquierda` y `rigidez_derecha` se ajustan sin recompilar. |
 
 ---
@@ -220,7 +232,9 @@ Se dejan escritas para que no se rediscutan en cada cambio.
 
 El criterio es siempre el mismo, y es el que se ha usado hasta ahora:
 
-1. **Que se note en las manos.** Si el jugador no lo nota, no es fase 1.
+1. **Que se note en las manos.** Si el jugador no lo nota, no entra.
 2. **Que se pueda medir.** Si no hay una comprobacion automatizada, no entra.
 3. **Un cambio cada vez.** La prueba la hace la persona que lleva el proyecto
-   jugando, y el siguiente cambio sale de ahi. No se agrupan.
+   jugando, y el siguiente cambio sale de ahi. Los tres modos de `AGENTS.md`
+   respetan esto: hasta el modo autonomo comprueba y corrige un punto cada vez
+   antes de pasar al siguiente.

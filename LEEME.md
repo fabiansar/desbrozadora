@@ -61,39 +61,56 @@ grafica. Es lo que hay que ejecutar antes de dar algo por bueno:
 
 ```bash
 cd ~/Documentos/desarrollos/desbrozadora
-timeout 300 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+timeout 400 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --headless --path . --script tools/test_juego.gd
 ```
 
-Acabo de salir: **131 correctas, 0 fallos, 1 aviso**. El aviso es que la
-comprobacion de imagen no se puede hacer en headless, y se hace aparte con
-render de verdad. Con la GPU si se hace, y entonces salen **133 correctas, 0
-fallos, 0 avisos**:
+Acabo de salir: **183 correctas, 0 fallos, 1 aviso**. El aviso es que la
+comprobacion de imagen no se puede hacer en headless, y se cierra aparte con una
+herramienta que va en 3 segundos:
 
 ```bash
 timeout 300 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
-  --path . --script tools/test_juego.gd --rendering-driver vulkan
+  --path . --script tools/medir_foto.gd --rendering-driver vulkan
 ```
 
-> **Cierra el juego antes de lanzar la prueba con ventana.** Godot se queda con
-> el teclado y el raton, y si hay otro Godot abierto la suite no los recibe:
-> salen fallos de pruebas de raton y de movimiento que no son del codigo, y se
-> ven todos a la vez. Se comprueba con `pgrep -af godot`: si sale `project.godot`
-> en vez de `tools/test_juego.gd`, hay un juego abierto. La de headless no tiene
-> ese problema y se puede repetir cuando quieras.
+Esa mide si la hierba se dibuja de verdad, y ahora mismo da **93,9 % de pixeles
+cambiados al ocultarla** y un 76,3 % de pixeles verdes. Sale en `capturas/`.
+
+> **No repitas la suite entera con ventana.** Se puede, pero con la GPU por
+> software de esta maquina va a un fps y la suite tarda doce minutos. Para
+> comprobar la imagen basta con `medir_foto.gd`, que hace justo eso y nada mas.
+> Si aun asi la repites, **cierra antes el juego**: Godot se queda con el
+> teclado y el raton, y si hay otro Godot abierto la suite no los recibe y salen
+> fallos de pruebas de raton que no son del codigo. Se comprueba con
+> `pgrep -af godot`: si sale `project.godot` en vez de `tools/test_juego.gd`, hay
+> un juego abierto. La de headless no tiene ese problema.
 
 ### Como esta repartida la hierba
 
-El campo no es un solo MultiMesh, sino **71 cuadrados de 8 m**, cada uno con el
-suyo. Un unico MultiMesh de 68 m tiene una caja tan grande que siempre se solapa
+El campo no es un solo MultiMesh, sino **cuadrados de 8 m**, cada uno con el
+suyo. Un unico MultiMesh de 100 m tiene una caja tan grande que siempre se solapa
 con la pantalla, se mire donde se mire, asi que el motor no descartaba nada y
 dibujaba las hojas enteras en cada fotograma. Con los cuadrados, cada uno lleva
 su caja ajustada y ademas se apagan los que estan lejos de la camara.
 
-Son **192.454 hojas** de 88 cm en 34 m de radio, y van a 120 fps. Esto lo
-comprueban las pruebas: que al repartir no se pierda ninguna hoja, que ningun
-cuadrante salga vacio, que las cajas sean manejables y que el recorte por
-distancia encienda y se apague.
+Hay **dos campos**, cada uno con su semilla y su material:
+
+| campo | tipo | alto | densidad | corte | en |
+|---|---|---|---|---|---|
+| `Hierba` | cesped | 71 cm | 60 por m2 | 0,73 m | 146 cuadrados de 8 m |
+| `MalezaAlta` | maleza | 145 cm | 18 por m2 | 0,73 m | 62 cuadrados de 12 m |
+
+El cesped da **471.239 hojas** y la maleza **31.162**. La maleza sale en **matas**
+y no como una alfombra: con `formacion = 0,78` solo se siembra el 34 % del
+terreno, asi que se ven claros de verdad por los que se pasa sin cortarse nada.
+Se corta con la misma maquina y el mismo radio que el cesped, que es la condicion
+para que no se note como otra herramienta.
+
+Esto lo comprueban las pruebas: que al repartir no se pierda ninguna hoja, que
+ningun cuadrante salga vacio, que las cajas sean manejables, que el recorte por
+distancia encienda y se apague, que los dos campos esten sembrados y que
+caminando por encima se corten los dos.
 
 ### Mirar como queda de verdad
 
@@ -130,6 +147,15 @@ global y la hoja de ruta** en [DISENO.md](DISENO.md).
 
 ## Como trabajamos
 
-Cambios pequenos, uno cada vez. Cada implementacion la prueba la persona que
-lleva el proyecto ejecutando el juego y contando que ve, y el siguiente cambio
-sale de ese feedback. No se meteran varias cosas en el mismo paso.
+Los cambios van en git, y hay un `AGENTS.md` con **tres modos de trabajo**. Segun
+lo que necesites, el mensaje empieza por una etiqueta:
+
+| etiqueta | que hace | pruebas |
+|---|---|---|
+| `[MODO: VIVO]` | cambio pequeno y directo | ninguna, pruebas tu en el editor |
+| `[MODO: SEMI]` | cambio con una comprobacion de parseo | la minima imprescindible |
+| `[MODO: NOCHE]` | bucle autonomo hasta dejarlo bien | suite completa, 0 fallos |
+
+Ademas del modo, los cambios pequenos van uno cada vez y el feedback sale de
+jugar, no de inventarlo. Lo que se va tocando se apunta en el
+[CHANGELOG.md](CHANGELOG.md).

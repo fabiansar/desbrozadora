@@ -17,8 +17,9 @@ main.tscn (Mundo)
 ├── Sol            DirectionalLight3D, la luz principal
 ├── Relleno        DirectionalLight3D, luz de relleno sin sombras
 ├── Bosque         arboles repartidos por el campo (colision capa 2)
-├── Hierba         192.454 hojas en 71 MultiMesh, uno por cuadrante
-│   └── Viento     el mapa del viento, hijo de la hierba
+├── Hierba         el cesped: 471.239 hojas en 146 MultiMesh, uno por cuadrante
+├── MalezaAlta     la maleza: 31.162 hojas en 62 MultiMesh, en matas
+├── Viento         el mapa del viento, UNO para los dos campos
 └── Player         el jugador (CharacterBody3D)
     ├── Cabeza     pivote de la cabeza, a 1,62 m
     │   └── Camara la camara en primera persona
@@ -170,9 +171,23 @@ que existiera, la prueba fallaba porque el bamboleo contaminaba la medida.
 | `retardo_mirada` | 0.12 | suavizado del retardo de la mirada |
 | `retardo_ladeo` | 0.30 | suavizado del ladeo |
 | `angular_correr` | 12° | cuanto se abre al correr |
-| `angular` | 100° | angular normal, horizontal |
+| `rapidez_agachado` | 9°/s | con que rapidez baja el angular al agacharse |
 | `margen_cabezal` | 4° | margen que se deja al cabezal en el encuadre |
-| `ladeo_herramienta` | — | lo pone `desbrozadora.gd` cada fotograma, no se toca a mano |
+| `tope_ladeo_herramienta` | 8° | tope del ladeo que le pone la maquina |
+
+El ladeo de la herramienta lo pone la maquina cada fotograma, y **antes era un
+`@export` de la camara**. Eso hacia que en el Inspector apareciera como algo que
+se puede tocar a mano, cuando no: lo que hay que tener a mano es
+`tope_ladeo_herramienta`, que si es del jugador. Ahora `ladeo_herramienta` es
+una variable normal.
+
+La ganancia tambien estaba mal: el codigo multiplicaba por 6
+(`rad_to_deg(_barrido * 6.0)`), y con el barrido completo de 96 grados eso son
+576 grados de ladeo, que no son un ladeo sino un giro. Con la ganancia de 0,07
+el tope sale justo: 96 grados de barrido dan 6,7 grados de ladeo, y de ahi el
+tope de 8 grados. El tope hace falta ademas porque el barrido tiene mas recorrido
+a la izquierda (96 grados) que a la derecha (38) y, sin tope, el lado izquierdo
+se llevaria bastante mas.
 
 ---
 
@@ -181,6 +196,55 @@ que existiera, la prueba fallaba porque el bamboleo contaminaba la medida.
 `class_name Desbrozadora`. Se apunta sola al grupo `"herramienta"` en `_ready()`,
 y busca dentro del modelo los nodos `Giro` y `Corte` por nombre, asi que
 moverlo de sitio en la escena no rompe nada.
+
+**El carrete gira sobre Z, no sobre Y.** La cuchilla va tumbada, con su eje en
+la vertical, y el Z del modelo es la vertical (la escena le da un giro de 180
+grados en Y al modelo entero, que no toca el Z). Girando sobre el Y, que es el
+eje a lo largo del tubo, la cuchilla daria vueltas **de lado a lado** y cortaria
+de canto. Y el nodo `Giro` del modelo va sin inclinacion a proposito: en `YXZ`
+cualquier inclinacion previa se sumaria a la de cada fotograma y la dejaria de
+girar plana. Hay una prueba que mira los tres ejes, porque si el eje se cambia
+la de "el carrete gira" se queda leyendo un cero fijo y no falla nunca.
+
+### Los ficheros del modelo y el cambio de cabezal
+
+El modelo se reparte en **un `.glb` por cabeza**, y esto es lo que hace posible
+cambiarla y ponerla en otra desbrozadora:
+
+| Fichero | Contenido |
+| --- | --- |
+| `models/desbrozadora.glb` | la maquina con su cuchilla de serie: `Motor`, `Barra`, `Manillar` y `Cabezal_Corta` |
+| `models/cabezal_hilo.glb` | carrete de hilo |
+| `models/cabezal_disco_2p.glb` | cuchilla de dos puntas |
+| `models/cabezal_disco_3p.glb` | cuchilla de tres puntas |
+
+Los cuatro se generan con `tools/crear_desbrozadora_mesh.py`.
+
+El contrato, que es lo que hay que respetar al cambiar un cabezal:
+
+- Todos tienen el **origen en el centro de giro**, que es `(0, 0, 0)` en el
+  `.glb` del cabezal. Por eso da igual en que maquina se monte: se cuelga del
+  nodo `Giro` con `add_child()` y cae justo en el pivote, sin moverlo a mano.
+- Los tres de repuesto vienen **sin gearbox y sin protector**: el protector es
+  parte de la maquina y se queda puesto con cualquier cabezal.
+- El plano de corte esta a `z = -0,222` en los cuatro, asi que un cabezal
+  cambiado corta a la misma altura que la cuchilla de serie.
+- La geometria es **tumbada** (plana en Z) y el nodo `Giro` va **sin rotacion**.
+
+Cambiar de cabezal en el juego es entonces:
+
+```gdscript
+var nuevo := CABEZALES[cabezal_elegido].instantiate()
+giro.add_child(nuevo)          # cae en el pivote solo
+anterior.queue_free()          # y se esconde el que estaba
+```
+
+**El giro va sobre `rotation.z`, no sobre `rotation.y`.** Godot compone en YXZ, y
+`rotation.y` mete un giro sobre el Y de la maquina, que es el eje a lo largo del
+tubo: con la cuchilla tumbada eso la daria vueltas de lado a lado. El Z de la
+modelo es la vertical, porque el giro de 180° en Y de `desbrozadora.tscn` no lo
+toca. Y el nodo `Giro` no lleva inclinacion propia a proposito: en YXZ se le
+sumaria a la del juego y dejaria de girar plano.
 
 | Export | Valor | Que hace |
 | --- | --- | --- |
@@ -206,6 +270,7 @@ El arnes y el barrido:
 | `masa_izquierda` | 1.6 | cuanto pesa a la izquierda (multiplica el peso del muelle) |
 | `rigidez_derecha` | 2.2 | cuanto se pone rigida al llegar al tope derecho |
 | `ladeo` | 3.8° | ladeo fijo de la herramienta |
+| `ganancia_ladeo` | 0.07 | cuanto ladeo la camara por cada radian de barrido |
 
 La vertical:
 
@@ -214,8 +279,67 @@ La vertical:
 | `inclinacion_reposo` | -16° | morro arriba en reposo; negativo es hacia abajo |
 | `inclinacion_acelerando` | 22° | cuanto baja el morro al acelerar |
 | `mirar_suelo` | 44° | pitch al que el cabezal apoya en el suelo y deja de hundirse |
+| `mirar_alto` | 45° | pitch al que la maquina llega arriba del todo |
+| `inclinacion_alta` | 95° | cuanto sube el morro al mirar arriba |
+| `rapidez_inclinacion` | 50°/s | con que rapidez llega a la inclinacion que toca |
 | `caida_max` | 0.26 m | cuanto bajan las manos al trabajar |
 | `vista_baja` | 0.30 m | cuanto baja la vista al trabajar: los ojos van detras de las manos |
+
+La vertical va en los dos sentidos, y esa era la parte que faltaba. Bajar la
+mirada apoya el cabezal en el suelo: se busca el angulo al que queda a la
+altura del suelo y el morro no pasa de ahi, que si no la maquina se hunde en
+tierra. **Subir la mirada sube el morro**, con el mismo reparto porVision: con
+`mirar_alto` se llega a toda la altura con el mismo gesto con el que
+`mirar_suelo` se llega al suelo. Sin esta parte el morro se quedaba clavado en
+`inclinacion_reposo` para cualquier mirar, y el cabezal no pasaba de 0,35 m: no
+habia forma de cortar nada por encima de la rodilla.
+
+La geometria sale medida, no supuesta. Al arrancar, `_medir_maquina()` sube desde
+el nodo `Corte` sumando transformaciones y saca dos numeros:
+
+- `_radio` (0,79 m): lo lejos que esta el cabezal de las manos.
+- `_angulo_cabeza` (116°): hacia que lado cae el cabezal respecto a la horizontal.
+
+Con eso la altura del cabezal sale en linea, sin ir probando:
+
+```
+altura = altura_manos + radio * cos(morro - angulo)
+```
+
+Y de ahi salen `altura_del_cabezal()` y `morro_para_altura()`, que son las que
+usan las pruebas. `morro_para_altura()` devuelve la solucion de **por delante**
+del arco (el signo menos), que es la que usa el juego; la de atras daria un morro
+apuntando al suelo y diria que la maleza es inalcanzable.
+
+La resistencia: cuanto mas maleza de pie hay por delante, mas frena la maquina.
+
+| Export | Valor | Que hace |
+| --- | --- | --- |
+| `densidad_corte` | 110 | hojas por m2 (contando dureza) a las que el frenao es maximo |
+| `frenao_motor` | 0.22 | cuanto bajan las rpm en la maleza mas cerrada |
+| `frenao_barrido` | 0.30 | cuanto frena el barrido, que es lo que mas se nota |
+| `intervalo_resistencia` | 0.15 s | cada cuanto se pregunta cuanta maleza hay |
+| `anticipacion_resistencia` | 0.40 m | a que distancia por delante se mira |
+| `constante_resistencia` | 0.45 s | cuanto tarda el motor en entrar y salir del frenao |
+
+Tres detalles que aqui importan de verdad:
+
+- Se mira **por delante**, no debajo. La hierba de justo debajo la acaba de
+  cortar la propia maquina en ese mismo fotograma, asi que medir ahi daria cero
+  siempre.
+- La distancia de mira no es un numero fijo: tiene que pasar del ancho del
+  cabezal (`max(anticipacion, radio_corte + 0.20)`), o el punto cae dentro de lo
+  recien cortado.
+- **El suavizado va aparte de la medida.** Preguntar cada 0,15 s esta bien, pero
+  si el filtro se aplicase solo en esos fotogramas, el motor tardaria varios
+  segundos en llegar al frenao y en un cesped normal se quedaria a media carga
+  sin que se notara. La medida se queda quieta entre preguntas y el filtro va
+  cada fotograma.
+
+`densidad_corte` va **por encima** de la densidad con la que se siembra, a
+proposito. Si se pusiera al nivel del cesped, el tope se alcanzaria en cualquier
+sitio y el frenao no diria nada: lo que se busca es recorrido entre un claro
+(≈ 0) y un zarzal (≈ 1).
 
 > El angulo de barrido lleva el signo de Godot: **positivo es hacia la
 > izquierda** del operario y negativo hacia la derecha. Por eso los topes se
@@ -251,17 +375,17 @@ El nodo crea y guarda sus propios hijos, uno por cuadrante.
 
 ### Por que cuadrantes
 
-Con un unico MultiMesh de 68 m de lado, su caja envolvente es tan grande que
+Con un unico MultiMesh de 100 m de lado, su caja envolvente es tan grande que
 siempre se solapa con la pantalla, se mire donde se mire. El motor no puede
-descartar nada, asi que dibuja las 192.000 hojas enteras en cada fotograma
+descartar nada, asi que dibuja las 500.000 hojas enteras en cada fotograma
 aunque solo se vea un trozo de cesped. Con cuadrantes, cada uno lleva su caja
 ajustada a las hojas que tiene dentro, el motor descarta solo los que quedan
 fuera de la vista, y el dibujo se reduce a lo que se ve de verdad.
 
 Por encima del culling de la vista hay un **recorte por distancia**
-(`distancia_maxima`, 42 m) en `_recortar()`: es la red de seguridad para el dia
-que el campo crezca. Hoy no apaga nada, porque 42 m es mas que el radio del
-campo (34 m).
+(`distancia_maxima`, 22 m en el cesped y 16 m en la maleza) en `_recortar()`: es la
+red de seguridad para el dia que el campo crezca. Hoy si apaga: el radio es de
+50 m, asi que lo que hay a mas de 22 m no se dibuja.
 
 El estado de cada hoja (donde esta y cuanto le queda de altura) vive en arrays
 de GDScript, **NO** en el MultiMesh:
@@ -269,7 +393,7 @@ de GDScript, **NO** en el MultiMesh:
 - El MultiMesh solo existe en el servidor de graficos. En headless no guarda
   nada, asi que una prueba en linea de comandos no veria ni una hoja y el
   sistema de corte no se podria comprobar.
-- Leer 190.000 transformaciones del motor en cada fotograma seria una chapuza.
+- Leer 500.000 transformaciones del motor en cada fotograma seria una chapuza.
   Con los arrays se va directo.
 
 El MultiMesh solo recibe la transformacion y el color. El shader lee
@@ -278,7 +402,7 @@ de altura despues del corte. Asi cortar es escribir un numero: no se toca ningun
 geometria, y se puede ir cortando en plan largo sin que baje el ritmo.
 
 Para el corte hay ademas una rejilla: un diccionario con celdas de 2 m y la
-lista de indices de cada una, para no revisar las casi doscientas mil hojas por
+lista de indices de cada una, para no revisar las quinientas mil hojas por
 fotograma.
 **Esa rejilla no tiene nada que ver con los cuadrantes**: es para el corte, y los
 cuadrantes son solo para el dibujo.
@@ -314,36 +438,64 @@ segunda asignacion **borraba el buffer entero**: `get_instance_count()` decia
 
 Luego `_repartir_en_cuadrantes()` decide a que cuadrante va cada hoja
 (`_casilla_de()`) y `_montar_cuadrante()` crea un `MultiMeshInstance3D` por
-cuadrante con su `custom_aabb` ya ajustada. Reparto verificado: **71 cuadrantes
-de 8 m, 192.454 hojas, ninguna perdida, ninguno vacio**.
+cuadrante con su `custom_aabb` ya ajustada. Reparto verificado: el cesped son
+**146 cuadrados de 8 m con 471.239 hojas** y la maleza **62 cuadrados de 12 m
+con 31.162**, ninguna perdida, ninguno vacio.
 
 La siembra es sobre una rejilla con jitter, y el borde se va aclarando con
-`borde` (0.72) para que el campo no tenga un corte recto.
+`borde` para que el campo no tenga un corte recto. Con `formacion` por encima de
+cero la siembra se hace en **matas** en vez de repartir por igual: se tira el
+suelo, se sortea el ruido y, si sale por encima del umbral, se siembra ahi; si no,
+se deja claro. Un claro no es un sitio con menos hojas, es un sitio **sin
+hojas**, y por eso se puede pasar andando sin oir el motor.
 
-| Export | En el codigo | **En el juego** | Que hace |
-| --- | --- | --- | --- |
-| `tipo` | 1 | 1 | 1 = hierba, 2 = el otro tipo (aun no hecho) |
-| `altura` | 0.38 m | **0.88 m** | |
-| `variacion_altura` | 0.45 | **0.96** | quanto hay de alto y de bajo |
-| `grosor` | 0.045 m | **0.145 m** | |
-| `variacion_grosor` | 0.35 | **0.64** | |
-| `radio` | 34 m | 34 m | radio del campo |
-| `densidad` | 30 | **53** | hojas por m2 |
-| `borde` | 0.72 | **0.76** | como se va aclarando el borde |
-| `semilla` | 90210 | 90210 | con la misma sale siempre igual |
-| `lado_cuadrante` | 8 m | 8 m | lado de cada trozo de campo |
-| `distancia_maxima` | 42 m | **22 m** | recorte por distancia |
-| `radio_corte` | 0.40 m | **0.54 m** | paso del cabezal, 108 cm de ancho |
-| `dejar_tocon` | true | true | cortar deja tocón |
-| `altura_tocon` | 0.08 m | 0.08 m | altura del tocón |
+Hay **dos instancias** en `scenes/main.tscn`, y no son el mismo campo con otros
+numeros: son dos campos, con su semilla, su material y su troceado.
 
-> **Ojo con estas dos columnas: son valores distintos y estan en sitios
-> distintos.** La columna "en el codigo" es el `@export` por defecto de
-> `scripts/hierba.gd`, y la de "en el juego" es lo que sobrescribe la instancia
-> `Hierba` de `scenes/main.tscn`. Lo que se ve al jugar es la segunda. Se
-> cambiaron a proposito para tener hierba alta y densa (88 cm, 53/m2) que se
-> parezca a un zarzal, y por eso el campo real son **192.454 hojas**, no las
-> 108.960 que salen con los valores por defecto.
+| Export | Por defecto | **`Hierba`** | **`MalezaAlta`** | Que hace |
+| --- | --- | --- | --- | --- |
+| `tipo` | 1 | 1 | **2** | 1 = cesped, 2 = maleza |
+| `altura` | 0.38 m | **0.71 m** | **1.45 m** | |
+| `variacion_altura` | 0.45 | **0.96** | 0.34 | cuanto hay de alto y de bajo |
+| `grosor` | 0.045 m | **0.145 m** | 0.11 m | |
+| `variacion_grosor` | 0.35 | 1.0 | 0.7 | |
+| `radio` | 34 m | **50 m** | **50 m** | radio del campo |
+| `densidad` | 30 | **60** | 18 | hojas por m2 sembradas |
+| `borde` | 0.72 | 1.0 | 0.9 | como se va aclarando el borde |
+| `formacion` | 0 | 0 | **0.78** | cuanto se agrupa en matas |
+| `dureza` | 1.0 | 1.0 | **1.8** | cuanto cuesta cortarla |
+| `tono_pie` | verde | verde | **seco** | color de la base |
+| `tono_punta` | verde claro | verde claro | **seco claro** | color de la punta |
+| `semilla` | 90210 | 90210 | **24601** | con la misma sale siempre igual |
+| `lado_cuadrante` | 8 m | **8 m** | 12 m | lado de cada trozo de campo |
+| `distancia_maxima` | 42 m | **22 m** | 16 m | recorte por distancia |
+| `radio_corte` | 0.40 m | **0.73 m** | **0.73 m** | paso del cabezal |
+| `dejar_tocon` | true | true | true | cortar deja tocón |
+| `altura_tocon` | 0.08 m | **0.15 m** | 0.30 m | altura del tocón |
+
+Los dos radio son 50 m a proposito, para que compartan el mismo mapa del viento
+y el mismo recorte. La maleza esta mas rala (18 por m2) pero sale en **matas**:
+con `formacion = 0.78` solo se siembra el 34 % del terreno, de modo que hay
+claros de verdad por los que se pasa sin cortar nada. Sin eso, un segundo tipo
+que se reparte por igual no se distingue de un cesped mas alto.
+
+`dureza` va aparte de la densidad a proposito. La densidad es "cuantas hojas hay
+debajo"; la dureza es "cuanto cuesta cada una". Con las dos juntas se puede
+tener un cesped ralo y barato, o una maleza corta y cara, y el motor nota las
+dos cosas. Sumarlas en un solo numero haria que "mas densa" y "mas cara" fueran
+lo mismo, y entonces la maleza seria solo una alfombra mas alta.
+
+`dureza` **no va al shader**: el shader no sabe quanto cuesta nada, solo dibuja.
+Quien la usa es `desbrozadora.gd`, que al medir la resistencia multiplica las
+hojas de pie que hay por delante por `coste_maleza()` de cada campo. Por eso
+`Hierba` expone `coste_maleza()`: el motor pregunta a cada campo cuanto cuesta
+lo que tiene debajo.
+
+> **Ojo con estas columnas: son valores distintos y estan en sitios distintos.**
+> La de "por defecto" es el `@export` de `scripts/hierba.gd`, y las otras dos son
+> lo que sobrescriben las instancias de `scenes/main.tscn`. Lo que se ve al
+> jugar son las de los campos. El campo real son **502.401 hojas** entre los dos,
+> no las 108.960 que salen con los valores por defecto.
 >
 > Al cambiar estos numeros, dos cosas se quedan viejas solas: los comentarios que
 > dan recuento de hojas, y las pruebas que comparen con un literal. Por eso la
@@ -355,8 +507,10 @@ La siembra es sobre una rejilla con jitter, y el borde se va aclarando con
 
 `dejar_tocon` esta en `true` a proposito: con `false` la hierba cortada queda a
 0 cm, tumbada en el suelo, y **no se ve nada desde la camara**, asi que no hay
-ni rastro de por donde has pasado. Con 8 cm de tocón el corte se ve de sobra,
-como una mancha mas corta y mas clara.
+ni rastro de por donde has pasado. Con tocón el corte se ve de sobra, como una
+mancha mas corta y mas clara. Ahora el cesped deja 15 cm y la maleza 30 cm, que es
+lo que se ve de verdad: en la maleza la zona cortada es casi tan alta como el
+tocón del cesped, y por eso los dos campos se distinguen tambien por el rastro.
 
 ### API para el corte y las pruebas
 
@@ -370,9 +524,15 @@ posicion_hoja(i) -> Vector3
 uv_de_hoja(i) -> Vector2                   # su sitio en el mapa del viento
 alto_de(i) / gordo_de(i) -> float
 altura_visual() -> float                   # altura de una hoja cortada
+datos_de_hoja(i) -> Color                  # los 4 canales tal cual van a la GPU
+tono_de(i) -> float                        # el tono, que nunca cambia
+densidad_bajo(centro, r) -> float          # hojas DE PIE por m2 alrededor
+coste_maleza() -> float                    # dureza
+refresca_uv_de_viento() -> void            # rehace las uv si cambio el radio
+uv_rehechas() -> int                       # cuantas hojas rehizo el ultimo refresco
 
 # lo de los cuadrantes
-num_cuadrantes() -> int                    # cuantos hay (71)
+num_cuadrantes() -> int                    # 146 en el cesped, 62 en la maleza
 hojas_de_cuadrante(n) -> int               # hojas de ese cuadrante
 caja_de_cuadrante(n) -> AABB               # su caja ajustada
 cuadrantes_visibles() -> int               # cuantos quedan tras el recorte
@@ -416,12 +576,12 @@ VERTEX.x += dir.x * (empuje + aleteo) * curva;
 
 El doblez es `curva = alto^2`, o sea que la punta se dobla mucho mas que la
 raiz, que es como se dobla una hoja de verdad. El tocón ademas se estrecha
-(`VERTEX.x *= mix(0.5, 1.0, enpie)`) porque si no un corte de 8 cm pareceria una
+(`VERTEX.x *= mix(0.5, 1.0, enpie)`) porque si no un corte de 15 cm pareceria una
 alfombra.
 
 **El corte.** Cortada, todos los vertices caen al suelo y el triangulo se
 degenera, asi que la hoja no pinta nada. Sin tocar un solo vertice desde el
-juego, por eso cortar 192.000 hojas es barato.
+juego, por eso cortar medio millon de hojas es barato.
 
 **El color.** Degradado pie→punta, cada hoja con su tono, la punta mas clara
 porque la luz la atraviesa, y lo cortado mas seco. Se compone en GDScript al
@@ -470,12 +630,31 @@ recalcula `lado_celda = radio * 2 / celdas` leyendo el `radio` de la hierba: la
 hoja calcula su UV suponiendo eso, y si el mapa midiera otra cosa cada hoja
 buscaria su celda en el sitio equivocado.
 
-> Consecuencia a tener en cuenta: la UV se calcula **al sembrar**. Si se cambia
-> `radio` en caliente hay que volver a sembrar, o el viento sale descuadrado.
+Con varios tipos de hierba se usa el **radio mayor de todos**, que es lo unico
+que vale para todos los campos a la vez.
 
-Se apunta a la hierba por el grupo `"hierba"`. Como el viento es hijo de la
-hierba, el `_ready` del hijo va antes que el del padre y a la primera vez no
-encuentra nada; `_process` reintenta hasta que la haya.
+**Un solo nodo de viento para todo el prado.** Vive en `main.tscn`, no dentro de
+`hierba.tscn`. Antes era hijo de la hierba, y al partir el campo en varios tipos
+cada uno traia el suyo: habia dos mapas peleandose por los mismos materiales y
+poniendole cada uno su reloj. El viento es una cosa del mundo, no de un campo.
+
+Se apunta a la hierba por el grupo `"hierba"`. Como ahora es hermano de la
+hierba y no hijo, el orden de arranque es el contrario: hay casos en que el
+`_ready` del viento corre antes de que los campos esten sembrados, asi que
+`_process` reintenta durante los primeros 90 fotogramas y ademas vigila que no
+entre ningun campo nuevo despues.
+
+> **La UV se calcula al sembrar, y se rehace si el radio cambia.** La hoja lleva
+> su sitio en el mapa metido en `INSTANCE_CUSTOM`. Si se cambia `radio` en
+> caliente sin mas, cada hoja sigue buscando su celda con el radio viejo y el
+> viento sale descuadrado. `Hierba` lo vigila: guarda aparte `_radio_uv` (el
+> radio con el que estan escritas las uv) y en `_process` compara. Si ha
+> cambiado, `refresca_uv_de_viento()` reescribe **todas** las hojas.
+>
+> Al reescribir se tocan **solo los canales `g` y `b`**, que son la uv. El `r`
+> (altura que le queda a la hoja) y el `a` (tono) van con la hoja, no con el
+> sitio donde se busca su viento, y se recuperan de los arrays para no
+> perderlos.
 
 ---
 
@@ -516,19 +695,30 @@ igual). Va en la capa 2.
 
 | Archivo | Que hace |
 | --- | --- |
-| `test_juego.gd` | la suite. **131 comprobaciones** en headless, **133** con GPU |
+| `test_juego.gd` | la suite. **183 comprobaciones** en headless |
 | `mirar_hierba.gd` | tres fotos con render real y cuanto ocupa cada una |
 | `medir_densidad.gd` | frame time con distintas densidades y radios |
-| `medir_foto.gd` | compara dos capturas pixel a pixel |
+| `medir_foto.gd` | **la comprobacion visual**: mide pixeles de la foto a render real |
 | `diag_hierba.gd` | AABB, reparto por cuadrante y datos de instancia |
 | `foto.gd` | una foto suelta |
 | `ver_encuadre.gd` | que mallas entran en la foto y a que grados del centro |
 | `crear_desbrozadora.py` | genera el modelo de la desbrozadora |
 | `crear_motor.py` | genera el modelo del motor |
+| `crear_desbrozadora_mesh.py` | genera la desbrozadora y **los tres cabezales sueltos**, y los mide antes de exportar |
+| `exportar_blender.py` | exportador a `.glb` con las correcciones que Godot necesita |
+| `abrir_modelo.py` | abre un `.glb` en Blender con ventana, para verlo |
 | `ver_modelo.py` | mira un `.glb` por dentro |
 
-Los tres `.py` son generadores: se ejecutan una vez para producir el `.glb` y
+Los `.py` son generadores: se ejecutan una vez para producir el `.glb` y
 luego no hacen falta en el juego. Los `.uid` los genera Godot solo, no se tocan.
+
+Todos van con **rutas absolutas** al lanzarlos desde el flatpak, porque Blender
+arranca en su propio directorio y no encuentra el proyecto con rutas relativas:
+
+```
+flatpak run --filesystem=$HOME/Documentos org.blender.Blender --background \
+    --python "$PWD/tools/crear_desbrozadora_mesh.py"
+```
 
 **La limitacion importante de las pruebas:** el renderer headless de Godot usa un
 dispositivo de mentira que **descarta los transforms y los datos de instancia
@@ -540,6 +730,39 @@ cualquier cosa visual. La suite comprueba la logica (los arrays), no el render.
 > `custom_aabb`, y eso **si** se puede comprobar en headless, porque lo calcula
 > GDScript. Lo que sigue sin poder comprobarse en headless es si la hoja sale
 > dibujada, que es otra cosa.
+
+Y hay un segundo limite, mas traicionero: **`get_instance_custom_data()` devuelve
+ceros en headless**, porque el buffer del MultiMesh vive en el servidor de
+graficos y en headless no hay. Asi que el contrato del shader **no se puede
+comprobar leyendo el MultiMesh**. Lo que hacen las pruebas es componerlo en CPU
+con `datos_de_hoja()`, que usa la misma funcion que se manda a la tarjeta: si
+cambia la funcion, las dos se rompen a la vez y la prueba no pasa por casualidad.
+Para lo que solo existe en la GPU, la comprobacion va en `medir_foto.gd`.
+
+### Como se cierra el aviso de imagen
+
+La suite comprueba que la foto sale **con algo de contenido** (que no sea todo
+negro), y eso en headless no se puede: no se dibuja nada, asi que la prueba avisa
+en vez de fallar. Para cerrarlo sin tener que abrir el juego:
+
+```bash
+flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+  --path . --script tools/medir_foto.gd --rendering-driver vulkan
+```
+
+`medir_foto.gd` hace la foto, espera 40 fotogramas reales, tira otra con la
+hierba oculta y compara las dos. En la ultima vez: **93,9 %** de los pixeles
+cambian al tapar la hierba, y **76,3 %** de los pixeles de la foto con hierba
+son verdes. Ese 76,3 % es el que importa: si el shader se rompiese, el campo
+saldria de otro color y el numero se hundiria.
+
+> **No se lanza la suite completa con Vulkan para cerrar el aviso.** En una
+> maquina sin GPU (render por software) va a unos 1 fps y las pruebas tardan
+> **doce minutos**, y ademas salen a veces falladas por motivo del reloj y no
+> del codigo. `medir_foto.gd` tarda 3 segundos y comprueba justo lo que
+> comprueba el aviso. Ademas la suite ahora espera **tiempo simulado** y no de
+> reloj (`_esperar()`), asi que las pruebas de movimiento ya no dependen de que
+> la maquina renderice rapido.
 
 `mirar_hierba.gd` espera 70 fotogramas antes de medir, porque si no el jugador
 todavia se esta asiendo y las tres fotos no salen con la misma camara y no se
@@ -567,7 +790,7 @@ el numero sea el de la hierba y no el de verse a uno mismo andando.
 
 | Densidad | Radio | Hojas | Triangulos | Mediana | Peor |
 | --- | --- | --- | --- | --- | --- |
-| **53/m2 (el de ahora)** | 34 m | **192.454** | 1.154.724 | 8.3 ms | 8.3 ms |
+| **53/m2 (el de entonces)** | 34 m | **192.454** | 1.154.724 | 8.3 ms | 8.3 ms |
 | 30/m2 | 20 m | 37.696 | 226.176 | 8.3 ms | 8.4 ms |
 | 60/m2 | 20 m | 75.380 | 452.280 | 8.3 ms | 8.4 ms |
 | 100/m2 | 20 m | 125.664 | 753.984 | 8.3 ms | 8.6 ms |
@@ -579,8 +802,15 @@ La mediana esta clavada en 8,3 ms en todas las filas porque es el tope de vsync 
 dato util es la columna "Peor", que es donde se nota cuando algo se pasa de la
 raya, y como ninguna se pasa, el campo va sobrado.
 
-La conclusion: el campo real, con 192.454 hojas y 1,15 millones de triangulos, va
-a 120 fps sin despeinarse. **Los cuadrantes lo que hacen es permitir subir la
-densidad**, que antes de trocear no se podia: con un solo MultiMesh de 68 m el
-motor dibujaba las hojas enteras siempre, y a esa densidad el portatil se
-arrastraba.
+La conclusion: el campo real de entonces, con 192.454 hojas y 1,15 millones de
+triangulos, iba a 120 fps sin despeinarse. **Los cuadrantes lo que hacen es
+permitir subir la densidad**, que antes de trocear no se podia: con un solo
+MultiMesh de 68 m el motor dibujaba las hojas enteras siempre, y a esa densidad
+el portatil se arrastraba.
+
+> **Estas medidas son anteriores a la fase 2 y ya no describen el juego.** El
+> campo ahora tiene **502.401 hojas** (471.239 de cesped y 31.162 de maleza) en
+> 50 m de radio, no 192.454 en 34 m: mas del doble de hojas en un radio mayor. La
+> tabla de arriba no se ha vuelto a medir, y **no se puede decir que el campo
+> siga yendo a 120 fps**. Hay que volver a pasar `tools/medir_densidad.gd` con la
+> GPU de verdad antes de fiarse de nada de aqui.
