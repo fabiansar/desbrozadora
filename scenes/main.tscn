@@ -59,14 +59,14 @@ terreno = NodePath("../Terreno")
 aldea = NodePath("../Aldea")
 
 [node name="Hierba" parent="." unique_id=677948321 node_paths=PackedStringArray("terreno", "aldea") instance=ExtResource("5_hierba")]
-altura = 0.7100000000000001
-variacion_altura = 0.96
-grosor = 0.14500000000000002
-variacion_grosor = 1.0
-radio = 50.0
-densidad = 60.0
-borde = 1.0
-distancia_maxima = 22.0
+altura = 0.42000000000000004
+variacion_altura = 0.35
+grosor = 0.055
+variacion_grosor = 0.35
+radio = 42.0
+densidad = 32.0
+borde = 0.85
+distancia_maxima = 36.0
 radio_corte = 0.7300000000000001
 altura_tocon = 0.15
 terreno = NodePath("../Terreno")

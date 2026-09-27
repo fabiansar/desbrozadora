@@ -66,10 +66,9 @@ var _paja := SurfaceTool.new()
 var _pizarra := SurfaceTool.new()
 var _tierra := SurfaceTool.new()
 var _oscuro := SurfaceTool.new()
-# Las cajas que colisionan: solo las casas y los horreos. Los muros de las
-# parcelas NO colisionan, y es a proposito: un muro de piedra seca de un metro
-# se salta, y un trimesh de 4.000 triangulos de media milla de alto hace que
-# la maquina se enganche en los bordes y dar saltos cada dos pasos.
+# Las cajas que colisionan: casas, hórreos y tramos de muro de parcela. Los
+# muros se parten en segmentos cortos para seguir la ladera y dejar libres sus
+# huecos de paso.
 var _solido: Array[Dictionary] = []
 
 # La altura del suelo en la figura que se esta construyendo ahora mismo. Se usa
@@ -123,7 +122,7 @@ func _ready() -> void:
 ##
 ## La cuadricula se gira con la horizontal del terreno, que es como se parcelan
 ## las laderas: el lado largo de cada parcela va en la horizontal y el corto se
-##|sube la pendiente. Asi el bancal queda tumbado y no clavado en la ladera.
+## sube la pendiente. Asi el bancal queda tumbado y no clavado en la ladera.
 func _reparto() -> void:
 	_rng.seed = semilla
 	var sitio := _sitio_del_bloque()
@@ -416,7 +415,8 @@ func _generar_caminos() -> void:
 ## en el terreno en cada punto y la parte de arriba va a saltos, con un escalon
 ## cada dos metros. Esa parte escalonada es la que hace que un muro de piedra se
 ## reconozca como un muro de piedra y no como un mutilo de goma.
-func _muro(p0: Vector2, p1: Vector2, alto: float, grosor: float, hueco: float) -> void:
+func _muro(p0: Vector2, p1: Vector2, alto: float, grosor: float, hueco: float,
+		colision := false) -> void:
 	var largo := p0.distance_to(p1)
 	if largo < 0.4:
 		return
@@ -438,6 +438,8 @@ func _muro(p0: Vector2, p1: Vector2, alto: float, grosor: float, hueco: float) -
 			a = corte_b
 		if b - a < 0.3:
 			continue
+		if colision:
+			_registrar_colisiones_muro(p0 + dir * a, p0 + dir * b, alto, grosor)
 		_tramo_de_muro(p0 + dir * a, p0 + dir * b, dir, lado, alto, grosor)
 	# Las dos esquinas de cada extremo, mas altas y mas anchas, que es de donde
 	# sale el aspecto de muro bien hecho.
@@ -473,7 +475,7 @@ func _tramo_de_muro(a: Vector2, b: Vector2, dir: Vector2, lado: Vector2,
 			# mitad de los triangulos.
 			_cara(_piedra, anterior[0], anterior[1], actual[1], actual[0],
 				Vector3(-lado.x, 0.0, -lado.y))
-			_cara(_piedra, actual[3], actual[2], anterior[2], anterior[1],
+			_cara(_piedra, actual[3], actual[2], anterior[2], anterior[3],
 				Vector3(lado.x, 0.0, lado.y))
 			_cara(_piedra, anterior[3], anterior[2], actual[2], actual[3], Vector3.UP)
 		anterior = actual
@@ -550,7 +552,22 @@ func _generar_parcelas() -> void:
 func _muro_de_cuadricula(x0: float, y0: float, x1: float, y1: float, hueco: float) -> void:
 	var a := _origen_cuadricula + _eje_cuadricula * x0 + _normal_cuadricula * y0
 	var b := _origen_cuadricula + _eje_cuadricula * x1 + _normal_cuadricula * y1
-	_muro(a, b, alto_muro, grosor_muro, hueco)
+	_muro(a, b, alto_muro, grosor_muro, hueco, true)
+
+
+func _registrar_colisiones_muro(a: Vector2, b: Vector2, alto: float, grosor: float) -> void:
+	var largo := a.distance_to(b)
+	var n := maxi(1, int(ceil(largo / 2.0)))
+	for i in n:
+		var p0 := a.lerp(b, float(i) / float(n))
+		var p1 := a.lerp(b, float(i + 1) / float(n))
+		var medio := p0.lerp(p1, 0.5)
+		var dir := (p1 - p0).normalized()
+		_solido.append({
+			"centro": Vector3(medio.x, terreno.cota_en(medio) + alto * 0.5, medio.y),
+			"tam": Vector3(p0.distance_to(p1), alto, grosor),
+			"giro": atan2(dir.y, dir.x),
+		})
 
 
 ## Una tira de tierra pegada al terreno, de `ancho`, que se eleva `alto`.
@@ -580,7 +597,7 @@ func _lomo(a: Vector2, b: Vector2, ancho: float, alto: float,
 		if i > 0:
 			_cara(t, anterior[0], anterior[1], actual[1], actual[0],
 				Vector3(-dir.x, 0.0, -dir.y))
-			_cara(t, actual[3], actual[2], anterior[2], anterior[1],
+			_cara(t, actual[3], actual[2], anterior[2], anterior[3],
 				Vector3(dir.x, 0.0, dir.y))
 			if alto > 0.0:
 				_cara(t, actual[2], actual[3], anterior[3], anterior[2], Vector3.UP)
@@ -662,34 +679,27 @@ func _prisma(base: Vector3, giro: float, largo: float, fondo: float, alto: float
 		vuelo: float, caballete: float, t: SurfaceTool) -> void:
 	var f := fondo * 0.5
 	var l := largo * 0.5 + vuelo
-	var pendiente := atan(caballete / f)
-	var largo_faldon := sqrt(f * f + caballete * caballete) * 1.06
+	var alero := f + 0.18
 	for lado: float in [-1.0, 1.0]:
-		# El faldon, inclinado. El centro va a media altura del faldon, a media
-		# anchura: de ahi sale la inclinacion, y con el vuelo de sobra para que
-		# los faldones se pisen en la caballera.
-		#
-		# El signo de la inclinacion es lo unico que separa un tejado de una
-		# cebada: los dos faldones tienen que CAER hacia fuera y juntarse arriba
-		# en la caballera. Con el signo al reves los dos bajan hacia el centro y
-		# se forma una V en medio, que de lejos no se lee como tejado sino como
-		# dos losas torcidas, y la caballera se queda flotando por encima sin
-		# tocar nada.
-		_caja_inclinada(t,
-			base + Vector3.UP * (alto + caballete * 0.5) + Vector3(-sin(giro), 0.0, cos(giro)) * (lado * f * 0.5),
-			Vector3(l * 2.0, 0.14, largo_faldon), giro, lado * pendiente)
-		# El hastial, que es el triangulito de debajo. Va en piedra, porque el
-		# hastial se cierra con la pared. Y es un TRIANGULO de verdad, con su
-		# funcion: si se pasa como un cuadrilatero con el ultimo punto repetido,
-		# sale un triangulo de area cero que el motor dibuja o no segun le
-		# apetece.
+		# Un faldon es solo un cuadrilatero: cumbrera arriba y alero abajo.
+		# Es deliberadamente simple; no hay una caja rotada que pueda quedar de
+		# canto o invertida por el orden de dos giros.
+		var p0 := _punto_casa(base, giro, -l, alto + caballete, 0.0)
+		var p1 := _punto_casa(base, giro, l, alto + caballete, 0.0)
+		var p2 := _punto_casa(base, giro, l, alto, lado * alero)
+		var p3 := _punto_casa(base, giro, -l, alto, lado * alero)
+		_cara(t, p0, p1, p2, p3, Vector3.UP)
+		# El hastial, el triangulo sencillo de piedra en cada extremo.
 		var e := Vector3(cos(giro), 0.0, sin(giro)) * (largo * 0.5) * lado
 		var n := Vector3(-sin(giro), 0.0, cos(giro)) * lado
 		_tri(_piedra, base + e + n * f, base + e - n * f,
 			base + e + Vector3.UP * (alto + caballete), e.normalized())
-	# La caballera, que remata las dos losas por arriba.
-	_caja_inclinada(t, base + Vector3.UP * (alto + caballete + 0.05),
-		Vector3(l * 2.0, 0.16, 0.3), giro, 0.0)
+
+
+func _punto_casa(base: Vector3, giro: float, x: float, y: float, z: float) -> Vector3:
+	var eje := Vector3(cos(giro), 0.0, sin(giro))
+	var normal := Vector3(-sin(giro), 0.0, cos(giro))
+	return base + eje * x + Vector3.UP * y + normal * z
 
 
 ## La puerta, las ventanas y, si el tejado es de pizarra, la chimenea.
@@ -936,8 +946,8 @@ func _commitir() -> void:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		add_child(mi)
 		n += 1
-	# Y la colision: una caja por casa y por hórreo, dentro de un cuerpo quieto.
-	# Los muros de las parcelas no colisionan, por lo de arriba.
+	# Y la colision: una caja por casa, hórreo y tramo de muro, dentro de un
+	# cuerpo quieto. Los huecos no generan caja.
 	#
 	# El cuerpo quieto no es opcional: un CollisionShape3D colgado de un Node3D
 	# se queda colgando sin avisar de nada, y se atraviesa la aldea andando. Solo
