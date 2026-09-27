@@ -200,6 +200,14 @@ func _acelerador() -> void:
 	_ok_si(herramienta.get_cortando(), "con el motor en marcha dice que corta")
 	_ok_si(absf(_rotacion_carrete() - giro0) > 0.5,
 		"el carrete gira (%.2f rad)" % (_rotacion_carrete() - giro0))
+	# El eje importa mas que el giro. La cuchilla va TUMBADA, con su eje en la
+	# vertical, y el Z del modelo es la vertical: girando sobre el Y, que es el
+	# eje a lo largo del tubo, la cuchilla daria vueltas de lado a lado y
+	# cortaria de canto. Ademas, si el eje se cambia, la prueba de arriba se queda
+	# leyendo un cero fijo y no falla nunca: hay que mirar los tres ejes.
+	_ok_si(absf(herramienta.giro.rotation.y) < 0.001 and absf(herramienta.giro.rotation.x) < 0.001,
+		"el carrete gira en Z, el eje de la cuchilla (y=%.3f x=%.3f)" % [
+			herramienta.giro.rotation.y, herramienta.giro.rotation.x])
 	# Y al parar el motor, baja.
 	Input.action_release("acelerador")
 	for _i in 90:
@@ -1003,10 +1011,10 @@ func _resistencia_prueba() -> void:
 	Input.action_release("acelerador")
 	await _asentar()
 
-	# En un claro tiene que ir mas suelta que en la maleza. Se usa el metodo de
-	#费的的成本 de menos hojas por debajo del cabezal, que es el mismo que usa
-	# el juego, para poder comparar los dos sitios sin tener que esperar a estar
-	# en un sitio concreto del mapa.
+	# En un claro tiene que ir mas suelta que en la maleza. Se usa el metodo que
+	# cuenta las hojas por debajo del cabezal, que es el mismo que usa el juego,
+	# para comparar los dos sitios sin tener que esperar a estar en un sitio
+	# concreto del mapa.
 	var maleza := mundo.get_node_or_null("MalezaAlta") as Hierba
 	_ok_si(maleza != null, "con la maleza a mano para comparar")
 	if maleza == null:
@@ -1546,7 +1554,7 @@ func _raton(dx: int, dy: int) -> void:
 
 
 func _rotacion_carrete() -> float:
-	return herramienta.giro.rotation.y if herramienta.giro != null else 0.0
+	return herramienta.giro.rotation.z if herramienta.giro != null else 0.0
 
 
 ## Que no se haya ido de Simple: por encima de todo y por debajo del suelo.

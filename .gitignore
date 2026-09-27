@@ -8,3 +8,8 @@ export_presets.cfg
 /export/
 *.pck
 *.zip
+
+# Las herramientas de Blender estan en Python y Python guarda sus .pyc al
+# ejecutarlas. Son binarios que se regeneran solos, como los de Godot.
+__pycache__/
+*.pyc

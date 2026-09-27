@@ -334,7 +334,13 @@ func _acelerador(delta: float) -> void:
 	if giro != null:
 		_girado += TAU * vueltas_maximas * (rpm / maxf(rpm_maximas, 1.0)) * delta
 		_girado = fmod(_girado, TAU)
-		giro.rotation.y = _girado
+		# El Z, no el Y. La cuchilla va TUMBADA, con su eje en la vertical, y el
+		# Z del modelo es la vertical: la escena le da un giro de 180 grados en
+		# Y, que no toca el Z. Girando sobre el Y, que es el eje a lo largo del
+		# tubo, la cuchilla daria vueltas de lado a lado. Y el nodo "Giro" del
+		# modelo va sin inclinacion, porque en YXZ cualquier inclinacion previa
+		# se sumaria a esta y la dejaria de girar plana.
+		giro.rotation.z = _girado
 	_sonido()
 
 
