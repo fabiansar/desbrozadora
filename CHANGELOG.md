@@ -6,6 +6,58 @@ Lo que se ha tocado y por que. Para el detalle de como esta cada cosa por dentro
 
 ---
 
+## Fase 3 — El terreno y la aldea
+
+El prado llano deja de existir. Ahora el suelo se genera con pendiente, ondulacion,
+terrazas y surcos de arado, y en esa ladera hay una aldea de minifundios con sus
+huertos cerrados con muro de piedra seca.
+
+### El terreno
+
+- `scripts/terreno.gd` (`class_name Terreno`, `extends StaticBody3D`) genera el
+  suelo por codigo: 6 grados de pendiente, ondulacion de 12,6 m, terrazas y
+  surcos de arado. 400 trozos de 12 m, 67.600 puntos y 135.200 triangulos, unos
+  500 ms de generacion, y las normales calculadas con `generate_normals()`.
+- La malla va troceada con AABB propio por trozo, que es lo que permite el
+  culling: con una sola malla de 135.000 triangulos no habria culling posible.
+- La colision se construye con los triangulos **expandidos**, sin compartir
+  vertices entre trozos. Con vertices compartidos, `set_faces()` se come los
+  indices y la ladera se atraviesa andando.
+- `altura_origen` deja el centro del mapa en `y = 0`, que es donde aparece el
+  jugador.
+- La API (`cota_en`, `cota_en_3d`, `cotas`, `pendiente_en`, ...) es la unica
+  fuente de altura del juego. Hierba, arboles, aldea y maquina la preguntan.
+
+### La aldea
+
+- `scripts/aldea.gd` (`class_name Aldea`) reparte 18 parcelas y 9 casas, mas dos
+  hórreos, caminos y lomos de labranza. Todo se apoya en `terreno.cota_en()`.
+- Las parcelas van cerradas con su muro de piedra seca, con hueco para el paso, y
+  el muro baja y sube escalon a escalon siguiendo el suelo, que es lo que hace
+  un bancal de verdad.
+- Los tejados van mitad de paja y mitad de pizarra, con `shaders/piedra.gdshader`
+  para la piedra: sillares, juntas, grano y musgo por la altura sobre el suelo.
+- Una malla por material (6 en total) en vez de una por casa: unas 11.600 caras
+  en seis llamadas de dibujo.
+- Las cajas de colision cuelgan de un `StaticBody3D` llamado `Solidos`. Sueltas
+  bajo el `Node3D` de la aldea no colisionaban con nada y Godot no avisaba.
+- El reparto va en tres pasadas de mas a menos exigencia. Con 6 grados de
+  pendiente, 22 m de lado ya son 2,3 m de desnivel, asi que el filtro estricto
+  solo encontraba 4 parcelas y la aldea salia a medias.
+- Se deja un claro de 24 m en el centro: es donde aparece el jugador y tiene que
+  quedar libre, que aparecer dentro de un huerto cerrado es empezar mal.
+
+### Hierba y bosque sobre el terreno
+
+- `scripts/hierba.gd` y `scripts/bosque.gd` admiten `terreno` y `aldea`. Con el
+  terreno, cada hoja y cada arbol se siembran a la altura que tenga el suelo ahi.
+  Con la aldea, no se siembra dentro de los recintos: 0 de 377.821 hojas caen en
+  un huerto.
+- Las dos referencias se pasan por el inspector, y en el `.tscn` los nodos que
+  las tienen necesitan `node_paths=PackedStringArray(...)` en la cabecera. Sin esa
+  linea Godot lee la propiedad, no la encuentra en la lista y la deja a null sin
+  decir nada.
+
 ## Fase 2 — La maleza (tipo 2), la resistencia y el morro que sube
 
 El cesped de siempre se queda, y encima aparece un segundo tipo de hierba: alta,

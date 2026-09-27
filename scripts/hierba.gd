@@ -124,6 +124,12 @@ extends Node3D
 ## hoja del todo. Sin esto la hierba cortada queda a 0 cm, tumbada en el suelo
 ## y no se ve desde la camara, asi que no hay ni rastro de por donde has
 ## pasado la maquina.
+## El terreno y la aldea, si estan puestos. Con el terreno, las hojas se siembran
+## a la altura que tenga el suelo en ese punto; con la aldea, no se siembra
+## dentro de los recintos, que es donde va tierra labrada y no cesped.
+@export var terreno: Terreno
+@export var aldea: Aldea
+
 @export var dejar_tocon := true
 ## Altura del tocón cuando dejar_tocon esta activo. Con 8 cm el corte se ve de
 ## sobra desde la camara: es una mancha mas corta y mas clara que la hierba de
@@ -299,8 +305,13 @@ func _sembrar() -> void:
 			var gordo := grosor * (1.0 - variacion_grosor * 0.5
 				+ rng.randf() * variacion_grosor)
 			# Un centimetro por encima del suelo, para que las raices no pelen
-			# con el terreno.
-			_pos.append(Vector3(x, 0.01, z))
+			# con el terreno. Y la altura la pregunta al terreno si lo hay.
+			if aldea != null and aldea.dentro(Vector2(x, z)):
+				continue
+			var y := 0.01
+			if terreno != null:
+				y = terreno.cota_en(Vector2(x, z)) + 0.01
+			_pos.append(Vector3(x, y, z))
 			_corte.append(0.0)
 			_alto.append(alto)
 			_gordo.append(gordo)

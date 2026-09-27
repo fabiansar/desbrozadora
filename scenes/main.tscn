@@ -1,10 +1,15 @@
+; OJO: en los nodos que tengan propiedades NodePath (el terreno, la aldea) la
+; cabecera lleva `node_paths=PackedStringArray(...)` con la lista. Sin esa
+; linea, Godot lee la propiedad, no la encuentra en la lista y la deja a null
+; sin decir nada: el terreno se genera en el aire y la hierba sale plana.
 [gd_scene format=3 uid="uid://bpmw8ymshy233"]
 
 [ext_resource type="PackedScene" path="res://scenes/jugador.tscn" id="1_jugador"]
 [ext_resource type="PackedScene" path="res://scenes/bosque.tscn" id="4_bosque"]
 [ext_resource type="PackedScene" uid="uid://brbuf8v1qvi42" path="res://scenes/hierba.tscn" id="5_hierba"]
-[ext_resource type="Shader" uid="uid://bo8xiign6ew42" path="res://shaders/suelo.gdshader" id="6_suelo"]
 [ext_resource type="Script" uid="uid://df60xr3dkwfo0" path="res://scripts/viento.gd" id="7_viento"]
+[ext_resource type="Script" path="res://scripts/terreno.gd" id="8_terreno"]
+[ext_resource type="Script" path="res://scripts/aldea.gd" id="9_aldea"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_cielo"]
 sky_top_color = Color(0.325, 0.533, 0.796, 1)
@@ -26,38 +31,18 @@ ssao_radius = 1.2
 ssao_intensity = 1.4
 glow_enabled = true
 
-[sub_resource type="CylinderShape3D" id="CylinderShape3D_suelo"]
-height = 0.4
-radius = 80.0
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_suelo"]
-render_priority = 0
-shader = ExtResource("6_suelo")
-shader_parameter/tierra_seca = Color(0.345, 0.259, 0.169, 1)
-shader_parameter/tierra_humeda = Color(0.145, 0.098, 0.062, 1)
-shader_parameter/verdin = Color(0.208, 0.271, 0.129, 1)
-shader_parameter/cantidad_verdin = 0.3
-shader_parameter/grano = 0.45
-shader_parameter/escala_manchas = 0.28
-
-[sub_resource type="PlaneMesh" id="PlaneMesh_suelo"]
-material = SubResource("ShaderMaterial_suelo")
-size = Vector2(160, 160)
-
 [node name="Mundo" type="Node3D" unique_id=225840598]
 
 [node name="Entorno" type="WorldEnvironment" parent="." unique_id=141337137]
 environment = SubResource("Environment_cielo")
 
-[node name="Suelo" type="StaticBody3D" parent="." unique_id=1564848163]
+[node name="Terreno" type="StaticBody3D" parent="."]
 collision_mask = 0
+script = ExtResource("8_terreno")
 
-[node name="Colision" type="CollisionShape3D" parent="Suelo" unique_id=286625267]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.2, 0)
-shape = SubResource("CylinderShape3D_suelo")
-
-[node name="Malla" type="MeshInstance3D" parent="Suelo" unique_id=2006169899]
-mesh = SubResource("PlaneMesh_suelo")
+[node name="Aldea" type="Node3D" parent="." node_paths=PackedStringArray("terreno")]
+script = ExtResource("9_aldea")
+terreno = NodePath("../Terreno")
 
 [node name="Sol" type="DirectionalLight3D" parent="." unique_id=955506535]
 transform = Transform3D(0.866025, -0.321394, 0.383022, 0, 0.766044, 0.642788, -0.5, -0.55667, 0.663414, 0, 8, 0)
@@ -69,9 +54,11 @@ transform = Transform3D(0.5, 0.433013, 0.75, 0, -0.866025, 0.5, -0.866025, 0.25,
 light_energy = 0.35
 light_specular = 0.0
 
-[node name="Bosque" parent="." unique_id=1093573865 instance=ExtResource("4_bosque")]
+[node name="Bosque" parent="." unique_id=1093573865 node_paths=PackedStringArray("terreno", "aldea") instance=ExtResource("4_bosque")]
+terreno = NodePath("../Terreno")
+aldea = NodePath("../Aldea")
 
-[node name="Hierba" parent="." unique_id=677948321 instance=ExtResource("5_hierba")]
+[node name="Hierba" parent="." unique_id=677948321 node_paths=PackedStringArray("terreno", "aldea") instance=ExtResource("5_hierba")]
 altura = 0.7100000000000001
 variacion_altura = 0.96
 grosor = 0.14500000000000002
@@ -82,8 +69,10 @@ borde = 1.0
 distancia_maxima = 22.0
 radio_corte = 0.7300000000000001
 altura_tocon = 0.15
+terreno = NodePath("../Terreno")
+aldea = NodePath("../Aldea")
 
-[node name="MalezaAlta" parent="." instance=ExtResource("5_hierba")]
+[node name="MalezaAlta" parent="." node_paths=PackedStringArray("terreno", "aldea") instance=ExtResource("5_hierba")]
 tipo = 2
 altura = 1.4500000000000001
 variacion_altura = 0.34
@@ -101,6 +90,8 @@ lado_cuadrante = 12.0
 distancia_maxima = 16.0
 radio_corte = 0.7300000000000001
 altura_tocon = 0.3
+terreno = NodePath("../Terreno")
+aldea = NodePath("../Aldea")
 
 [node name="Viento" type="Node3D" parent="."]
 script = ExtResource("7_viento")
