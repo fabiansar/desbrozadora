@@ -200,3 +200,7 @@ lo que necesites, el mensaje empieza por una etiqueta:
 Ademas del modo, los cambios pequenos van uno cada vez y el feedback sale de
 jugar, no de inventarlo. Lo que se va tocando se apunta en el
 [CHANGELOG.md](CHANGELOG.md).
+
+Si quieres aprender a hacer cambios directamente, consulta la
+[guía para principiantes](docs/para_principiantes/README.md): explica Godot,
+GDScript, Blender, Git y las pruebas del proyecto paso a paso.

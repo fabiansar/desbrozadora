@@ -16,7 +16,14 @@ Este punto es la base funcional desde la que continuar el desarrollo. La prueba
 manual del usuario cubrió la versión actual del proyecto después de retirar la
 interacción experimental `E`/`Q`; la desbrozadora vuelve a permanecer anclada al
 arnés. El commit que introduce este registro fija exactamente el código de esta
-base. La guía para desarrolladores guardará su hash para poder volver a él.
+base: **`8da06a626c01250e0dda99fa3df17095e6e7dac0`**.
+
+## Guía para aportaciones manuales
+
+Se añadió [docs/para_principiantes/](docs/para_principiantes/README.md), con
+pasos iniciales para Godot/GDScript, Blender, Git y pruebas. La guía identifica
+el commit estable anterior como punto de partida para experimentar y aprender
+sin asistente.
 
 La prueba focalizada `tools/test_movimiento_integrado.gd` cubre 48 comprobaciones
 combinadas de paneo, giro, WASD, carrera, agachado, salto y acelerador, incluida
