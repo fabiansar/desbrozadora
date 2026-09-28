@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="Herramienta" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/herramienta.gd" id="1_herramienta"]
+[ext_resource type="PackedScene" path="res://scenes/desbrozadora.tscn" id="2_escena"]
+
+[resource]
+script = ExtResource("1_herramienta")
+id = &"desbrozadora"
+nombre = "Desbrozadora"
+escena = ExtResource("2_escena")
+caja = Vector3(0.45, 0.45, 2.2)
+tipos_compatibles = Array[int]([1, 2, 3])
+radio_corte = 1.0
+descripcion = "A motor. Corta por debajo de la cintura y llega a la zarza."

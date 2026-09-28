@@ -1,10 +1,13 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/jugador.gd" id="1_jugador"]
 [ext_resource type="Script" path="res://scripts/camara_gopro.gd" id="2_camara"]
-[ext_resource type="PackedScene" path="res://scenes/desbrozadora.tscn" id="3_herramienta"]
 [ext_resource type="PackedScene" path="res://models/personaje_trabajo.glb" id="4_personaje"]
 [ext_resource type="Script" path="res://scripts/brazos_primera_persona.gd" id="5_brazos"]
+[ext_resource type="Script" path="res://scripts/inventario.gd" id="6_inventario"]
+[ext_resource type="Script" path="res://scripts/rueda_inventario.gd" id="7_rueda"]
+[ext_resource type="Resource" path="res://resources/herramientas/desbrozadora.tres" id="8_desbrozadora"]
+[ext_resource type="Resource" path="res://resources/herramientas/hoz.tres" id="9_hoz"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_cuerpo"]
 radius = 0.35
@@ -56,4 +59,18 @@ script = ExtResource("5_brazos")
 ; que aqui solo esta el origen.
 [node name="PivoteDesbrozadora" type="Node3D" parent="Caderas"]
 
-[node name="Desbrozadora" parent="Caderas/PivoteDesbrozadora" instance=ExtResource("3_herramienta")]
+; Las nueve cosas que llevas y la que tienes en la mano. La desbrozadora ya no
+; esta aqui como nodo fijo: la crea el inventario al equipar el hueco 1, y por
+; eso esta en el catalogo y no en la escena. La ESCENA de la herramienta sigue
+; siendo scenes/desbrozadora.tscn, solo que ahora la pone el inventario.
+[node name="Inventario" type="Node3D" parent="."]
+script = ExtResource("6_inventario")
+catalogo = Array[ExtResource("8_desbrozadora")]([ExtResource("8_desbrozadora"), ExtResource("9_hoz")])
+ocupacion_inicial = Array[StringName]([&"desbrozadora", &"hoz"])
+pivote = NodePath("../Caderas/PivoteDesbrozadora")
+
+; La rueda de los nueve huecos, arriba a la derecha. Va suelta en el jugador y
+; no como hija de la herramienta a proposito: la rueda tiene que verse tambien
+; con las manos vacias, que es justo cuando mas hace falta saber que llevas.
+[node name="RuedaInventario" type="CanvasLayer" parent="."]
+script = ExtResource("7_rueda")

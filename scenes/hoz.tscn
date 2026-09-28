@@ -1,0 +1,27 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/hoz.gd" id="1_hoz"]
+[ext_resource type="PackedScene" path="res://models/hoz.glb" id="2_modelo"]
+
+[node name="Hoz" type="Node3D"]
+script = ExtResource("1_hoz")
+corte = NodePath("Corte")
+agarre = NodePath("Agarre")
+
+; El modelo viene con el mango en la Z y la hoja hacia delante y abajo. En Godot
+; el eje de adelante es -Z, asi que la Y de Blender pasa a ser -Z con solo la
+; conversion del glTF, y no hace falta ningun giro de correccion: con la Y hacia
+; -Z la hoja queda mirando al frente y el filo por dentro de la curva, que es
+; como se lleva en la mano.
+[node name="Modelo" parent="." instance=ExtResource("2_modelo")]
+
+; Donde se agarra. La base del mango, que es justo el origen del modelo, asi que
+; el marcador esta en el (0, 0, 0) y solo hay que separarlo un poco hacia atras
+; para que la mano no este dentro del madero.
+[node name="Agarre" type="Marker3D" parent="."]
+position = Vector3(0, 0.12, 0.03)
+
+; La punta de la hoja, que es donde se corta. Cae por debajo de la mano, como
+; tiene que caer: una hoz que corta a la altura de la muñeca no sirve.
+[node name="Corte" type="Marker3D" parent="."]
+position = Vector3(0, -0.14, -0.36)
