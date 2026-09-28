@@ -1,8 +1,10 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/desbrozadora.gd" id="1_desbrozadora"]
 [ext_resource type="PackedScene" path="res://models/desbrozadora.glb" id="2_modelo"]
 [ext_resource type="AudioStream" path="res://audio/motor.wav" id="3_motor"]
+[ext_resource type="Script" path="res://scripts/interfaz_herramienta.gd" id="4_interfaz"]
+[ext_resource type="AudioStream" path="res://audio/corte.wav" id="5_corte"]
 
 [node name="Desbrozadora" type="Node3D"]
 script = ExtResource("1_desbrozadora")
@@ -18,6 +20,11 @@ motor_sonido = NodePath("Motor")
 [node name="Modelo" parent="." instance=ExtResource("2_modelo")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
 
+[node name="SonidoCorte" type="AudioStreamPlayer3D" parent="."]
+stream = ExtResource("5_corte")
+unit_size = 4.0
+max_distance = 25.0
+
 [node name="Motor" type="AudioStreamPlayer3D" parent="."]
 stream = ExtResource("3_motor")
 unit_size = 6.0
@@ -31,3 +38,6 @@ position = Vector3(-0.2, 0.239, -0.039)
 
 [node name="AgarreDerecho" type="Marker3D" parent="."]
 position = Vector3(0.2, 0.239, -0.039)
+
+[node name="Interfaz" type="CanvasLayer" parent="."]
+script = ExtResource("4_interfaz")

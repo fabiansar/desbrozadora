@@ -1,8 +1,18 @@
 class_name Desbrozadora
 extends Node3D
 
+const MotorModelo = preload("res://scripts/motor_desbrozadora.gd")
+const CABEZALES_INICIALES: Array[CabezalDesbrozadora] = [
+	preload("res://resources/cabezales/serie.tres"),
+	preload("res://resources/cabezales/hilo.tres"),
+	preload("res://resources/cabezales/disco_2p.tres"),
+	preload("res://resources/cabezales/disco_3p.tres"),
+]
+
 signal telemetria_actualizada(rpm_sin_carga: float, rpm_bajo_carga: float,
-		resistencia: float)
+		rpm_maximas: float, resistencia: float, combustible_litros: float,
+		combustible_maximo_litros: float, nombre_cabezal: String,
+		desgaste_cabezal: float)
 
 ## La desbrozadora del operario: va colgada del arnes, no en las manos.
 ##
@@ -44,8 +54,21 @@ signal telemetria_actualizada(rpm_sin_carga: float, rpm_bajo_carga: float,
 ## hierba ni el radio geométrico de la cuchilla. 1 m conserva el ancho de pasada
 ## que ya dejaba un rastro visible en el césped. Se ajusta al cambiar cabezal.
 @export_range(0.05, 1.5, 0.01) var radio_corte := 1.0
+## Cabezal inicial y repuestos disponibles en este prototipo. La tienda futura
+## decidira cuales ha comprado cada partida.
+@export var cabezales_disponibles: Array[CabezalDesbrozadora] = CABEZALES_INICIALES
+## Perdida de vida util por hoja cortada y punto de dureza.
+@export_range(0.0000001, 0.00001, 0.0000001) var desgaste_por_hoja := 0.000001
 ## Sonido del motor.
 @export var motor_sonido: AudioStreamPlayer3D
+## Sonido corto de corte. Si esta vacio, el motor es el unico que suena.
+@export var corte_sonido: AudioStreamPlayer3D
+
+## Cuanto se ha cortado en el ultimo fotograma. Lo consume el sonido de corte y
+## se pone a cero en cuanto se ha usado.
+var _corte_ultimo := 0
+## Espera entre golpes del sonido de corte, para que no suene un zumbido.
+var _corte_sonido_reloj := 0.0
 ## Revoluciones por minuto maxima.
 @export var rpm_maximas := 9000.0
 ## Cuanto tarda en llegar de parado a tope, en segundos.
@@ -54,6 +77,15 @@ signal telemetria_actualizada(rpm_sin_carga: float, rpm_bajo_carga: float,
 @export var bajada_rpm := 0.6
 ## Frecuencia maxima de giro del carrete, en vueltas por segundo.
 @export var vueltas_maximas := 130.0
+@export_category("Combustible")
+## Capacidad total del deposito, en litros.
+@export_range(0.1, 2.0, 0.05) var capacidad_combustible_litros := 0.75
+## Combustible al empezar la partida.
+@export_range(0.0, 2.0, 0.05) var combustible_inicial_litros := 0.75
+## Consumo a plena demanda en terreno despejado, en litros por hora.
+@export_range(0.1, 3.0, 0.05) var consumo_base_l_h := 0.85
+## Consumo adicional a plena carga, en litros por hora.
+@export_range(0.0, 3.0, 0.05) var consumo_extra_carga_l_h := 0.55
 
 # --- Las caderas ----------------------------------------------------------
 
@@ -207,15 +239,30 @@ signal telemetria_actualizada(rpm_sin_carga: float, rpm_bajo_carga: float,
 @export_range(0.05, 2.0, 0.05) var constante_resistencia := 0.45
 
 ## RPM en vacío, de solo lectura para los consumidores.
-var _rpm := 0.0
 var rpm: float:
 	get:
-		return _rpm
+		return _motor.rpm_sin_carga if _motor != null else 0.0
 ## Estado de corte derivado de las RPM; no se almacena por separado para evitar
 ## que el booleano y la velocidad del motor puedan divergir.
 var cortando: bool:
 	get:
-		return _rpm > rpm_maximas * 0.15
+		return rpm_efectiva() > rpm_maximas * 0.15
+
+var combustible_litros: float:
+	get:
+		return _motor.combustible_litros if _motor != null else 0.0
+
+var combustible_maximo_litros: float:
+	get:
+		return _motor.capacidad_combustible_litros if _motor != null else 0.0
+
+var nombre_cabezal: String:
+	get:
+		return _cabezal_actual.nombre if _cabezal_actual != null else "Sin cabezal"
+
+var desgaste_cabezal: float:
+	get:
+		return _desgaste_actual
 
 var _girado := 0.0
 var _giro_carrete_acumulado := 0.0
@@ -252,11 +299,24 @@ var _densidad_debajo := 0.0
 var _bruta := 0.0
 ## La maleza que hay en el campo, para preguntarle por la densidad. Se busca una
 ## vez por el grupo "hierba", como hace la hierba con la herramienta.
-var _campos: Array[Hierba] = []
+var _campos: Array[Vegetacion] = []
 var _campos_buscados := false
+var _motor = MotorModelo.new()
+var _cabezal_actual: CabezalDesbrozadora
+var _cabezal_indice := 0
+var _cabezal_original: Node3D
+var _cabezal_montado: Node3D
+var _desgaste_actual := 1.0
+var _desgaste_por_id := {}
 
 
 func _ready() -> void:
+	_motor.configurar(rpm_maximas, subida_rpm, bajada_rpm, frenao_motor,
+		capacidad_combustible_litros, combustible_inicial_litros,
+		consumo_base_l_h, consumo_extra_carga_l_h)
+	_cabezal_original = _buscar(modelo, "Cabezal_Corta") as Node3D
+	if not cabezales_disponibles.is_empty():
+		_montar_cabezal(0)
 	# La hierba la busca por este grupo para poder cortarla. Se apunta aqui y
 	# no en la escena para que siga funcionando aunque se mueva de sitio.
 	add_to_group("herramienta")
@@ -295,12 +355,16 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_acelerador(delta)
+	if Input.is_action_just_pressed("cambiar_cabezal"):
+		cambiar_cabezal_siguiente()
 	_medir_maquina()
 	_mide_resistencia(delta)
 	_suavizar_resistencia(delta)
 	_mover_barrido(delta)
 	_colocar(delta)
-	telemetria_actualizada.emit(_rpm, rpm_efectiva(), _resistencia)
+	telemetria_actualizada.emit(rpm, rpm_efectiva(), rpm_maximas, _resistencia,
+		combustible_litros, combustible_maximo_litros, nombre_cabezal,
+		desgaste_cabezal)
 
 
 ## Se mide la maqueta una vez y se guarda el resultado.
@@ -343,17 +407,13 @@ func _offset_del_cabezal() -> Vector3:
 ## el cabezal no corta. Ademas el motor echado echa el peso del cuerpo sobre la
 ## maquina, asi que el punto de trabajo va con el acelerador.
 func _acelerador(delta: float) -> void:
-	var acelerado := Input.is_action_pressed("acelerador")
-	var objetivo := rpm_maximas if acelerado else 0.0
-	var paso := (rpm_maximas / maxf(subida_rpm, 0.01)) if acelerado \
-		else (rpm_maximas / maxf(bajada_rpm, 0.01))
-	_rpm = move_toward(_rpm, objetivo, paso * delta)
+	_motor.avanzar(delta, Input.is_action_pressed("acelerador"), _resistencia)
 	# El peso del cuerpo sobre la maqueta. Antes la maqueta se movia sola, sin
 	# relacion con el motor; esto es lo que la hace trabajar.
-	_trabajando = clampf(_rpm / maxf(rpm_maximas, 1.0), 0.0, 1.0)
+	_trabajando = clampf(_motor.rpm_efectivas / maxf(rpm_maximas, 1.0), 0.0, 1.0)
 	if giro != null:
-		var incremento := TAU * vueltas_maximas \
-			* (_rpm / maxf(rpm_maximas, 1.0)) * delta
+		var incremento: float = TAU * vueltas_maximas \
+			* (_motor.rpm_efectivas / maxf(rpm_maximas, 1.0)) * delta
 		_giro_carrete_acumulado += incremento
 		_girado = fmod(_girado + incremento, TAU)
 		# Este modelo nuevo tiene el eje de la cuchilla en Y. El modelo anterior
@@ -361,6 +421,41 @@ func _acelerador(delta: float) -> void:
 		# El nodo Giro va sin inclinacion para que la rotacion quede plana.
 		giro.rotation.y = _girado
 	_sonido()
+	_apisonar()
+	_cortar_sonido()
+	# El recuento de lo cortado es de un solo fotograma: lo que se corto antes ya
+	# se ha contabilizado y no debe seguir haciendo sonar el cabezal.
+	_corte_ultimo = 0
+
+
+## Pasa por encima de los montones de material y los aplana. Es lo que permite
+## apartar el escombro de donde quieres trabajar en vez de rodearlo siempre.
+func _apisonar() -> void:
+	if not _trabajando:
+		return
+	var montes := Montes.obtener(get_tree())
+	montes.pisar(punto_de_corte(), radio_corte_actual())
+
+
+## Sonido de corte. Suena corto y grave, y mas fuerte cuanto mas se ha cortado de
+## verdad, para que se oiga el trabajo aunque la vegetacion no cambie a la vista.
+func _cortar_sonido() -> void:
+	if corte_sonido == null or corte_sonido.stream == null:
+		corte_sonido = get_node_or_null("SonidoCorte") as AudioStreamPlayer3D
+	if corte_sonido == null or corte_sonido.stream == null:
+		return
+	# El sonido se renueva solo: se dispara una vez y se reinicia cuando vuelve a
+	# saltar. Asi da un golpe seco por cada vez que el cabezal muerde algo.
+	if _corte_sonido_reloj > 0.0:
+		_corte_sonido_reloj -= get_process_delta_time()
+		return
+	if _corte_ultimo <= 0:
+		return
+	corte_sonido.pitch_scale = randf_range(0.88, 1.14)
+	corte_sonido.volume_db = linear_to_db(clampf(0.18 + float(_corte_ultimo) * 0.02,
+		0.05, 0.9))
+	corte_sonido.play()
+	_corte_sonido_reloj = 0.11
 
 
 ## El barrido horizontal. Aqui esta casi todo el sentimiento de la maquina, asi
@@ -477,12 +572,81 @@ func _factor_barrido() -> float:
 	return 1.0 - frenao_barrido * _resistencia
 
 
-## Estimación de las RPM disponibles después de aplicar la carga de maleza.
-## `rpm` sigue la demanda del acelerador y alimenta el sonido actual. Esta
-## estimación se publica para telemetría; todavía no modifica el sonido ni la
-## rotación del carrete mientras se calibra el modelo de carga.
+## RPM disponibles despues de aplicar la carga de maleza. La simulacion del
+## motor conserva aparte las RPM pedidas por el acelerador y usa estas para el
+## sonido, el giro del cabezal y la señal de telemetria.
 func rpm_efectiva() -> float:
-	return _rpm * (1.0 - frenao_motor * _resistencia)
+	return _motor.rpm_efectivas
+
+
+## Añade combustible hasta la capacidad del deposito y devuelve los litros
+## realmente añadidos. El punto de repostaje se conectara mas adelante a la UI.
+func repostar(litros: float) -> float:
+	return _motor.repostar(litros)
+
+
+## Cambia al siguiente cabezal del inventario de prueba. Solo se permite con el
+## motor parado; en la fase de taller esta llamada quedara detras de una accion
+## de mantenimiento.
+func cambiar_cabezal_siguiente() -> bool:
+	if rpm > 50.0 or cabezales_disponibles.size() < 2:
+		return false
+	_montar_cabezal((_cabezal_indice + 1) % cabezales_disponibles.size())
+	return true
+
+
+func cabezal_puede_cortar(tipo_vegetacion: int) -> bool:
+	return _cabezal_actual != null \
+		and _cabezal_actual.tipos_compatibles.has(tipo_vegetacion)
+
+
+## Radio de pasada actual, reducido a medida que el filo se desgasta.
+func radio_corte_actual() -> float:
+	if _cabezal_actual == null:
+		return radio_corte
+	var eficiencia := lerpf(0.55, 1.0, _desgaste_actual)
+	return _cabezal_actual.radio_corte * eficiencia
+
+
+## Registra desgaste solo por hojas realmente cortadas. La dureza y el tipo de
+## cabezal determinan cuanto filo se pierde en cada hoja.
+func registrar_corte(tipo_vegetacion: int, cantidad: int, dureza_vegetacion: float) -> void:
+	if cantidad <= 0 or not cabezal_puede_cortar(tipo_vegetacion):
+		return
+	var factor := _cabezal_actual.multiplicador_desgaste
+	var perdida := float(cantidad) * desgaste_por_hoja \
+		* maxf(dureza_vegetacion, 0.0) * factor
+	_desgaste_actual = maxf(0.0, _desgaste_actual - perdida)
+	_desgaste_por_id[_cabezal_actual.id] = _desgaste_actual
+	# Se guarda lo que se ha cortado en el ultimo fotograma: lo usa el sonido para
+	# dar un golpe mas fuerte cuanto mas ha mordido el cabezal.
+	_corte_ultimo = maxi(cantidad, _corte_ultimo)
+
+
+func _montar_cabezal(indice: int) -> void:
+	if indice < 0 or indice >= cabezales_disponibles.size():
+		return
+	if _cabezal_actual != null:
+		_desgaste_por_id[_cabezal_actual.id] = _desgaste_actual
+	if is_instance_valid(_cabezal_montado):
+		_cabezal_montado.queue_free()
+	_cabezal_indice = indice
+	_cabezal_actual = cabezales_disponibles[_cabezal_indice]
+	if _cabezal_actual == null:
+		return
+	_desgaste_actual = float(_desgaste_por_id.get(_cabezal_actual.id, 1.0))
+	if is_instance_valid(_cabezal_original):
+		_cabezal_original.visible = _cabezal_actual.modelo == null
+	_cabezal_montado = null
+	if _cabezal_actual.modelo == null or giro == null:
+		return
+	var instancia := _cabezal_actual.modelo.instantiate() as Node3D
+	if instancia == null:
+		push_warning("El modelo del cabezal '%s' no tiene raiz Node3D" % _cabezal_actual.nombre)
+		return
+	giro.add_child(instancia)
+	instancia.transform = Transform3D.IDENTITY
+	_cabezal_montado = instancia
 
 
 ## Que frenao se nota ahora mismo, de 0 a 1. 0 es un claro y 1 es maleza
@@ -513,15 +677,15 @@ func _adelante() -> Vector3:
 ## respuesta va lentisima de todos modos. Y solo con el motor echado, que con el
 ## motor parado no se esta cortando nada.
 func _mide_resistencia(delta: float) -> void:
-	# Los campos de hierba se buscan UNA vez, y lo primero del todo. Ojo al
+	# Los campos de vegetacion se buscan UNA vez, y lo primero del todo. Ojo al
 	# orden: antes el "¿no hay campos? pues no hay resistencia" estaba ANTES de
 	# la busqueda, con lo que la lista se quedaba vacia para siempre y el frenao
 	# no subia nunca, por mas cesped que hubiera.
 	if not _campos_buscados:
 		_campos.clear()
-		for n in get_tree().get_nodes_in_group("hierba"):
-			if n is Hierba:
-				_campos.append(n as Hierba)
+		for n in get_tree().get_nodes_in_group("vegetacion"):
+			if n is Vegetacion:
+				_campos.append(n as Vegetacion)
 		_campos_buscados = not _campos.is_empty()
 	if not cortando or _campos.is_empty():
 		_resistencia_t = 0.0
@@ -543,8 +707,10 @@ func _mide_resistencia(delta: float) -> void:
 	# divide por el area del disco, asi que lo que sale son hojas por m2 y la
 	# cuenta de los dos tipos se puede sumar tal cual.
 	for c in _campos:
-		var d := maxf(anticipacion_resistencia, radio_corte + 0.20)
-		coste += c.densidad_bajo(punto + _adelante() * d, radio_corte) * c.coste_maleza()
+		var radio_actual := radio_corte_actual()
+		var d := maxf(anticipacion_resistencia, radio_actual + 0.20)
+		coste += c.densidad_bajo(
+			punto + _adelante() * d, radio_actual) * c.coste_maleza()
 	_densidad_debajo = coste
 	_bruta = clampf(coste / maxf(densidad_corte, 1.0), 0.0, 1.0)
 
@@ -725,18 +891,19 @@ func _sonido() -> void:
 	# bandera, si el sonido se acababa por lo que fuera, el motor se callaba
 	# para siempre sin que nadie lo volviera a arrancar. Preguntando al propio
 	# reproductor, si se para, se rearranca solo.
-	if _rpm > 60.0:
+	var rpm_actuales := rpm_efectiva()
+	if rpm_actuales > 60.0:
 		if not motor_sonido.playing:
 			motor_sonido.play()
 	elif motor_sonido.playing:
 		motor_sonido.stop()
 	# El tono sube con las revoluciones: eso es lo que se oye cuando acelera, y
 	# no solo que esta encendido.
-	motor_sonido.pitch_scale = clampf(0.55 + 1.15 * (_rpm / maxf(rpm_maximas, 1.0)),
+	motor_sonido.pitch_scale = clampf(0.55 + 1.15 * (rpm_actuales / maxf(rpm_maximas, 1.0)),
 		0.4, 2.2)
-	if _rpm > 1.0:
+	if rpm_actuales > 1.0:
 		motor_sonido.volume_db = linear_to_db(
-			clampf(_rpm / maxf(rpm_maximas, 1.0), 0.05, 1.0))
+			clampf(rpm_actuales / maxf(rpm_maximas, 1.0), 0.05, 1.0))
 	else:
 		motor_sonido.volume_db = -60.0
 
@@ -774,7 +941,7 @@ func punto_de_corte() -> Vector3:
 ## es solo la velocidad de giro; cuando haya hierba habra que sumar la del
 ## jugador.
 func velocidad_corte() -> float:
-	return vueltas_maximas * (_rpm / maxf(rpm_maximas, 1.0)) * TAU * 0.05
+	return vueltas_maximas * (rpm_efectiva() / maxf(rpm_maximas, 1.0)) * TAU * 0.05
 
 
 ## Rotación acumulada del carrete desde que arrancó la escena, en radianes.
@@ -835,6 +1002,22 @@ func angulo_del_suelo(altura_manos: float, suelo: float) -> float:
 ##
 ## El rayo sale de la columna del cabezal, no de las manos. Si no toca nada (por
 ## ejemplo, si el jugador está en el aire) se devuelve 0.
+## Altura del suelo en un punto del mundo, para lo que la necesite consultar desde
+## fuera, como los restos. Devuelve 0 si el rayo no encuentra nada.
+func altura_del_suelo(punto: Vector3) -> float:
+	if not is_inside_tree():
+		return 0.0
+	var espacio := get_world_3d().direct_space_state
+	var origen := Vector3(punto.x, punto.y + 1.0, punto.z)
+	var q := PhysicsRayQueryParameters3D.create(origen, origen + Vector3.DOWN * 4.0)
+	if _jugador != null:
+		q.exclude = [_jugador.get_rid()]
+	var golpe: Dictionary = espacio.intersect_ray(q)
+	if golpe.is_empty():
+		return 0.0
+	return to_local(golpe["position"]).y
+
+
 func _altura_del_suelo(altura_manos: float) -> float:
 	# Mirando al frente el suelo esta lejos y cualquier valor vale. Se evita el
 	# rayo entero, que son unos nanos, pero sobre todo porque en campo abierto

@@ -14,16 +14,17 @@ export_presets.cfg
 __pycache__/
 *.pyc
 
-# Las piezas que aun no se usan en el juego: los cabezales de disco y de
-# hilo, y la furgoneta. estan en el proyecto para tenerlas a mano cuando
-# toque la fase de los discos o la conduccion, pero Godot no deberia
-# importarlas ni el repositorio guardarlas mientras no entren en escena.
-# Cuando una se use, se quita de aqui con git rm --cached.
-models/cabezal_disco_2p.glb
-models/cabezal_disco_2p.glb.import
-models/cabezal_disco_3p.glb
-models/cabezal_disco_3p.glb.import
-models/cabezal_hilo.glb
-models/cabezal_hilo.glb.import
+# La furgoneta: 269 KB de modelo que NO esta en ninguna escena. Va en el
+# proyecto para tenerla a mano cuando toque la conduccion, pero mientras no
+# entre en juego el repositorio no la necesita.
+#
+# OJO: los cabezales de disco y de hilo SI se guardan, y antes no. La regla
+# era "fuera del repositorio todo lo que no entre en escena", pero con la tecla
+# Q el jugador cambia de cabezal y entonces los tres SI entran en escena: los
+# carga `Desbrozadora` con `preload` en `scripts/desbrozadora.gd`.
+# Con los modelos fuera del clon, esos `preload` no encuentran el .glb, el
+# script no compila y el juego no arranca en un repositorio nuevo. Ya ha
+# pasado: la leccion es que un `.tres` que apunta a un modelo tiene que
+# traerse el modelo, use la escena o no.
 models/furgoneta.glb
 models/furgoneta.glb.import

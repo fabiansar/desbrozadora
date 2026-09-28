@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="CabezalDesbrozadora" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/cabezal_desbrozadora.gd" id="1_cabezal"]
+
+[resource]
+script = ExtResource("1_cabezal")
+id = &"serie"
+nombre = "Cuchilla de serie"
+tipos_compatibles = Array[int]([1, 2, 3])
+radio_corte = 1.0
+multiplicador_desgaste = 1.0

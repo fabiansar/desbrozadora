@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CabezalDesbrozadora" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/cabezal_desbrozadora.gd" id="1_cabezal"]
+[ext_resource type="PackedScene" path="res://models/cabezal_disco_3p.glb" id="2_modelo"]
+
+[resource]
+script = ExtResource("1_cabezal")
+id = &"disco_3p"
+nombre = "Disco de tres puntas"
+modelo = ExtResource("2_modelo")
+tipos_compatibles = Array[int]([2, 3])
+radio_corte = 1.15
+multiplicador_desgaste = 0.75
