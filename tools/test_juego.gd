@@ -643,9 +643,9 @@ func _hierba_prueba() -> void:
 ##
 ## El cesped corto es lo que hay por defecto. La maleza alta es un SEGUNDO
 ## campo, con su propia semilla y su propio material, y tiene que cumplir tres
-## cosas: sembrarse en matas y no a pelo suelto, ser mas alta que el cesped
-## (y que la cintura del operario, que es lo que hace que sea maleza y no
-## hierba), y cortar con la misma maquina. Lo ultimo es lo importante: si la
+## cosas: sembrarse en matas y no a pelo suelto, ser claramente mas alta que el
+## cesped pero sin llegar a la cara del operario (que es lo que hace que sea
+## maleza y no un muro verde), y cortar con la misma maquina. Lo ultimo es lo importante: si la
 ## maleza salta por encima del radio de corte y no se corta, es decorado, y un
 ## decorado que no se puede cortar es un fallo, no un detalle.
 func _maleza_prueba() -> void:
@@ -665,27 +665,56 @@ func _maleza_prueba() -> void:
 	_ok_si(cesped != null and maleza.coste_maleza() > cesped.coste_maleza(),
 		"el cesped sigue siendo el barato de cortar")
 
-	# Mas alta que el cesped, y mas alta que el operario. Si la maleza le
-	# llegaba a la cara habria que revisar el encuadre de la camara.
-	# Se mide con las hojas de verdad, no con el alto del Inspector: lo que
-	# importa es lo que se ve, y lo que se ve es lo que salio de la siembra.
+	# Mas alta que el cesped, y sin llegar a la cara. Se mide con las hojas de
+	# verdad, no con el alto del Inspector: lo que importa es lo que se ve, y lo
+	# que se ve es lo que salio de la siembra.
+	#
+	# La comparacion va por la altura TIPICA de cada campo y no por la hoja mas
+	# alta. El cesped lleva `variacion_altura = 1.0`, con lo que su hoja mas alta
+	# mide casi lo mismo que la maleza mas alta (0,73 contra 0,79): comparar los
+	# dos maximos mide la variacion del cesped, no la diferencia entre campos. La
+	# tipica son 0,49 y 0,76, y ahi si se ve que la maleza es otra cosa.
 	var alta_maleza := 0.0
 	var alta_cesped := 0.0
+	var tipica_maleza := 0.0
+	var tipica_cesped := 0.0
 	for i in maleza.total():
 		if i % 53 == 0:
 			alta_maleza = maxf(alta_maleza, maleza.alto_de(i))
+			tipica_maleza += maleza.alto_de(i)
+	tipica_maleza /= float(maleza.total() / 53)
 	_altura_maleza_probada = alta_maleza
 	if cesped != null:
 		for i in cesped.total():
 			if i % 53 == 0:
 				alta_cesped = maxf(alta_cesped, cesped.alto_de(i))
+				tipica_cesped += cesped.alto_de(i)
+		tipica_cesped /= float(cesped.total() / 53)
 	var alta_cadera: float = herramienta.altura_cadera
-	print("   la maleza llega a %.2f m, el cesped a %.2f m y la cadera a %.2f m"
-		% [alta_maleza, alta_cesped, alta_cadera])
-	_ok_si(alta_maleza > alta_cesped * 1.4,
-		"la maleza es bastante mas alta que el cesped (%.2f m)" % alta_maleza)
-	_ok_si(alta_maleza > alta_cadera,
-		"y le pasa la altura del operario (%.2f m)" % alta_maleza)
+	# La altura de los ojos, medida de verdad: es el limite que importa, porque a
+	# partir de ahi la maleza se come el encuadre.
+	var ojos := mundo.get_node_or_null("Player/Cabeza/Camara") as Camera3D
+	var altura_ojos := 1.62
+	if ojos != null:
+		altura_ojos = ojos.global_position.y - jugador.global_position.y
+	print("   la maleza llega a %.2f m (tipica %.2f), el cesped a %.2f (tipica %.2f);"
+		% [alta_maleza, tipica_maleza, alta_cesped, tipica_cesped])
+	print("   la cadera esta a %.2f m y los ojos a %.2f m"
+		% [alta_cadera, altura_ojos])
+	_ok_si(tipica_maleza > tipica_cesped * 1.4,
+		"la maleza es bastante mas alta que el cesped (%.2f contra %.2f m)"
+		% [tipica_maleza, tipica_cesped])
+	# Antes se pedia que la maleza le pasara al operario. Ahora al reves, y con
+	# motivo: se bajo a 0,76 m porque a 1,33 m tapaba la mitad de la pantalla y no
+	# se veia donde estabas cortando. Lo que tiene que cumplirse es que siga
+	# siendo maleza de verdad (por encima de la rodilla) sin llegar a tapar la
+	# vista.
+	_ok_si(tipica_maleza > 0.5,
+		"y sigue siendo maleza de verdad, por encima de la rodilla (%.2f m)"
+		% tipica_maleza)
+	_ok_si(alta_maleza < altura_ojos - 0.3,
+		"pero no llega a la cara, que es donde se cortaba el encuadre (%.2f m)"
+		% alta_maleza)
 
 	# Y tiene que ser alcanzable. Si el cabezal no llega a cortarla, el jugador
 	# puede dar con un muro verde y no hay manera de pasar. Se mide lo que el
@@ -1006,21 +1035,59 @@ func _cabezal_visible() -> void:
 	_ok_si(jugador.get_pitch() < -0.5,
 		"la mirada baja hacia el suelo (%.2f rad)" % jugador.get_pitch())
 	var corte := herramienta.punto_de_corte()
-	var suelo_corte := _suelo_fisico_en(corte)
-	_ok_si(absf(corte.y - suelo_corte) < 0.06,
+	_ok_si(camara.is_position_in_frustum(corte) or motor == null,
+		"al trabajar se ve el cabezal")
+
+	# 2b) El apoyo en el suelo se comprueba mirando **del todo** hacia abajo **con
+	# el acelerador pulsado**, que es la unica postura en la que el morro llega a
+	# su punto bajo: al trabajar, la maquina echa el peso del cuerpo sobre el
+	# morro y lo hunde. Sin acelerar, el cabezal se queda a nueve centimetros
+	# del suelo, y no es un fallo: es que no se esta cortando. Medirlo sin
+	# acelerar daba un numero que no significaba nada.
+	jugador.mirar_a(jugador.get_yaw(), deg_to_rad(-85.0))
+	Input.action_press("acelerador")
+	await _esperar(0.8)
+	var corte_bajo := herramienta.punto_de_corte()
+	var suelo_corte := _suelo_fisico_en(corte_bajo)
+	print("   mirando al suelo y acelerando, el cabezal esta a %.3f m (suelo %.3f)"
+		% [corte_bajo.y, suelo_corte])
+	_ok_si(absf(corte_bajo.y - suelo_corte) < 0.03,
 		"el cabezal apoya en el collider del suelo (y = %.2f, suelo %.2f)"
-		% [corte.y, suelo_corte])
+		% [corte_bajo.y, suelo_corte])
+	# Y que ese punto tan bajo es de verdad alcanzable, que es lo que permite
+	# rematar una raiz de zarza. Sin esto, el cabezal podria quedarse a un palmo
+	# del suelo y la mecanica de la zarza seria imposible de completar. La
+	# garantia de que una pasada de verdad tumba una raiz esta en
+	# `tools/test_zarza_raiz.gd`.
+	_ok_si(corte_bajo.y < 0.06,
+		"y llega a la altura a la que hay que cortar la raiz de la zarza (%.3f m)"
+		% corte_bajo.y)
+	Input.action_release("acelerador")
+	# Sin acelerar el cabezal sube: es el peso del cuerpo sobre el morro, y
+	# mientras no se esta cortando la maquina no se echa encima.
+	await _esperar(0.5)
+	var corte_sin_motor := herramienta.punto_de_corte()
+	_ok_si(corte_sin_motor.y >= corte_bajo.y - 0.01,
+		"y con el motor parado el morro se levanta (%.2f m)" % corte_sin_motor.y)
+	# A -50 grados, que es la postura de trabajo normal, el cabezal esta mas
+	# arriba: no se comprueba que toque, sino que no se hunda en la tierra.
+	jugador.mirar_a(jugador.get_yaw(), deg_to_rad(-50.0))
+	await _esperar(0.5)
+	var corte_trabajo := herramienta.punto_de_corte()
+	_ok_si(corte_trabajo.y >= suelo_corte - 0.02,
+		"y a media postura no se hunde en el suelo (%.2f m)" % corte_trabajo.y)
 	# Lo que importa para el encuadre es lo lejos que va por delante, no la
 	# distancia en linea recta: con la cabeza a 1,6 m y el cabezal en el suelo
 	# la distancia total siempre es grande.
-	var por_delante := (corte - camara.global_position).dot(-camara.global_transform.basis.z)
+	var por_delante := (corte_trabajo - camara.global_position).dot(
+		-camara.global_transform.basis.z)
 	_ok_si(por_delante > herramienta.alcance * 0.7
 		and por_delante < herramienta.alcance * 1.4,
 		"el cabezal queda dentro de su alcance de trabajo (%.2f / %.2f m)"
 		% [por_delante, herramienta.alcance])
 	if motor != null:
-		_ok_si(camara.is_position_in_frustum(corte),
-			"al trabajar se ve el cabezal")
+		_ok_si(camara.is_position_in_frustum(corte_trabajo),
+			"y se ve entero desde la postura de trabajo")
 
 	# 3) El cabezal NO se puede perder de vista. La posición depende de la pose y
 	# del alcance; la cámara debe comprobar el punto real y mantenerlo en pantalla.
@@ -1121,9 +1188,11 @@ func _resistencia_prueba() -> void:
 	# justo lo que no se quiere.
 	_ok_si(maleza.coste_maleza() > 1.0,
 		"y ademas cada hoja suya cuesta mas (x%.2f)" % maleza.coste_maleza())
-	_ok_si(herramienta.anticipacion_resistencia > herramienta.radio_corte * 0.4,
-		"mira por delante del cabezal, no debajo (%.2f m de anticipacion)"
-		% herramienta.anticipacion_resistencia)
+	_ok_si(herramienta.distancia_anticipacion() > herramienta.radio_corte,
+		"mira por delante del cabezal, no debajo (%.2f m por delante, con un"
+		% herramienta.distancia_anticipacion())
+	_ok_si(herramienta.distancia_anticipacion() >= herramienta.anticipacion_resistencia,
+		"cabezal de %.2f m de radio)" % herramienta.radio_corte)
 
 
 ## --- Mirar para arriba ----------------------------------------------------

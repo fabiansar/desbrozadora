@@ -233,6 +233,26 @@ var _corte_sonido_reloj := 0.0
 ## delante se mide lo que va a encontrar, que es lo que de verdad frena: es el
 ## mismo truco que lleva mirando el porvenir un pelo antes deMeter la cuchilla.
 @export_range(0.0, 2.0, 0.05) var anticipacion_resistencia := 0.40
+## Margen que se anade al radio del cabezal para que el punto de medida caiga
+## siempre FUERA de lo que se acaba de cortar. Veinte centimetros, que es lo
+## justo para que el margen sobreviva a un cabezal grande.
+const MARGEN_ANTICIPACION := 0.20
+
+
+## A quantos metros por delante del cabezal se mide la resistencia de verdad.
+##
+## No es el `anticipacion_resistencia` de arriba: es la mayor de esa cifra y el
+## radio del cabezal mas el margen. El motivo es que el punto tiene que caer
+## fuera del disco que se acaba de cortar, y con un cabezal de un metro de radio
+## mirar a 0,40 m es mirar justo donde ya no hay nada. Con 1,0 m de radio sale
+## 1,20 m.
+##
+## Vive aqui y no solo en la linea que lo usa porque es una propiedad del
+## comportamiento de la maquina, y las pruebas tienen que poder mirarla: si
+## calculan la cuenta por su cuenta, estan midiendo una formula que puede
+## quedar vieja sin que se entere nadie. Y ya quedo viejo una vez.
+func distancia_anticipacion() -> float:
+	return maxf(anticipacion_resistencia, radio_corte_actual() + MARGEN_ANTICIPACION)
 ## Cuanto tarda el motor en entrar y salir del frenao, en segundos. Es el
 ## suavizado, y va aparte de intervalo_resistencia: este es el ritmo con el que
 ## se DECIDE cuando mirar, y este otro el ritmo con el que se MUYVE el motor.
@@ -708,7 +728,7 @@ func _mide_resistencia(delta: float) -> void:
 	# cuenta de los dos tipos se puede sumar tal cual.
 	for c in _campos:
 		var radio_actual := radio_corte_actual()
-		var d := maxf(anticipacion_resistencia, radio_actual + 0.20)
+		var d := distancia_anticipacion()
 		coste += c.densidad_bajo(
 			punto + _adelante() * d, radio_actual) * c.coste_maleza()
 	_densidad_debajo = coste

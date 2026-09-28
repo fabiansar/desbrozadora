@@ -4,6 +4,27 @@ Lo que se ha tocado y por que. Para el detalle de como esta cada cosa por dentro
 [DOCUMENTACION.md](DOCUMENTACION.md); para el estado y los problemas que quedan,
 [REVISION.md](REVISION.md).
 
+## La maleza vuelve a ser maleza, y la raiz de la zarza es alcanzable — 2026-09-29
+
+- **La maleza esta en matas de verdad.** `formacion` subio de 0,24 a 0,70 en
+  `main.tscn` y con ello paso de ocupar el 93 % del mapa (una alfombra de 0,76 m
+  donde no se veia nada) al 37 %, con claros por los que se anda. Era lo que
+  pedia la comprobacion de la suite desde hacia tiempo, y el usuario lo confirmo
+  al preguntarle que queria: matas separadas, no alfombra.
+- **Se midio el rango real del cabezal** y se documenta en `LEEME.md`. Con el
+  motor echado el morro recorre de 0 a 2 m segun la mirada, y **cualquier mirada
+  hacia abajo lo deja en el suelo**. Por eso "cortar por arriba" es mirar un poco
+  **arriba**, no menos abajo. Antes no estaba escrito en ningun sitio y hacia
+  falta saberlo para jugar.
+- **`tools/test_zarza_raiz.gd`** (nueva) cierra la garantia que faltaba: que una
+  pasada **de verdad**, con el jugador y la maquina reales, tumba una raiz. Las
+  demas pruebas de zarza cortaban llamando a `cortar_en()` con un punto dado, lo
+  que demuestra que la mecanica esta bien pero no que se pueda jugar. La pasada
+  por arriba deja la raiz viva y la pasada a la base se la lleva.
+- `Desbrozadora.distancia_anticipacion()`: la distancia a la que se mide la
+  resistencia de verdad era `max(anticipacion, radio + 0,20)` dentro de una
+  linea, y una comprobacion la calculaba por su cuenta con una cuenta vieja.
+
 ## Inventario de nueve herramientas y la hoz — 2026-09-28
 
 - La desbrozadora deja de ser un nodo fijo de la escena y pasa a ser un objeto
@@ -86,20 +107,29 @@ Lo que se ha tocado y por que. Para el detalle de como esta cada cosa por dentro
 
 | Prueba | Resultado |
 | --- | --- |
-| `tools/test_juego.gd` (suite completa) | **195 correctas, 6 fallos, 1 aviso** |
+| `tools/test_juego.gd` (suite completa) | **207 correctas, 0 fallos, 1 aviso** |
 | `tools/test_movimiento_integrado.gd` | 71/71 |
 | `tools/test_inventario.gd` | OK |
 | `tools/test_zarza_conexion.gd` | OK |
+| `tools/test_zarza_raiz.gd` | OK |
 | `tools/test_zarza_capas.gd` | OK |
 | `tools/test_zarza_capas_recorrido.gd` | OK |
 
-Los seis fallos de la suite son de una sola causa y son **trabajo pendiente**: el
-césped bajó de 0,69 a 0,49 m y la maleza de 1,33 a 0,76 m, y las comprobaciones
-siguen esperando las alturas viejas. Comprobado con `git stash`: en el commit
-anterior ya fallaban cinco.
+**La suite queda en verde: 207 correctas, 0 fallos.** Salio seis veces en rojo, y
+las seis tenian dos causas distintas:
 
-La última ejecución completa antes de estos cambios dio **202 correctas / 0
-fallos**; el 28-09-2026 se probó a mano en Godot y el usuario confirmó que
+- **Cuatro por numeros viejos.** El cesped bajo a 0,49 m y la maleza a 0,76 m, y
+  las comprobaciones seguian esperando las alturas de antes. Ahora se compara la
+  altura **tipica** de cada campo y no la hoja mas alta suelta, y el check de
+  "la maleza le pasa al operario" se ha invertido: se pide que pase la rodilla y
+  **no** llegue a la cara.
+- **Dos por bugs de verdad.** El apoyo del cabezal se media mirando a 50 grados
+  y sin acelerar, y el morro solo baja **con el motor echado**. Y la anticipacion
+  de la resistencia se comprobaba contra una cuenta que el codigo ya no usaba:
+  ahora `Desbrozadora.distancia_anticipacion()` es la fuente y se mira esa.
+
+La ultima ejecucion completa antes de estos cambios dio **202 correctas / 0
+fallos**; el 28-09-2026 se probo a mano en Godot y el usuario confirmo que
 funcionaba.
 
 ## Base estable confirmada — 2026-09-28

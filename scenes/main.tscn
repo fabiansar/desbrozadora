@@ -87,7 +87,11 @@ altura_tocon = 0.15
 
 [node name="MalezaAlta" parent="." unique_id=2099391743 instance=ExtResource("5_hierba")]
 tipo = 2
-formacion = 0.24
+; formacion 0.24 era un campo casi uniforme: con la maleza en 0,76 m ocupaba el
+; 93 % del mapa y no habia por donde andar. A 0.70 sale en matas con claros
+; entre medias, que es lo que hace que un claro se trabaje mas rapido que un
+; zarzal y que la resistencia del motor se note.
+formacion = 0.7
 dureza = 3.3
 tono_pie = Color(0.204, 0.157, 0.078, 1)
 tono_punta = Color(0.478, 0.396, 0.188, 1)

@@ -53,6 +53,23 @@ miras: el aviso sale cuando tienes algo delante, y si el inventario está lleno
 te lo dice en vez de dejarte pulsando. Lo que coges va al primer hueco libre y a
 la mano.
 
+### Hasta donde llega el cabezal
+
+Con el motor echado, la altura del morro depende solo de hacia donde miras:
+
+| Mirada | Altura del morro |
+| --- | ---: |
+| 55 grados arriba | 1,34 m |
+| 35 grados arriba | 1,97 m |
+| 15 grados arriba | 0,94 m |
+| De frente | 0,09 m |
+| 10 grados abajo o mas | 0,00 m (en el suelo) |
+
+O sea que **cualquier mirada hacia abajo apoya el cabezal en el suelo**, y para
+"cortar por arriba" hay que mirar un poco **arriba**, no menos abajo. Sin el
+motor echado el morro no se hunde: se queda a nueve centimetros aunque mires de
+narices, porque es el peso del trabajo lo que lo baja.
+
 ### La zarza hay que tumbarla por la raiz
 
 La zarza no es un CESped mas alto. Cada mata tiene una **raíz** clavada en el
@@ -145,11 +162,9 @@ flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --headless --path . --script res://tools/test_movimiento_integrado.gd
 ```
 
-Ultima ejecucion registrada en `v0.1.0`: **195 correctas, 6 fallos, 1 aviso**.
-Los seis fallos son las comprobaciones que siguen esperando la maleza de 1,33 m,
-cuando ahora mide 0,76 m (ver la tabla de mas abajo); no son un fallo de codigo.
-El aviso es que la comprobacion de imagen no se puede hacer en headless, y se
-cierra aparte con una herramienta que va en 3 segundos:
+Ultima ejecucion registrada: **207 correctas, 0 fallos, 1 aviso**. El aviso es
+que la comprobacion de imagen no se puede hacer en headless, y se cierra aparte
+con una herramienta que va en 3 segundos:
 
 ```bash
 timeout 300 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
@@ -209,11 +224,10 @@ Hay **dos campos**, cada uno con su semilla y su material:
 | `MalezaAlta` | maleza seca | 76 cm | 60 por m2 | 90 m | 12 m |
 
 Las dos alturas bajaron desde la version anterior (69 y 133 cm) porque con la
-maleza a 1,33 m tapaba la mitad del encuadre y no se veia donde estabas
-cortando. **La suite todavia espera las alturas viejas y por eso da seis
-fallos**: son las comprobaciones de "la maleza es mas alta que el cesped y que
-el operario" y las de "viene en matas". Es un trabajo de actualizar la suite, no
-un fallo de codigo.
+maleza a 1,33 m tapaba la mitad del encuadre. Y la maleza se puso en matas de
+verdad (`formacion` 0,70, antes 0,24): ocupa el 37 % del mapa en vez del 93 %, y
+se ven los claros por los que se anda. Un claro se trabaja mas rapido que un
+zarzal, y con la maleza en alfombra no habia forma de notarlo.
 
 La escena actual también agrupa el césped (`formacion = 0,70`); la maleza usa
 `formacion = 0,24` y `dureza = 3,3`. Ambos campos se siembran sobre el suelo plano

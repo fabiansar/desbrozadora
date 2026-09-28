@@ -12,22 +12,34 @@ Estado de las pruebas en `v0.1.0`:
 
 | Prueba | Resultado |
 | --- | --- |
-| `tools/test_juego.gd` (suite completa) | **195 correctas, 6 fallos, 1 aviso** |
+| `tools/test_juego.gd` (suite completa) | **207 correctas, 0 fallos, 1 aviso** |
 | `tools/test_movimiento_integrado.gd` | 71/71 |
 | `tools/test_inventario.gd` | OK |
 | `tools/test_zarza_conexion.gd` | OK |
+| `tools/test_zarza_raiz.gd` | OK |
 | `tools/test_zarza_capas.gd` | OK |
 | `tools/test_zarza_capas_recorrido.gd` | OK |
 
-**Los seis fallos de la suite son trabajo pendiente y son de una sola causa**: la
-sesion anterior bajo el cesped de 0,69 a 0,49 m y la maleza de 1,33 a 0,76 m para
-que la maleza no tapara el encuadre, y **las comprobaciones de la suite siguen
-esperando las alturas viejas**. Son las de "la maleza es bastante mas alta que el
-cesped", "le pasa la altura del operario", "viene en matas" y "hay huecos de
-verdad entre mata y mata", mas dos de apoyo del cabezal y de anticipacion que ya
-fallaban antes. Comprobado con `git stash`: en `HEAD` ya fallan cinco. La
-solucion es actualizar las comprobaciones a los valores actuales, no volver a
-subir la maleza: la altura esta bien, lo que se quedaron viejo son los numeros.
+**La suite esta en verde: 207 correctas, 0 fallos.** Estuvo seis salidas en rojo
+y las seis tenian dos causas distintas, que conviene tener en la cabeza:
+
+1. **Cuatro eran numeros viejos.** El cesped bajo de 0,69 a 0,49 m y la maleza de
+   1,33 a 0,76 m, y las comprobaciones seguian esperando las alturas de antes.
+   Ahora se mide la altura **tipica** de cada campo y no la hoja mas alta suelta
+   (el cesped lleva `variacion_altura = 1.0`, con lo que su hoja mas alta mide
+   casi lo que la maleza mas alta, y comparar maximos mide la variacion del
+   cesped, no la diferencia entre campos). Y el check de "la maleza le pasa al
+   operario" se ha **invertido**: ahora se pide que pase la rodilla y **no** llegue
+   a la cara, que es lo que se busca desde que la maleza se bajo.
+2. **Dos eran bugs de verdad**, y uno era serio:
+   - El apoyo del cabezal en el suelo se media **mirando a 50 grados**, que no es
+     la postura baja, y sin acelerar. El morro solo se hunde **con el motor
+     echado**, porque al trabajar la maquina echa el peso del cuerpo sobre el.
+   - El rango real del morro con el motor echado es de 0 a 2 m, y **cualquier
+     mirada hacia abajo lo deja en el suelo**: a 0 grados esta a 0,09 m y a 10
+     grados ya esta a 0,00. Eso significa que "cortar por arriba" es mirar un
+     poco **arriba**, no "menos abajo", y es un dato que no estaba escrito en
+     ningun sitio.
 
 Medicion visual de `v0.1.0` (herramienta `tools/medir_zarza.gd`): antes del
 arreglo, la zarza del prado cambiaba **2 pixeles** al ocultarla, o sea que se
@@ -464,9 +476,11 @@ Configuración efectiva, leída de `main.tscn` (los defaults de
 | Campo | Altura | Densidad | Formación | Radio de siembra | Cuadrante | Recorte | Tocon |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | `Hierba` | 0,49 m | 60/m² | 0,70 | 90 m | 24 m | 80 m | 0,15 m |
-| `MalezaAlta` | 0,76 m | 60/m² | 0,24 | 90 m | 12 m | 16 m | 0,06 m |
+| `MalezaAlta` | 0,76 m | 60/m² | 0,70 | 90 m | 12 m | 16 m | 0,06 m |
 
-Los dos campos llevan `densidad` 60/m² y formacion de matas. La maleza tiene
+Los dos campos llevan `densidad` 60/m² y formacion de matas. La maleza subio
+su formacion de 0,24 a 0,70 al arreglar la suite: con 0,24 ocupaba el 93 % del
+mapa y no habia por donde andar, y con 0,70 ocupa el 37 % y se ven los claros. La maleza tiene
 dureza 3,3 (el cesped 1,0) y es la que frena de verdad a la maquina.
 
 La maleza tiene dureza 3,3. Ambos campos se siembran sobre el plano sin
