@@ -1,5 +1,5 @@
 class_name Hierba
-extends Node3D
+extends Vegetacion
 
 ## El campo de hierba.
 ##
@@ -154,8 +154,6 @@ var _rejilla := {}
 var _paso := 2.0
 var _lado := 0
 var _sembradas := 0
-var _desbrozadora: Desbrozadora = null
-var _buscada := false
 ## Ultima posicion desde la que se refresco el recorte por distancia. Solo se
 ## recalcula si la camara se ha movido mas de un metro, porque si no se estaria
 ## escribiendo lo mismo en 81 nodos sesenta veces por segundo.
@@ -164,6 +162,7 @@ var _mirada := Vector3(1.0e9, 0.0, 0.0)
 
 func _ready() -> void:
 	add_to_group("hierba")
+	add_to_group("vegetacion")
 	_crear_material()
 	_sembrar()
 	_crear_rejilla()
@@ -472,6 +471,32 @@ func _dist2(a: Vector3, b: Vector3) -> float:
 	return dx * dx + dz * dz
 
 
+## Cuantas hojas siguen de pie. Para las pruebas y para el interfaz: cuanto queda
+## en un campo es lo unico que se puede medir de un vistazo, porque
+## `altura_visual()` devuelve SIEMPRE la altura del tocon, que es la misma tanto
+## si el campo esta entero como si esta recien cortado.
+func hojas_en_pie() -> int:
+	var total := 0
+	for i in _corte.size():
+		if _corte[i] <= 0.0:
+			total += 1
+	return total
+
+
+## Que tipo de vegetacion es: 1 el cesped, 2 la maleza alta. Lo decide el
+## atributo `tipo` de la escena, y de ahi lo saca la herramienta para saber si su
+## cabezal puede con esto.
+func tipo_vegetacion() -> int:
+	return tipo
+
+
+## El corte del contrato comun. La desbrozadora tiene su propia logica de
+## barrido y pregunta por dentro, asi que esta funcion es la puerta de entrada
+## para las herramientas que solo saben cortar "lo que haya aqui": la hoz.
+func cortar_por_banda(centro: Vector3, radio: float) -> int:
+	return cortar(centro, radio)
+
+
 ## Corta la hierba alrededor de un punto y devuelve cuantas hojas ha tumbado.
 ##
 ## El cabezal barre un disco en el suelo, digase la altura que tenga. Podria
@@ -766,21 +791,37 @@ func _process(_delta: float) -> void:
 	_recortar(p)
 
 
-## Corta por donde pase el cabezal mientras el motor este en marcha.
+## Corta por donde pase la herramienta mientras este cortando.
 ##
-## La desbrozadora se busca por el grupo "herramienta" y se guarda en cuanto
-## aparece, porque recorrer el arbol en cada fotograma seria tirar CPU. Si no
-## esta todavia (depende del orden de arranque) se reintenta, y por eso
-## _buscada solo se activa cuando de verdad se ha encontrado.
+## La herramienta se busca en el grupo "herramienta" en cada fotograma y no se
+## guarda. Antes se guardaba la primera desbrozadora que aparecia, con lo que
+## al cambiar de herramienta en el inventario el campo se quedaba cortando con
+## la que estaba en la mano antes, que ya no corta. Es una busqueda en un grupo
+## con un elemento, no un recorrido del arbol: sale gratis.
 func _physics_process(_delta: float) -> void:
-	if not _buscada:
-		var encontradas := get_tree().get_nodes_in_group("herramienta")
-		for n in encontradas:
-			if n is Desbrozadora:
-				_desbrozadora = n as Desbrozadora
-				_buscada = true
-				break
-		if not _buscada:
-			return
-	if _desbrozadora.cortando:
-		cortar(_desbrozadora.punto_de_corte(), _desbrozadora.radio_corte)
+	var herramienta := get_tree().get_first_node_in_group("herramienta")
+	if herramienta == null or not herramienta.has_method("cabezal_puede_cortar"):
+		return
+	if herramienta.cortando and herramienta.cabezal_puede_cortar(tipo):
+		var punto: Vector3 = herramienta.punto_de_corte()
+		var radio: float = herramienta.radio_corte_actual()
+		var hojas_cortadas := cortar(punto, radio)
+		herramienta.registrar_corte(tipo, hojas_cortadas, dureza)
+		_soltar_restos(punto, hojas_cortadas)
+
+
+## Al cortar no queda la planta en su sitio: aparecen restos sueltos que salen
+## despedidos y se posan en el suelo. Se sueltan en el punto de corte, no en el
+## suelo, para que el monticulo se vea caer y no aparezca de la nada.
+func _soltar_restos(origen: Vector3, hojas: int) -> void:
+	if hojas <= 0:
+		return
+	# Un resto por cada pocas hojas: la hierba es finita y por fotograma caen
+	# cientos, asi que uno por hoja llenaria el grupo en dos segundos.
+	var cuantos := mini(int(round(float(hojas) / 4.0)), 12)
+	if cuantos <= 0:
+		return
+	var direccion := Vector3(randf_range(-0.3, 0.3), 0.0,
+		randf_range(-0.3, 0.3))
+	Restos.obtener(get_tree()).soltar(origen, cuantos, direccion,
+		tono_punta.lerp(tono_pie, randf() * 0.5), 0.8)

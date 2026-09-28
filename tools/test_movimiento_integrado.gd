@@ -42,6 +42,8 @@ func _ejecutar() -> void:
 	_comprobar(absf(_camara.global_position.y - 1.62) < 0.08,
 		"altura inicial de camara estable")
 	_probar_radio_corte_compartido()
+	_probar_cabezales_y_desgaste()
+	await _probar_zarza_aerea()
 
 	await _probar_paneo_y_barrido()
 	await _probar_wasd_carrera_y_motor()
@@ -76,6 +78,66 @@ func _probar_radio_corte_compartido() -> void:
 			% [nombre, cortadas])
 		_comprobar(campo.total_de_pie() == de_pie_antes - cortadas,
 			"el corte se registra correctamente en %s" % nombre)
+
+
+func _probar_cabezales_y_desgaste() -> void:
+	print("-- cabezales compatibles y desgaste --")
+	var nombre_inicial := _herramienta.nombre_cabezal
+	var desgaste_inicial := _herramienta.desgaste_cabezal
+	_comprobar(_herramienta.cabezal_puede_cortar(1)
+		and _herramienta.cabezal_puede_cortar(2)
+		and _herramienta.cabezal_puede_cortar(3),
+		"la cuchilla de serie corta cesped, maleza y zarza")
+	_herramienta.registrar_corte(1, 1000, 1.0)
+	_comprobar(_herramienta.desgaste_cabezal < desgaste_inicial,
+		"cortar hojas reduce el filo del cabezal")
+	_comprobar(_herramienta.cambiar_cabezal_siguiente(),
+		"se puede cambiar de cabezal con el motor parado")
+	_comprobar(_herramienta.nombre_cabezal == "Hilo de nylon"
+		and _herramienta.cabezal_puede_cortar(1)
+		and not _herramienta.cabezal_puede_cortar(2)
+		and not _herramienta.cabezal_puede_cortar(3),
+		"el cabezal de hilo solo es compatible con cesped")
+	_herramienta.cambiar_cabezal_siguiente()
+	_comprobar(_herramienta.cabezal_puede_cortar(3),
+		"el disco de dos puntas tambien corta zarza")
+	_herramienta.cambiar_cabezal_siguiente()
+	_comprobar(_herramienta.cabezal_puede_cortar(3),
+		"el disco de tres puntas tambien corta zarza")
+	_herramienta.cambiar_cabezal_siguiente()
+	_comprobar(_herramienta.nombre_cabezal == nombre_inicial,
+		"el ciclo vuelve a la cuchilla de serie")
+	_comprobar(is_equal_approx(_herramienta.desgaste_cabezal, desgaste_inicial - 0.001),
+		"el desgaste se conserva al desmontar y volver a montar un cabezal")
+
+
+func _probar_zarza_aerea() -> void:
+	print("-- zarza que se quita por capas --")
+	# Las matas viven bajo el nodo Zarzas, para que se puedan colocar varias
+	# repartidas por el campo.
+	var zarza := _mundo.get_node_or_null("Zarzas/ZarzaCercana") as Zarza
+	_comprobar(zarza != null, "la zarza de prueba esta en la escena")
+	if zarza == null:
+		return
+	_comprobar(zarza.columnas_en_pie() > 50,
+		"la zarza se siembra con muchas columnas en varias zonas")
+	var corte_alto := zarza.cortar_en(zarza.to_global(Vector3(0.0, 0.9, 0.0)), 1.5)
+	_comprobar(corte_alto > 0,
+		"se puede cortar en una franja a la altura del cabezal")
+	# Cortar por arriba quita la copa pero deja el tocon, y hay que bajar para
+	# rematarlo. Esa es la mecanica de capas.
+	_comprobar(zarza.columnas_en_pie() > 0,
+		"cortar por arriba deja el tocon en el suelo")
+	var montes := Montes.obtener(_mundo.get_tree())
+	var donde := zarza.to_global(Vector3(0.0, 0.0, 0.0))
+	var altura_monton := montes.altura_en(donde)
+	var corte_bajo := zarza.cortar_en(zarza.to_global(Vector3(0.0, 0.1, 0.0)), 1.5)
+	_comprobar(corte_bajo > 0, "una pasada a ras de suelo remata el tocon")
+	# El monton ya puede estar en el tope de altura, asi que no se comprueba que
+	# el numero de celdas crezca, sino que donde se ha cortado hay mas material
+	# que antes. En una zona ya apilada, el monton se queda igual de alto.
+	_comprobar(montes.altura_en(donde) > altura_monton - 0.001,
+		"donde se corta hay monton en el suelo")
 
 
 func _probar_paneo_y_barrido() -> void:
@@ -129,6 +191,7 @@ func _probar_wasd_carrera_y_motor() -> void:
 	await _esperar(0.7)
 	var antes := _jugador.global_position
 	var fov_antes := _camara.fov
+	var combustible_antes := _herramienta.combustible_litros
 	Input.action_press("mover_adelante")
 	Input.action_press("mover_derecha")
 	Input.action_press("correr")
@@ -143,6 +206,10 @@ func _probar_wasd_carrera_y_motor() -> void:
 		"el FOV responde a la carrera durante la diagonal")
 	_comprobar(_herramienta.rpm > 5000.0 and _herramienta.cortando,
 		"el acelerador mantiene el motor cortando mientras se mueve")
+	_comprobar(not _herramienta.cambiar_cabezal_siguiente(),
+		"no se permite cambiar el cabezal con el motor en marcha")
+	_comprobar(_herramienta.combustible_litros < combustible_antes,
+		"el motor consume combustible mientras trabaja")
 	_comprobar(_barrido_en_rango(), "W+D no saca la maquina del arco de cadera")
 	_comprobar(_error_camara(_jugador.get_yaw()) < 4.0,
 		"la camara mantiene la mirada mientras el cuerpo gira con W+D")
@@ -284,7 +351,8 @@ func _esperar(segundos: float) -> void:
 
 func _soltar_todo() -> void:
 	for accion in ["mover_adelante", "mover_atras", "mover_izquierda",
-			"mover_derecha", "correr", "agacharse", "saltar", "acelerador"]:
+			"mover_derecha", "correr", "agacharse", "saltar", "acelerador",
+			"cambiar_cabezal"]:
 		Input.action_release(accion)
 
 

@@ -91,7 +91,8 @@ func _cargar() -> void:
 	# El input map: si una accion no existe, Input.is_action_pressed avisa en
 	# vez de fallar, y el juego se queda quieto sin avisar.
 	for accion in ["mover_adelante", "mover_atras", "mover_izquierda",
-			"mover_derecha", "correr", "saltar", "agacharse", "acelerador"]:
+			"mover_derecha", "correr", "saltar", "agacharse", "acelerador",
+			"cambiar_cabezal"]:
 		_ok_si(InputMap.has_action(accion), "la accion %s existe" % accion)
 
 
@@ -203,6 +204,7 @@ func _acelerador() -> void:
 	print("\n== acelerador ==")
 	await _asentar()
 	_ok_si(herramienta.rpm < 1.0, "el motor empieza parado")
+	var combustible_inicial := herramienta.combustible_litros
 	Input.action_press("acelerador")
 	# Con el acelerador el motor sube de vueltas y el carrete gira.
 	var giro0 := herramienta.giro_carrete_acumulado()
@@ -211,8 +213,10 @@ func _acelerador() -> void:
 	var rpm := herramienta.rpm
 	_ok_si(rpm > 3000.0, "las rpm suben con el acelerador (%.0f)" % rpm)
 	_ok_si(herramienta.cortando, "con el motor en marcha dice que corta")
+	_ok_si(herramienta.combustible_litros < combustible_inicial,
+		"el motor consume combustible al acelerar")
 	_ok_si(_telemetrias_recibidas > 0,
-		"la interfaz futura recibe actualizaciones mientras cambia el motor")
+		"la interfaz recibe actualizaciones mientras cambia el motor")
 	var giro_acumulado := herramienta.giro_carrete_acumulado() - giro0
 	_ok_si(giro_acumulado > 0.5,
 		"el carrete gira (%.2f rad acumulados)" % giro_acumulado)
@@ -1700,7 +1704,9 @@ func _ok_si(condicion: bool, texto: String) -> void:
 
 
 func _recibir_telemetria(_rpm_sin_carga: float, _rpm_bajo_carga: float,
-		_resistencia: float) -> void:
+		_rpm_maximas: float, _resistencia: float, _combustible_litros: float,
+		_combustible_maximo_litros: float, _nombre_cabezal: String,
+		_desgaste_cabezal: float) -> void:
 	_telemetrias_recibidas += 1
 
 

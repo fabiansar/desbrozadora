@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" uid="uid://brbuf8v1qvi42" path="res://scenes/hierba.tscn" id="5_hierba"]
 [ext_resource type="Shader" uid="uid://bo8xiign6ew42" path="res://shaders/suelo.gdshader" id="6_suelo"]
 [ext_resource type="Script" uid="uid://df60xr3dkwfo0" path="res://scripts/viento.gd" id="7_viento"]
+[ext_resource type="PackedScene" path="res://scenes/zarza.tscn" id="9_zarza"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_cielo"]
 sky_top_color = Color(0.325, 0.533, 0.796, 1)
@@ -73,11 +74,11 @@ light_specular = 0.0
 
 [node name="Hierba" parent="." unique_id=677948321 instance=ExtResource("5_hierba")]
 formacion = 0.7
-altura = 0.6900000000000001
+altura = 0.49
 variacion_altura = 1.0
-grosor = 0.23
+grosor = 0.1
 variacion_grosor = 1.0
-radio = 66.0
+radio = 90.0
 densidad = 60.0
 borde = 0.85
 lado_cuadrante = 24.0
@@ -90,7 +91,7 @@ formacion = 0.24
 dureza = 3.3
 tono_pie = Color(0.204, 0.157, 0.078, 1)
 tono_punta = Color(0.478, 0.396, 0.188, 1)
-altura = 1.33
+altura = 0.76
 variacion_altura = 0.09
 grosor = 0.26
 variacion_grosor = 0.38
@@ -101,6 +102,48 @@ semilla = 24601
 lado_cuadrante = 12.0
 distancia_maxima = 16.0
 altura_tocon = 0.06
+
+[node name="Zarzas" type="Node3D" parent="."]
+
+[node name="ZarzaCercana" parent="Zarzas" instance=ExtResource("9_zarza")]
+position = Vector3(0, 0, -7.0)
+ancho = 9.0
+fondo = 9.0
+altura_maxima = 2.4
+densidad = 0.82
+semilla = 33031
+
+[node name="ZarzaIzquierda" parent="Zarzas" instance=ExtResource("9_zarza")]
+position = Vector3(-12.0, 0, -16.0)
+ancho = 9.0
+fondo = 9.0
+altura_maxima = 2.5
+densidad = 0.78
+semilla = 9387
+
+[node name="ZarzaDerecha" parent="Zarzas" instance=ExtResource("9_zarza")]
+position = Vector3(13.0, 0, -19.0)
+ancho = 9.0
+fondo = 9.0
+altura_maxima = 2.8
+densidad = 0.76
+semilla = 50123
+
+[node name="ZarzaLejana" parent="Zarzas" instance=ExtResource("9_zarza")]
+position = Vector3(2.0, 0, -33.0)
+ancho = 11.0
+fondo = 11.0
+altura_maxima = 4.2
+densidad = 0.72
+semilla = 1729
+
+[node name="ZarzaAislada" parent="Zarzas" instance=ExtResource("9_zarza")]
+position = Vector3(-19.0, 0, -38.0)
+ancho = 8.0
+fondo = 8.0
+altura_maxima = 3.4
+densidad = 0.68
+semilla = 777
 
 [node name="Viento" type="Node3D" parent="." unique_id=701693324]
 script = ExtResource("7_viento")
