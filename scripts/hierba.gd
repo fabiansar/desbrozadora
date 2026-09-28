@@ -87,10 +87,10 @@ extends Node3D
 ## Cuanto varian los grosores.
 @export_range(0.0, 1.0, 0.01) var variacion_grosor := 0.35
 ## Radio del campo, en metros. Fuera no hay hierba, y las hojas del final se
-## achican para que el campo se acabe sin que se vea un circulo en el suelo.
+## achican para que el campo se acabe sin que se vea un círculo en el suelo.
 @export_range(5.0, 90.0, 1.0) var radio := 34.0
 ## Hojas por metro cuadrado. El total también depende del radio, formación,
-## borde, semilla y zonas que la aldea excluye. Por debajo de 8 se ve ralo.
+## borde y semilla. Por debajo de 8 se ve ralo.
 @export_range(1.0, 60.0, 0.5) var densidad := 30.0
 ## Desde que fraccion del radio se empieza a achicar el campo. Si vale 1 el
 ## cesped se corta en seco y se ve un circulo perfecto.
@@ -120,12 +120,6 @@ extends Node3D
 ## hoja del todo. Sin esto la hierba cortada queda a 0 cm, tumbada en el suelo
 ## y no se ve desde la camara, asi que no hay ni rastro de por donde has
 ## pasado la maquina.
-## El terreno y la aldea, si estan puestos. Con el terreno, las hojas se siembran
-## a la altura que tenga el suelo en ese punto; con la aldea, no se siembra
-## dentro de los recintos, que es donde va tierra labrada y no cesped.
-@export var terreno: Terreno
-@export var aldea: Aldea
-
 @export var dejar_tocon := true
 ## Altura del tocón cuando dejar_tocon esta activo. Con 8 cm el corte se ve de
 ## sobra desde la camara: es una mancha mas corta y mas clara que la hierba de
@@ -325,14 +319,9 @@ func _sembrar() -> void:
 				continue
 			var gordo := grosor * (1.0 - variacion_grosor * 0.5
 				+ rng.randf() * variacion_grosor)
-			# Un centimetro por encima del suelo, para que las raices no pelen
-			# con el terreno. Y la altura la pregunta al terreno si lo hay.
-			if aldea != null and aldea.ocupada(Vector2(x, z)):
-				continue
-			var y := 0.01
-			if terreno != null:
-				y = terreno.cota_en(Vector2(x, z)) + 0.01
-			_pos.append(Vector3(x, y, z))
+			# El suelo de pruebas es plano y está en Y=0. Las raíces quedan un
+			# centímetro por encima para evitar z-fighting.
+			_pos.append(Vector3(x, 0.01, z))
 			_corte.append(0.0)
 			_alto.append(alto)
 			_gordo.append(gordo)

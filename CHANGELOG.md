@@ -25,6 +25,20 @@ pasos iniciales para Godot/GDScript, Blender, Git y pruebas. La guía identifica
 el commit estable anterior como punto de partida para experimentar y aprender
 sin asistente.
 
+## Regreso temporal al suelo plano — 2026-09-28
+
+- `main.tscn` vuelve al suelo plano inicial: malla de 160 × 160 m y colisión
+  hasta radio 80 m. La hierba, la maleza y el bosque continúan activos sobre
+  `Y = 0`.
+- Se retiraron `scripts/terreno.gd`, `scripts/aldea.gd` y las dependencias que
+  sembraban o excluían objetos mediante sus APIs.
+- `tools/test_juego.gd` deja de comprobar relieve y parcelas y verifica el plano,
+  su collider y el apoyo del cabezal. El valle y la aldea manuales quedan para
+  una fase futura, con el plugin de terreno aún por elegir.
+- Parseo del editor y arranque de la escena durante 60 fotogramas en Godot 4.7.2
+  headless, sin errores. `test_movimiento_integrado.gd`: **48/48** correctas. La
+  suite completa queda pendiente.
+
 La prueba focalizada `tools/test_movimiento_integrado.gd` cubre 48 comprobaciones
 combinadas de paneo, giro, WASD, carrera, agachado, salto y acelerador, incluida
 la mirada alta con el motor en marcha; ultima ejecucion: **48 correctas, 0
@@ -100,7 +114,11 @@ en juego, no solo en la captura.
 
 ---
 
-## Entorno — terreno y aldea (base de la futura conducción)
+## Terreno procedural y aldea (histórico; retirados temporalmente)
+
+Las secciones siguientes registran la implementación procedural anterior. Ya no
+forma parte de la escena ni del código activos; el prototipo volvió al plano de
+pruebas descrito arriba.
 
 El prado llano deja de existir. Ahora el suelo se genera con pendiente, ondulacion,
 terrazas y surcos de arado, y en esa ladera hay una aldea de minifundios con sus
@@ -123,20 +141,16 @@ huertos cerrados con muro de piedra seca.
 - La API (`cota_en`, `cota_en_3d`, `cotas`, `pendiente_en`, ...) es la unica
   fuente de altura del juego. Hierba, arboles, aldea y maquina la preguntan.
 
-### La aldea: estado actual modular
+### La aldea: última implementación modular (retirada)
 
-`scripts/aldea.gd` ya no genera geometría. Calcula una cuadrícula de 4 × 3 (12)
-parcelas de 15 × 12 m y coloca casas, muros, carretera, árboles y arbustos desde
-el catálogo `assets/models/aldea/*.glb`. **En el estado actual el catálogo está
-vacío** (solo existe `.gitkeep`), así que las ubicaciones son placeholders
-`Node3D` con metadata `asset_path`; hay 0 modelos de aldea cargados.
+En aquella implementación `scripts/aldea.gd` no generaba geometría. Calculaba una cuadrícula de 4 × 3 (12)
+parcelas de 15 × 12 m y colocaba casas, muros, carretera, árboles y arbustos desde
+el catálogo `assets/models/aldea/*.glb`. El catálogo estaba vacío, así que las
+ubicaciones eran placeholders `Node3D` con metadata `asset_path`.
 
-Cada instancia consulta `terreno.cota_en()`. Los árboles y arbustos tienen yaw
-reproducible cuando haya modelos que instanciar, y `Aldea/PuntoInicioFurgoneta`
-es el `Marker3D` del tramo principal. La furgoneta todavía no está integrada en
-la escena.
-`Aldea.dentro()` reserva las parcelas para el bosque exterior y
-`Aldea.ocupada()` excluye solo casas y carretera de la hierba.
+Cada instancia consultaba `terreno.cota_en()`. `Aldea/PuntoInicioFurgoneta` era el
+`Marker3D` del tramo principal, y `Aldea.dentro()` / `Aldea.ocupada()` excluían
+parcelas y edificios de la siembra. Esas APIs ya se eliminaron.
 
 ### La aldea: histórico procedural sustituido
 

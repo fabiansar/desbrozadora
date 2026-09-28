@@ -13,11 +13,10 @@ demás cuelga de ahi.
 ```
 main.tscn (Mundo)
 ├── Entorno        WorldEnvironment: cielo, luz de ambiente, niebla
-├── Terreno        StaticBody3D + terreno procedural de 240x240 m
-├── Aldea          cuadrícula modular 4x3; modelos aún en placeholders
+├── Suelo          StaticBody3D + plano de pruebas de 160x160 m y colisión
 ├── Sol            DirectionalLight3D, la luz principal
 ├── Relleno        DirectionalLight3D, luz de relleno sin sombras
-├── Bosque         arboles repartidos por el campo (colision capa 2)
+├── Bosque         arboles de prueba sobre el plano (colision capa 2)
 ├── Hierba         césped agrupado, 60 hojas/m², cuadrantes de 24 m
 ├── MalezaAlta     maleza en matas, 18 hojas/m², cuadrantes de 12 m
 ├── Viento         el mapa del viento, UNO para los dos campos
@@ -546,9 +545,8 @@ segunda asignacion **borraba el buffer entero**: `get_instance_count()` decia
 Luego `_repartir_en_cuadrantes()` decide a que cuadrante va cada hoja
 (`_casilla_de()`) y `_montar_cuadrante()` crea un `MultiMeshInstance3D` por
 cuadrante con su `custom_aabb` ajustada. El número de hojas y de cuadrantes no
-es una constante: depende de los parámetros, la semilla y las zonas ocupadas.
-La configuración efectiva está en `scenes/main.tscn` y se resume en la tabla
-siguiente.
+es una constante: depende de los parámetros y la semilla. La configuración
+efectiva está en `scenes/main.tscn` y se resume en la tabla siguiente.
 
 La siembra es sobre una rejilla con jitter, y el borde se va aclarando con
 `borde` para que el campo no tenga un corte recto. Con `formacion` por encima de
@@ -585,8 +583,7 @@ El mapa de viento compartido toma el radio mayor, 66 m, y cubre 132 m de lado.
 Los dos campos salen en matas: `formacion = 0.70` para el césped y `0.78` para
 la maleza. La fórmula del generador estima, respectivamente, alrededor del 40,5 %
 y 33,7 % de superficie sembrada; los claros y los bordes excluidos hacen que el
-recuento final varíe con la semilla y la aldea. La maleza mantiene además una
-dureza de 1,8.
+recuento final varíe con la semilla. La maleza mantiene además una dureza de 1,8.
 
 `dureza` va aparte de la densidad a proposito. La densidad es "cuantas hojas hay
 debajo"; la dureza es "cuanto cuesta cada una". Con las dos juntas se puede
@@ -602,10 +599,10 @@ lo que tiene debajo.
 
 > **Ojo con estas columnas: son valores distintos y estan en sitios distintos.**
 > La primera columna es el `@export` de `scripts/hierba.gd`; las otras dos son
-> los valores efectivos de `scenes/main.tscn`. En la última ejecución se
-> sembraron **255.360** hojas de `Hierba` y **28.606** de `MalezaAlta`.
-> El recuento cambia al modificar densidad, formación, radio, semilla o zonas
-> ocupadas; se consulta en ejecución con `total()` por cada campo.
+> los valores efectivos de `scenes/main.tscn`. Los recuentos publicados en la
+> revisión anterior corresponden al mundo con exclusiones de aldea y ya no son
+> la cifra esperada. En la escena plana actual la siembra no excluye parcelas;
+> consulta el resultado en ejecución con `total()` por cada campo.
 >
 > Al cambiar estos numeros, dos cosas se quedan viejas solas: los comentarios que
 > dan recuento de hojas, y las pruebas que comparen con un literal. Por eso la
@@ -768,12 +765,12 @@ entre ningun campo nuevo despues.
 
 ---
 
-## 8. `shaders/suelo.gdshader` y el suelo
+## 8. Suelo plano temporal y `shaders/suelo.gdshader`
 
-El suelo visible pertenece a `Terreno`, un `StaticBody3D` que genera una malla de
-240 × 240 m, partida en 400 fragmentos de 12 m. La forma y la colisión usan la
-misma rejilla de alturas. El shader mezcla tonos de tierra con ruido a varias
-escalas; la forma geométrica la define `scripts/terreno.gd`, no el shader.
+`main.tscn` contiene un nodo `Suelo` (`StaticBody3D`) con una malla plana de
+160 × 160 m y una colisión cilíndrica de radio 80 m. La cara superior del
+collider está en `Y = 0`, que es también la altura a la que se siembran hierba y
+árboles. El shader solo da aspecto de tierra; ya no genera geometría ni altura.
 
 > Godot 4.7 **no tiene `noise()` ni `hash()`** en el lenguaje de sombreado. Se
 > comprobo. El ruido de valor va montado a pelo con `hash21()` y `ruido()`.
@@ -790,101 +787,18 @@ repitan con el borde de la malla y no se vea el empalme al alejarse.
 | `grano` | 0.45 |
 | `escala_manchas` | 0.28 |
 
-### Configuración efectiva del terreno (`scripts/terreno.gd`)
-
-La escena principal no sobrescribe estos exports, por lo que son también los
-valores activos:
-
-| Export | Valor | Uso |
-| --- | --- | --- |
-| `semilla` | 41021 | semilla del ruido determinista |
-| `lado` | 240 m | extensión del terreno, centrado en el origen |
-| `lado_cuadrante` | 12 m | 20 × 20 = 400 fragmentos |
-| `paso_malla` | 1 m | resolución de la malla y la colisión |
-| `pendiente` | 6° | pendiente general hacia el norte |
-| `desde_terraza` | 3 m | altura base a partir de la que aparecen terrazas |
-| `alto_terraza` | 1,7 m | desnivel entre niveles de terraza |
-| `talud_terraza` | 0,20 | proporción del nivel ocupada por el talud |
-| `fondo_surco` | 0,9 m | profundidad nominal de los surcos |
-| `ancho_surco` / `paso_surco` | 2,6 m / 5,5 m | ancho y separación de los surcos |
-| `altura_origen` | 0 m | cota del terreno en el origen |
-| `altura_nube` | 60 m | límite inicial al calcular las cotas del terreno |
-
-La altura combina pendiente, ondulación, terrazas y surcos; por eso el desnivel
-total no es igual a la pendiente simple. La malla actual tiene 67.600 vértices y
-135.200 triángulos. Las normales se calculan a partir de diferencias entre
-alturas vecinas.
+El plano tiene 160 × 160 m y el borde superior de su collider queda a `Y = 0`.
+Esta configuración está en `scenes/main.tscn`; la forma es plana a propósito.
 
 ---
 
-## 9. `scripts/aldea.gd` — catalogo modular de Blender
+## 9. Terreno definitivo y aldea manuales (pendientes)
 
-La aldea no genera mallas por codigo. `Aldea` calcula una cuadrícula de parcelas,
-ajusta cada instancia a `Terreno.cota_en()` y carga estos archivos si existen.
-Si falta alguno, deja un `Node3D` placeholder con la ruta en metadata
-`asset_path`. **Estado actual:** la carpeta `assets/models/aldea/` solo contiene
-`.gitkeep`; no hay modelos disponibles y todas las ubicaciones del catálogo son
-placeholders. La lógica coloca una casa, muros, un árbol y un arbusto por parcela,
-además de la carretera; todavía no coloca hórreos.
+No hay nodos ni scripts de terreno procedural o de aldea en la escena actual. El
+mapa futuro será un valle esculpido desde el editor; el plugin aún está por
+elegir. Las casas, muros, carreteras y parcelas se colocarán manualmente desde
+el editor en otra fase.
 
-Configuración efectiva en `main.tscn` / exports de `aldea.gd`:
-
-| Parámetro | Valor |
-| --- | --- |
-| `columnas` × `filas` | 4 × 3 (12 parcelas) |
-| `largo_parcela` × `ancho_parcela` | 15 × 12 m |
-| `origen` / `giro` | (0, 0) / 0 rad |
-| `calle_fila` / `ancho_camino` | 1 / 4 m |
-| `semilla` | 20260927 |
-
-API del layout para los sistemas futuros de encargos y parcelas:
-
-```gdscript
-numero_parcelas() -> int
-parcela_por_id(id: int) -> Parcela
-dentro(p: Vector2) -> bool       # pertenece a un recinto
-ocupada(p: Vector2) -> bool      # casa/carretera: no sembrar aquí
-```
-
-`Parcela` conserva `id`, fila, columna, centro, `centro_casa`, giro y dimensiones
-en un tipo explícito; el identificador se mantiene estable dentro de la cuadrícula.
-
-| Grupo | Rutas esperadas en el catálogo |
-| --- | --- |
-| Casas | `casa_1.glb`, `casa_2.glb`, `casa_3.glb` |
-| Muros | `muro_recto.glb`, `muro_esquina.glb` |
-| Vegetacion | `arbol_1.glb`, `arbol_2.glb`, `arbusto_1.glb`, `arbusto_2.glb` |
-| Carretera | `carretera_recta.glb`, `carretera_cruce.glb` |
-
-Todos van en `res://assets/models/aldea/`. Las coordenadas de los modelos usan
-metros: **1 unidad de Godot = 1 metro**. Exporta cada origen en el centro de la
-base, con la base en `Y = 0`; la aldea escribe la altura `Y` con el heightmap del
-terreno. El eje longitudinal del modelo debe quedar en el eje local `+X`; si
-trabajas mirando hacia `-Z` en Blender, gira la malla dentro del archivo antes
-de exportar.
-
-Medidas recomendadas:
-
-| Modelo | Medida de referencia |
-| --- | --- |
-| Casa | hasta `6 x 5 x 5 m`, base en `Y = 0` |
-| Muro recto | `1 x 0,8 x 1 m`; el juego escala el eje longitudinal a cada lado |
-| Muro esquina | `1 x 0,8 x 1 m` |
-| Arbol | base en `Y = 0`, entre `3` y `8 m` de alto |
-| Arbusto | base en `Y = 0`, entre `0,6` y `2 m` de alto |
-| Carretera recta | aproximadamente `15 x 4 m`, eje largo local `X` |
-| Carretera cruce | aproximadamente `4 x 4 m` |
-
-Los árboles y arbustos reciben una variación reproducible de yaw de `+-0,25`
-radianes cuando sus escenas estén disponibles. `Aldea/PuntoInicioFurgoneta` es un
-`Marker3D` colocado al comienzo del tramo principal; su posición pública es
-`punto_inicio_furgoneta`. Es un punto de integración: la furgoneta aún no está
-instanciada en `main.tscn`.
-
-La hierba sigue apareciendo en la zona libre de cada parcela. Solo se excluyen
-las cajas ocupadas por casas y carretera mediante `Aldea.ocupada()`; `Bosque`
-sigue usando `Aldea.dentro()` para no plantar arboles del bosque exterior dentro
-de las parcelas.
 
 ---
 
@@ -901,7 +815,7 @@ igual). Va en la capa 2.
 
 | Archivo | Que hace |
 | --- | --- |
-| `test_juego.gd` | la suite. **200 comprobaciones** en headless |
+| `test_juego.gd` | pruebas headless de movimiento, desbrozadora, vegetación y suelo plano |
 | `test_movimiento_integrado.gd` | combinaciones de paneo, WASD, carrera, agachado, salto y acelerador |
 | `mirar_hierba.gd` | tres fotos con render real y cuanto ocupa cada una |
 | `medir_densidad.gd` | frame time con distintas densidades y radios |
@@ -964,10 +878,10 @@ flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
 ```
 
 `medir_foto.gd` hace la foto, espera 40 fotogramas reales, tira otra con
-`Hierba` oculta y compara las dos. Con la configuración actual y el encuadre
-inicial de −40° cambió el **52,4 %** de los píxeles al ocultar ese campo; el
-**54,7 %** de la captura tenía píxeles verdes. El resultado depende del encuadre,
-así que debe repetirse si cambian la cámara o los campos.
+`Hierba` oculta y compara las dos. La última medición fue sobre la escena
+anterior, con terreno procedural y encuadre inicial de −40°: cambió el **52,4 %**
+de los píxeles al ocultar ese campo y el **54,7 %** de la captura tenía píxeles
+verdes. El plano actual aún no se ha medido visualmente.
 
 > **No se lanza la suite completa con Vulkan para cerrar el aviso.** En una
 > maquina sin GPU (render por software) va a unos 1 fps y las pruebas tardan
@@ -995,16 +909,17 @@ pueden comparar.
 
 ---
 
-## 11. Rendimiento medido
+## 12. Rendimiento medido (referencia de la escena anterior)
 
-Medición actual con una AMD Radeon RX 6600, Forward+, Vulkan 1.4 y
+Medición registrada con una AMD Radeon RX 6600, Forward+, Vulkan 1.4 y
 `tools/medir_densidad.gd`. El jugador se oculta durante la captura, pero el resto
-de la escena permanece activo: terreno, bosque y `MalezaAlta`. Los recuentos y
-triángulos de la tabla son solo los de `Hierba`.
+de la escena anterior permanece activo: terreno procedural, bosque y
+`MalezaAlta`. Los recuentos y triángulos de la tabla son solo los de `Hierba`;
+estas cifras no son una medición del plano actual.
 
 | Densidad | Radio | Hojas | Triángulos | Mediana | Peor |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| **60/m² (configuración actual)** | **66 m** | **255.360** | **1.532.160** | 8,3 ms | 8,3 ms |
+| **60/m² (baseline anterior)** | **66 m** | **255.360** | **1.532.160** | 8,3 ms | 8,3 ms |
 | 30/m² | 20 m | 8.136 | 48.816 | 8,3 ms | 8,4 ms |
 | 60/m² | 20 m | 16.301 | 97.806 | 8,3 ms | 8,4 ms |
 | 100/m² | 20 m | 27.118 | 162.708 | 8,3 ms | 8,6 ms |

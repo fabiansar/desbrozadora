@@ -40,7 +40,6 @@ func _correr() -> void:
 	await _mirar()
 	await _correr_prueba()
 	await _bosque()
-	_aldea_prueba()
 	await _giro_suave()
 	# La hierba se mira antes que el acelerador: despues de encender el motor
 	# ya hay hojas cortadas y no se puede comprobar que empiezan de pie.
@@ -291,38 +290,6 @@ func _bosque() -> void:
 	var arbol := arboles[0] as StaticBody3D
 	_ok_si((jugador.collision_mask & arbol.collision_layer) != 0,
 		"el jugador choca con los arboles (capa %d)" % arbol.collision_layer)
-
-
-func _aldea_prueba() -> void:
-	print("\n== parcelas y zonas ocupadas de la aldea ==")
-	var aldea := mundo.get_node_or_null("Aldea") as Aldea
-	_ok_si(aldea != null, "la aldea está conectada al mundo")
-	if aldea == null:
-		return
-	_ok_si(aldea.numero_parcelas() == 12, "el layout tiene 12 parcelas estables")
-	var parcela = aldea.parcela_por_id(7)
-	_ok_si(parcela != null and parcela.id == 7 and parcela.fila == 1
-		and parcela.columna == 3,
-		"la parcela 7 conserva su identidad de fila y columna")
-	_ok_si(aldea.parcela_por_id(-1) == null
-		and aldea.parcela_por_id(aldea.numero_parcelas()) == null,
-		"los identificadores fuera del layout no devuelven parcelas")
-	if parcela != null:
-		_ok_si(aldea.dentro(parcela.centro), "el centro de la parcela cae dentro del recinto")
-		_ok_si(aldea.ocupada(parcela.centro_casa),
-			"la casa reserva su zona para la siembra")
-	_ok_si(not aldea.dentro(Vector2(100.0, 100.0)),
-		"un punto exterior no pertenece a la aldea")
-	var hierba := mundo.get_node_or_null("Hierba") as Hierba
-	if hierba != null:
-		var dentro_de_casa := 0
-		for i in range(0, hierba.total(), 127):
-			var hoja := hierba.posicion_hoja(i)
-			if aldea.ocupada(Vector2(hoja.x, hoja.z)):
-				dentro_de_casa += 1
-		_ok_si(dentro_de_casa == 0,
-			"la muestra de césped no invade casas ni carretera (%d hojas)"
-			% dentro_de_casa)
 
 
 func _giro_suave() -> void:
@@ -941,18 +908,41 @@ func _regenerar_hierba() -> void:
 
 
 func _suelo_prueba() -> void:
-	print("\n== suelo ==")
-	var suelo := _primera_malla(mundo.get_node_or_null("Terreno"))
-	_ok_si(suelo != null, "el suelo tiene malla")
+	print("\n== suelo plano de pruebas ==")
+	_ok_si(mundo.get_node_or_null("Terreno") == null
+		and mundo.get_node_or_null("Aldea") == null,
+		"no hay terreno procedural ni layout de aldea activos")
+	var suelo := mundo.get_node_or_null("Suelo") as StaticBody3D
+	_ok_si(suelo != null, "hay un cuerpo físico para el suelo plano")
 	if suelo == null:
 		return
-	var mat := suelo.material_override as ShaderMaterial
+	var suelo_malla := suelo.get_node_or_null("Malla") as MeshInstance3D
+	_ok_si(suelo_malla != null and suelo_malla.mesh is PlaneMesh,
+		"el suelo visible usa una malla plana")
+	if suelo_malla == null or not suelo_malla.mesh is PlaneMesh:
+		return
+	var plano := suelo_malla.mesh as PlaneMesh
+	_ok_si(is_equal_approx(plano.size.x, 160.0)
+		and is_equal_approx(plano.size.y, 160.0),
+		"el plano de pruebas mide 160 × 160 m")
+	var colision := suelo.get_node_or_null("Colision") as CollisionShape3D
+	_ok_si(colision != null and colision.shape is CylinderShape3D,
+		"el suelo tiene una superficie física amplia")
+	if colision == null or not colision.shape is CylinderShape3D:
+		return
+	var cilindro := colision.shape as CylinderShape3D
+	_ok_si(is_equal_approx(cilindro.radius, 80.0)
+		and is_equal_approx(cilindro.height, 0.4),
+		"la colisión cubre el campo de pruebas")
+	var altura_suelo := _suelo_fisico_en(Vector3.ZERO)
+	_ok_si(absf(altura_suelo) < 0.01,
+		"la superficie física está en Y=0 (%.3f m)" % altura_suelo)
+	var mat := suelo_malla.material_override as ShaderMaterial
 	_ok_si(mat != null, "el suelo lleva shader, no un color plano")
 	if mat == null:
 		return
 	_ok_si(mat.shader != null, "y el shader esta cargado")
-	# Tierra: el canal rojo tiene que pesar mas que el azul. El verde plano de
-	# antes iba al reves y por eso parecia cesped de plastico.
+	# La superficie plana mantiene el material de tierra del prototipo inicial.
 	var seca: Color = mat.get_shader_parameter("tierra_seca")
 	var humeda: Color = mat.get_shader_parameter("tierra_humeda")
 	_ok_si(seca.r > seca.b and humeda.r > humeda.b,
@@ -1014,7 +1004,7 @@ func _cabezal_visible() -> void:
 	var corte := herramienta.punto_de_corte()
 	var suelo_corte := _suelo_fisico_en(corte)
 	_ok_si(absf(corte.y - suelo_corte) < 0.06,
-		"el cabezal apoya en el collider del terreno (y = %.2f, suelo %.2f)"
+		"el cabezal apoya en el collider del suelo (y = %.2f, suelo %.2f)"
 		% [corte.y, suelo_corte])
 	# Lo que importa para el encuadre es lo lejos que va por delante, no la
 	# distancia en linea recta: con la cabeza a 1,6 m y el cabezal en el suelo
@@ -1215,7 +1205,7 @@ func _tecla_atras() -> void:
 	var gira := rad_to_deg(mira_antes.angle_to(-camara.global_transform.basis.z))
 	_ok_si(absf(gira) < 12.0,
 		"la camara no se da la vuelta al pulsar S (%.1f grados)" % gira)
-	# Y tampoco se ha comido el terreno: el jugador sigue en el suelo.
+	# Y tampoco se ha caído del plano: el jugador sigue en el suelo.
 	_ok_si(jugador.is_on_floor(),
 		"y sigue en el suelo y no se ha ido por las ramas")
 	# Se deja todo como estaba para no molestar a las pruebas siguientes.
@@ -1419,25 +1409,25 @@ func _movimiento_de_la_maquina() -> void:
 		% [rad_to_deg(con_cuerpo_a_un_lado), rad_to_deg(herramienta.angulo_barrido())])
 
 	# 8) El apoyo en el suelo. Durante el trabajo, al mirar mas abajo de lo que
-	# cabe, el cabezal apoya y se queda ahi: no se hunde en la tierra.
+	# cabe, el cabezal apoya y se queda ahi: no se hunde en el suelo.
 	Input.action_press("acelerador")
 	await _esperar(0.6)
 	jugador.mirar_a(0.0, deg_to_rad(-42.0))
 	await _esperar(1.2)
 	var corte_1 := herramienta.punto_de_corte()
 	var suelo_1 := corte_1.y
-	var cota_1 := _suelo_fisico_en(corte_1)
+	var altura_colision_1 := _suelo_fisico_en(corte_1)
 	jugador.mirar_a(0.0, deg_to_rad(-80.0))
 	await _esperar(1.2)
 	var corte_2 := herramienta.punto_de_corte()
 	var suelo_2 := corte_2.y
-	var cota_2 := _suelo_fisico_en(corte_2)
-	_ok_si(absf(suelo_1 - cota_1) < 0.06,
-		"al mirar al suelo apoya en terreno inclinado (y = %.2f, cota %.2f)"
-		% [suelo_1, cota_1])
-	_ok_si(absf(suelo_2 - cota_2) < 0.06,
-		"y bajando mas la vista sigue apoyado (y = %.2f, cota %.2f)"
-		% [suelo_2, cota_2])
+	var altura_colision_2 := _suelo_fisico_en(corte_2)
+	_ok_si(absf(suelo_1 - altura_colision_1) < 0.06,
+		"al mirar al suelo apoya en la superficie plana (y = %.2f, suelo %.2f)"
+		% [suelo_1, altura_colision_1])
+	_ok_si(absf(suelo_2 - altura_colision_2) < 0.06,
+		"y bajando mas la vista sigue apoyado (y = %.2f, suelo %.2f)"
+		% [suelo_2, altura_colision_2])
 	Input.action_release("acelerador")
 	jugador.mirar_a(0.0, 0.0)
 	await _esperar(1.0)

@@ -22,11 +22,6 @@ extends Node3D
 ## Semilla. Con la misma semilla sale siempre el mismo bosque, que es lo que
 ## hace falta para poder comparar unas pruebas con otras.
 @export var semilla := 20260926
-## Si esta puesto, los arboles se plantan a la altura del terreno. Sin esto, en
-## una ladera el bosque se queda en un escalon flotante.
-@export var terreno: Terreno
-## La aldea, para no plantar un arbol en mitad de un huerto.
-@export var aldea: Aldea
 
 
 func _ready() -> void:
@@ -70,8 +65,6 @@ func _generar() -> void:
 				break
 		if cerca:
 			continue
-		if aldea != null and aldea.dentro(punto):
-			continue
 		puestos.append(punto)
 		_poner(punto, rng, verdes)
 
@@ -85,10 +78,7 @@ func _poner(p: Vector2, rng: RandomNumberGenerator, verdes: Array[StandardMateri
 	# parece una regiment y se nota muchisimo que son copias.
 	var alto := rng.randf_range(0.75, 1.45)
 	var gordo := rng.randf_range(0.8, 1.2)
-	var y := 0.0
-	if terreno != null:
-		y = terreno.cota_en(p)
-	n.position = Vector3(p.x, y, p.y)
+	n.position = Vector3(p.x, 0.0, p.y)
 	n.scale = Vector3(gordo, alto, gordo)
 	n.rotation.y = rng.randf() * TAU
 	# La copa Alta se aparta un poco hacia un lado: el arbol se ve torcido, que

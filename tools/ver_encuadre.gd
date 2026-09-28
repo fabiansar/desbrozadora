@@ -29,8 +29,7 @@ func _initialize() -> void:
 	var dentro := 0
 	var fuera := 0
 	# El diagnóstico interesa al cuerpo y a la herramienta. Recorrer el mundo
-	# entero incluye cientos de fragmentos de terreno y cuadrantes de vegetación,
-	# que repiten el mismo origen lógico y saturan el informe.
+	# entero incluye cientos de instancias de vegetación que saturan el informe.
 	for n in _mallas(jugador):
 		var vm := n as VisualInstance3D
 		if not vm.is_visible_in_tree():

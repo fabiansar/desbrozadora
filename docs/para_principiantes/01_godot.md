@@ -47,16 +47,15 @@ propiedades. La pestaña **Script** abre el código asociado. El panel inferior
 | Barrido, inclinación, motor y corte | `scripts/desbrozadora.gd` |
 | Siembra y corte de hierba | `scripts/hierba.gd` |
 | Viento que mueve las hojas | `scripts/viento.gd` y `shaders/hierba.gdshader` |
-| Forma y consultas del terreno | `scripts/terreno.gd` |
-| Distribución modular de la aldea | `scripts/aldea.gd` |
+| Suelo plano temporal | `scenes/main.tscn`, nodo `Suelo` |
 | Modelo de primera persona | `models/personaje_trabajo.glb` y `scripts/brazos_primera_persona.gd` |
 
 El flujo habitual de una escena es:
 
 ```text
 scenes/main.tscn
-  ├── Terreno   → scripts/terreno.gd
-  ├── Aldea     → scripts/aldea.gd
+  ├── Suelo     → plano y colisión para pruebas
+  ├── Bosque    → scripts/bosque.gd; árboles sobre Y=0
   ├── Hierba    → scripts/hierba.gd
   ├── Viento    → scripts/viento.gd
   └── Player    → scenes/jugador.tscn

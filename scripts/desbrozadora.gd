@@ -825,17 +825,12 @@ func angulo_del_suelo(altura_manos: float, suelo: float) -> float:
 	return _angulo_cabeza - acos(clampf(caida, -1.0, 1.0))
 
 
-## A que altura esta el suelo bajo el cabezal, en el sistema de las caderas.
+## A que altura está la superficie física bajo el cabezal, en el sistema de las
+## caderas. Se consulta con un rayo para que el apoyo siga funcionando al cambiar
+## el plano de pruebas por un terreno con relieve en el futuro.
 ##
-## Esto no puede ser un numero fijo, y por un motivo concreto: las caderas estan
-## a 0,88 m del suelo SOLO cuando el terreno es llano. El suelo de este juego
-## es ondulado y el jugador se para en cualquier pendiente, asi que la misma
-## maquina tiene que apoyar a distintas alturas. Por eso se lanza un rayo
-## hacia abajo y se pregunta.
-##
-## El rayo sale de la columna del cabezal, no de las manos, porque lo que toca
-## el terreno es el cabezal. Si no toca nada (ruido de hierarchical o jugador
-## en el aire) se devuelve 0, que es el suelo en terreno llano.
+## El rayo sale de la columna del cabezal, no de las manos. Si no toca nada (por
+## ejemplo, si el jugador está en el aire) se devuelve 0.
 func _altura_del_suelo(altura_manos: float) -> float:
 	# Mirando al frente el suelo esta lejos y cualquier valor vale. Se evita el
 	# rayo entero, que son unos nanos, pero sobre todo porque en campo abierto
@@ -844,16 +839,15 @@ func _altura_del_suelo(altura_manos: float) -> float:
 		return 0.0
 	var espacio := get_world_3d().direct_space_state
 	# Se lanza bajo el centro de corte de la pose del fotograma anterior. Usar
-	# una coordenada fija de alcance fallaba al alargar la barra o barrer de lado:
-	# el rayo consultaba otra columna del terreno y dejaba el cabezal flotando.
+	# una coordenada fija de alcance falla al alargar la barra o barrer de lado:
+	# el rayo consultaría otra columna del suelo y dejaría el cabezal flotando.
 	var corte_actual := punto_de_corte()
 	var caderas := _caderas if _caderas != null else self
 	var origen := Vector3(corte_actual.x,
 		maxf(corte_actual.y, altura_manos) + 1.0, corte_actual.z)
 	var q := PhysicsRayQueryParameters3D.create(origen, origen + Vector3.DOWN * 4.0)
-	# Se aparta al jugador del rayo. La capsula del jugador es alta y en una
-	# pendiente el rayo la puede rozar, y si la Roquea la maquina se apoya en el
-	# aire, por encima del terreno.
+	# Se aparta al jugador del rayo. La cápsula es alta y puede cruzarse con el
+	# rayo, haciendo que la máquina se apoye en el aire.
 	if _jugador != null:
 		q.exclude = [_jugador.get_rid()]
 	var golpe: Dictionary = espacio.intersect_ray(q)

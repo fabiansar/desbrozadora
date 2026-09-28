@@ -177,28 +177,28 @@ de nada si la maquina no nota que hay algo delante ni si llega a cortarlo.
 
 > **Lo que queda de esta fase y por que.** El desgaste, el combustible y los
 > discos siguen pendientes: son sistemas que se notan mucho cuando están a
-> medias, y sin discos no hay filo que desgastar. El terreno con pendiente ya
-> está implementado como base del entorno; la resistencia de la desbrozadora
-> todavía se calcula por la hierba que queda delante, no por la pendiente.
+> medias, y sin discos no hay filo que desgastar. Por ahora el suelo de pruebas
+> es plano; la futura pendiente del valle aún no influye en la resistencia.
 
-### Base del entorno (implementada; integración visual en curso)
+### Entorno actual y mapa definitivo (por hacer)
 
-- [x] Terreno procedural de 240 × 240 m, con pendiente, ondulación, terrazas,
-      surcos, colisión y consultas de altura compartidas.
-- [x] Layout modular de aldea en una cuadrícula de 4 × 3 parcelas de 15 × 12 m,
-      conectado con el terreno, el bosque y las zonas de siembra.
-- [ ] Modelos visuales de casas, muros, caminos y vegetación para
-      `assets/models/aldea/`; por ahora las ubicaciones cargan placeholders.
+- [x] Plano temporal de pruebas de 160 × 160 m, con colisión en `Y = 0`.
+- [ ] Elegir y validar en Godot 4.7.2 un plugin para esculpir el terreno desde el
+      Inspector; probar primero en una escena/proyecto de ensayo.
+- [ ] Crear a mano un valle extenso que conecte parcelas con caminos transitables.
+- [ ] Medir los trayectos reales en juego: entre parcelas, viajes de 3–4 minutos
+      como máximo.
+- [ ] Colocar manualmente la aldea y sus assets desde el editor; no habrá
+      generador procedural de parcelas.
 - [x] Medición Vulkan del campo y comparación visual de `Hierba` con la
       configuración actual. La mediana está limitada por VSync; no aísla el coste
       de cada elemento de la escena.
-- [ ] Validación visual final del terreno y la aldea cuando se incorporen sus
-      modelos; mantener pendiente la calibración GoPro del operario.
+- [ ] Validar visualmente el valle y las carreteras cuando se incorporen.
 
 ### Feedback de la sesión actual
 
-- [x] Movimiento, herramienta, encuadre y entorno considerados correctos; quedan
-      mejoras futuras sin bloquear la ampliación del juego.
+- [x] Movimiento, herramienta y encuadre considerados correctos; el suelo queda
+      temporalmente plano mientras se prepara el mapa definitivo.
 - [ ] Revisar la resistencia de la maleza y cómo la carga modifica el motor.
 - [ ] Antes de sumar combustible/desgaste, separar el componente de motor del
       controlador físico de la desbrozadora; `telemetria_actualizada` define el

@@ -115,20 +115,16 @@ Godot crea archivos `.import` para guardar opciones de importación. No borres n
 edites esos archivos para corregir la forma del modelo: corrige la geometría o
 la escena que la instancia.
 
-## 7. Añadir un modelo a la aldea
+## 7. Pueblo manual (trabajo futuro)
 
-El catálogo modular de la aldea busca rutas como
-`assets/models/aldea/casa_1.glb`. Ahora el catálogo puede no contener modelos y
-la aldea usa placeholders. Para añadir uno:
+El generador procedural y el catálogo de la aldea se retiraron. Cuando empiece
+esa etapa, la idea es crear una escena reutilizable por tipo de pieza y colocar
+las instancias manualmente desde el editor de Godot. Aún no hay una carpeta de
+assets ni una herramienta de terreno elegidas para ese flujo.
 
-1. Guarda el `.glb` en la carpeta correspondiente dentro de `assets/models/aldea/`.
-2. Abre el modelo con el helper de Blender y revisa escala, origen y orientación.
-3. Añade o cambia la ruta en el catálogo exportado de `scripts/aldea.gd`.
-4. Ejecuta el juego y comprueba que apoya en el terreno y no tapa zonas de forma
-   inesperada.
-
-Los modelos de casa, muro, carretera, árbol y arbusto no comparten necesariamente
-el mismo origen; mira el contexto de `_instanciar()` antes de cambiar una ruta.
+Para que las piezas se puedan mover con facilidad, se definirán entonces las
+convenciones de origen, escala, orientación y colisión para casas, muros,
+carreteras y vegetación. Mientras tanto, no hay un catálogo activo que editar.
 
 ## 8. Solución rápida de problemas
 

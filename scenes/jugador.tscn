@@ -10,7 +10,7 @@
 radius = 0.35
 height = 1.7
 
-; Suelo, camara y luces van en "main.tscn", no aqui. El terreno tiene que estar
+; Suelo, camara y luces van en "main.tscn", no aqui. El suelo tiene que estar
 ; quieto en el mundo: si cuelga del jugador se va con el y el jugador cae
 ; eternamente sin llegar nunca al suelo (y aun asi da "is_on_floor" true,
 ; porque esta encima de su propio suelo).

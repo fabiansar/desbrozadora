@@ -109,7 +109,7 @@ Después elige una comprobación apropiada:
 | --- | --- |
 | Sintaxis o escena | Abrir el proyecto en el editor y mirar Output; parseo headless |
 | Movimiento/cámara/herramienta | Recorrido manual y `test_movimiento_integrado.gd` |
-| Corte, hierba, viento o terreno | Prueba manual; suite `test_juego.gd` si quieres comprobar todo |
+| Corte, hierba, viento o suelo plano | Prueba manual; suite `test_juego.gd` si quieres comprobar todo |
 | Modelo Blender | Abrir el GLB con ventana y luego ejecutar el juego |
 
 Parseo rápido, que carga el proyecto en modo editor sin interfaz:

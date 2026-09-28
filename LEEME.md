@@ -4,9 +4,11 @@ Simulador de desbrozadora en Godot 4.7. Andas por un huerto, llevas una
 desbrozadora y lo que toca, se cae.
 
 Estado: **prototipo jugable del trabajo de desbroce**. Se anda, se corre, se
-salta, se mira, se acelera la desbrozadora, suena el motor y se corta hierba. El
-mundo ya tiene terreno con pendiente y una aldea distribuida por parcelas; la
-aldea sigue en integración visual y sus modelos todavía son placeholders.
+salta, se mira, se acelera la desbrozadora, suena el motor y se corta hierba. Para
+las pruebas el mundo vuelve temporalmente al suelo plano inicial; el terreno
+procedural y el layout de la aldea están retirados mientras se prepara el mapa
+artesanal definitivo. El mapa futuro será un valle; el plugin de terreno aún no
+está decidido.
 
 ## Como se juega
 
@@ -108,9 +110,10 @@ timeout 300 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --path . --script tools/medir_foto.gd --rendering-driver vulkan
 ```
 
-Esa mide si la hierba se dibuja de verdad. En la configuración actual la última
-medición registró **52,4 % de píxeles cambiados** al ocultar `Hierba` y **54,7 %
-de píxeles verdes**. Las capturas se guardan en `capturas/`.
+Esa mide si la hierba se dibuja de verdad. La última medición registrada fue en
+la escena anterior con terreno procedural: **52,4 % de píxeles cambiados** al
+ocultar `Hierba` y **54,7 % de píxeles verdes**. El plano actual aún no se ha
+medido visualmente. Las capturas se guardan en `capturas/`.
 
 > **No repitas la suite entera con ventana.** Se puede, pero con la GPU por
 > software de esta maquina va a un fps y la suite tarda doce minutos. Para
@@ -135,22 +138,23 @@ Hay **dos campos**, cada uno con su semilla y su material:
 | `MalezaAlta` | maleza | 145 cm (hasta ~169 cm) | 18 por m2 | 0,73 m | 12 m |
 
 La escena actual también agrupa el césped (`formacion = 0,70`); la maleza usa
-`formacion = 0,78` y `dureza = 1,8`. Ambos campos se siembran sobre el terreno y
-respetan las zonas ocupadas de la aldea. El recuento de hojas depende de la
-semilla y de las exclusiones del terreno; no se fija aquí como cifra permanente.
-Los radios de corte son distintos en la configuración actual.
+`formacion = 0,78` y `dureza = 1,8`. Ambos campos se siembran sobre el suelo plano
+de pruebas, sin exclusiones por terreno o parcelas. El recuento depende de la
+semilla y la formación; los radios de corte son distintos.
 
 La suite comprueba el reparto, las cajas, el recorte por distancia y el corte de
 ambos campos. Los valores efectivos están en `scenes/main.tscn`; el detalle está
 en [DOCUMENTACION.md](DOCUMENTACION.md).
 
-### Terreno y aldea
+### Suelo plano de pruebas
 
-El terreno ocupa 240 × 240 m y se construye en fragmentos de 12 m, con pendiente,
-ondulación, terrazas y surcos. La aldea usa una cuadrícula de 4 × 3 parcelas de
-15 × 12 m. Su distribución y las consultas que excluyen hierba/bosque ya están
-integradas; las casas, muros, caminos y plantas aún no tienen modelos `.glb` en
-`assets/models/aldea/`.
+La escena usa una superficie plana de 160 × 160 m con colisión que cubre un radio
+de 80 m. Su altura es `Y = 0`, igual que el suelo inicial del prototipo. No hay
+nodos ni scripts activos para `Terreno` o `Aldea`; el bosque y los dos campos de
+hierba se generan sobre el plano sin exclusiones por parcelas.
+
+El valle, las carreteras y la aldea manual se diseñarán más adelante. La hoja de
+ruta está en [DISENO.md](DISENO.md).
 
 ### Mirar como queda de verdad
 
@@ -179,7 +183,7 @@ shaders/    el de la hierba y el del suelo
 tools/      las pruebas y las herramientas de medicion
 audio/      el motor
     models/     la desbrozadora, el personaje y modelos auxiliares
-    assets/     catálogo pendiente de modelos para la aldea
+    assets/     recursos auxiliares
 ```
 
 Los detalle de cada archivo estan en [DOCUMENTACION.md](DOCUMENTACION.md), el

@@ -3,14 +3,20 @@
 Analisis del estado del proyecto tal y como esta ahora, con lo que esta bien,
 lo que esta raro y lo que falta. Para decidir el siguiente paso.
 
-Ultima revision: base jugable de desbroce y entorno procedural integrada; la
-integración visual de la aldea sigue pendiente. La última suite ejecutada antes
-de los cambios de FOV e interacción dio **202 correctas / 0 fallos**, con un aviso esperado por la
-imagen. Con la configuración y el encuadre actuales, la medición Vulkan registra **52,4 %** de
-píxeles cambiados al ocultar el césped y **54,7 %** verdes.
+Ultima revision: base jugable de desbroce sobre el suelo plano inicial. El terreno
+procedural y el layout de la aldea se retiraron para preparar un mapa manual; el
+plugin para esculpirlo desde el editor aún no está elegido. La última suite
+ejecutada antes de los cambios de FOV e interacción dio **202 correctas / 0
+fallos**, con un aviso esperado por la imagen. La medición Vulkan del mapa
+anterior registró **52,4 %** de píxeles cambiados al ocultar el césped y **54,7 %**
+verdes; esas cifras no corresponden a la escena plana actual.
 
 La interacción experimental para coger/soltar la desbrozadora con `E` y `Q` se
 retiró; la herramienta vuelve a permanecer anclada al arnés.
+
+El parseo del editor y el arranque de la escena durante 60 fotogramas pasaron sin
+errores; el recorrido integrado de movimiento dio **48/48**. La suite completa
+queda pendiente de ejecutarse.
 
 Lo que se puede jugar hoy esta en [LEEME.md](LEEME.md), el detalle por archivo en
 [DOCUMENTACION.md](DOCUMENTACION.md) y la hoja de ruta en
@@ -28,10 +34,10 @@ Lo que se puede jugar hoy esta en [LEEME.md](LEEME.md), el detalle por archivo e
   mide su giro en el mundo y le resta el del cuerpo.
 - La desbrozadora cuelga de las caderas, acelera con curva, suena el motor con
   el tono y el volumen correctos, y el cabezal baja al acelerar.
-- Hay bosque con colision, y suelo de tierra procedural que se ve bien.
-- **La hierba, el viento y el corte están implementados.** La escena actual se
-  comprobó con Vulkan; la vegetación cambia el 52,4 % de los píxeles de la captura
-  al ocultar `Hierba`.
+- Hay bosque de prueba con colisión y un suelo plano de 160 × 160 m con collider.
+- **La hierba, el viento y el corte están implementados.** La escena conserva los
+  dos campos de vegetación sobre el plano; falta repetir la comprobación visual
+  Vulkan después de este cambio.
 - El campo va **por cuadrantes**, con culling por caja y por distancia, asi que
   la densidad se puede subir sin que el motor dibuje las hojas enteras.
 - **Hay dos tipos de hierba.** `MalezaAlta`, alta y seca, sale en matas con
@@ -39,12 +45,8 @@ Lo que se puede jugar hoy esta en [LEEME.md](LEEME.md), el detalle por archivo e
   maquina. Un claro va mas rapido que un zarzal, y se nota.
 - **Mirar arriba sube la maquina**, y el cabezal llega a la parte alta de la
   maleza sin salirse del encuadre. Antes no pasaba de 0,35 m.
-- **La aldea usa un catalogo modular.** `scripts/aldea.gd` solo calcula parcelas
-  y coloca instancias; `assets/models/aldea/` aún no contiene modelos, por lo que
-  las ubicaciones actuales son placeholders.
-- **El terreno tiene desnivel real.** `Terreno` construye una superficie de
-  240 × 240 m con pendiente, ondulación, terrazas y surcos; hierba, bosque y aldea
-  consultan la misma función de altura.
+- **El mundo de prueba está plano.** Hierba y árboles se siembran a `Y = 0`; no
+  hay referencias activas a `Terreno` o `Aldea`.
 - **Mirar arriba funciona con el motor parado.** El acelerador controla la
   bajada de trabajo y el corte, pero no bloquea la elevacion vertical por la
   mirada.
@@ -336,9 +338,9 @@ son los de las dos instancias de `scenes/main.tscn`. Ahora `Hierba` está a
 diferentes y tamaños de cuadrante diferentes. La tabla exacta está en
 `DOCUMENTACION.md`; hay que mantenerla al cambiar `main.tscn`.
 
-El número total de hojas no se documenta como constante porque también depende
-de la semilla y de las exclusiones por aldea. `medir_densidad.gd` lee parámetros
-de la escena al arrancar y las pruebas evitan comparar con cantidades fijas.
+El número total de hojas no se documenta como constante porque depende de los
+parámetros y la semilla. `medir_densidad.gd` lee la configuración de la escena al
+arrancar y las pruebas evitan comparar con cantidades fijas.
 
 ### 4.6 `capturas/` se genera y no se versiona
 
@@ -360,9 +362,8 @@ importantes sacadas antes a mano.
 - `hierba.gd` mantiene una sola fuente CPU para sembrado, corte y cuadrantes. La
   rejilla de corte y el renderer son buenos límites para separar antes de añadir
   crecimiento, recortes recogibles o nuevos tipos de vegetación.
-- `aldea.gd` ya usa registros tipados de parcela y consultas por ID; el catálogo
-  visual sigue vacío. Los encargos deberían depender de IDs/estado de parcela,
-  no de nodos o nombres de modelos.
+- El generador de terreno y el layout procedural de aldea ya no están activos.
+  El futuro mapa y sus parcelas se diseñarán manualmente desde el editor.
 
 ## 5. Lo que no esta hecho
 
@@ -376,11 +377,10 @@ importantes sacadas antes a mano.
 - **Sonido de corte.** Ahora solo suena el motor.
 - **Colision con la hierba.** La capa 4 esta reservada pero vacia.
 - **Ciclo de dia.** La luz es fija.
-- **Modelos de la aldea.** El layout de parcelas está implementado, pero los
-  modelos de casas, muros, caminos, árboles y arbustos aún no están en el catálogo;
-  por ahora se instancian placeholders.
-- **Conducción y furgoneta jugable.** Hay un punto de inicio en la aldea y un
-  modelo local excluido del repositorio, pero todavía no hay vehículo en la escena.
+- **Mapa de valle y aldea manuales.** No hay terreno definitivo, layout de parcelas,
+  edificios ni carreteras en la escena de pruebas.
+- **Conducción y furgoneta jugable.** Hay un modelo de furgoneta, pero no está
+  integrada ni tiene punto de inicio en el mundo.
 - **Telemetría del motor en pantalla.** Hay una medida de RPM efectiva y de
   resistencia, pero aún no existe una interfaz que las presente.
 
@@ -405,33 +405,32 @@ Configuración efectiva, leída de `main.tscn` (los defaults de
 | `Hierba` | 0,69 m | 60/m² | 0,70 | 66 m | 24 m | 80 m | 1,00 m |
 | `MalezaAlta` | 1,45 m | 18/m² | 0,78 | 50 m | 12 m | 16 m | 0,73 m |
 
-La maleza tiene dureza 1,8; ambas instancias usan el terreno y la aldea. En la
-última siembra se contaron **255.360** hojas de césped y **28.606** de maleza.
-La configuración del terreno es 240 × 240 m, pendiente general de 6°, 400
-fragmentos de 12 m y malla de 1 m. La aldea es una cuadrícula de 4 × 3 parcelas
-de 15 × 12 m.
+La maleza tiene dureza 1,8. Ambos campos se siembran directamente sobre el suelo
+plano, sin exclusiones de terreno o aldea. El suelo temporal mide 160 × 160 m y
+su collider alcanza un radio de 80 m.
 
-La medición Vulkan actual registró **8,3 ms de mediana** para el campo base, en
-el límite de VSync a 120 fps; por eso no aísla el coste de la hierba. La peor
-muestra fue de 8,3 ms para ese campo y hasta 8,6 ms en las configuraciones de
-comparación. La medición visual registró 52,4 % de píxeles cambiados al ocultar
-el césped y 54,7 % verdes con el encuadre inicial de −40°.
+La medición Vulkan del mapa anterior registró **8,3 ms de mediana**, limitada por
+VSync a 120 fps, así que no aislaba el coste de la hierba. La medición visual de
+esa versión registró 52,4 % de píxeles cambiados al ocultar el césped y 54,7 %
+verdes con el encuadre inicial de −40°. El suelo plano actual no se ha perfilado.
 
 ## 8. Propuesta de siguiente paso
 
 Estado del camino inmediato:
 
-1. **Ajustar la vista GoPro con feedback visual.** El cuerpo está visible, pero
-   falta calibrar la escala aparente del torso y la lectura separada de las piernas.
-2. **Completar la aldea visual.** Crear los modelos que faltan en
-   `assets/models/aldea/` y revisarlos en el juego.
-3. **Revisar maleza y carga del motor.** La interfaz futura debe mostrar telemetría
+1. **Elegir y probar el editor de terreno.** Comprobar la compatibilidad de
+   Terrain3D con Godot 4.7.2 antes de incorporarlo al proyecto.
+2. **Diseñar el valle a mano.** Esculpir relieve, zonas de parcelas y carreteras,
+   midiendo la duración real de los desplazamientos.
+3. **Colocar manualmente la aldea y sus assets.** El layout procedural se retiró;
+   el flujo futuro será construir escenas y ubicarlas desde el editor.
+4. **Revisar maleza y carga del motor.** La interfaz futura debe mostrar telemetría
    desacoplada (`telemetria_actualizada`), incluida la RPM bajo carga.
-4. **Integrar la furgoneta y conducción básica.** Hay punto de inicio y modelo,
-   pero vehículo, controles y navegación siguen pendientes.
-5. **Continuar el bucle de trabajo:** recoger hierba cortada, añadir sonido de
+5. **Integrar la furgoneta y conducción básica.** Vehículo, controles y navegación
+   siguen pendientes.
+6. **Continuar el bucle de trabajo:** recoger hierba cortada, añadir sonido de
    corte y conectar la pendiente del terreno con la resistencia de la máquina.
-6. **Después:** discos intercambiables, combustible, desgaste/afilado y encargos.
+7. **Después:** discos intercambiables, combustible, desgaste/afilado y encargos.
 
 Ojo con una cosa al tocar la hierba: la suite **con ventana** necesita el juego
 cerrado, y sin ventana (headless) no se ve nada de lo visual. Con la GPU por
