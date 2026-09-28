@@ -108,12 +108,6 @@ extends Node3D
 ## recorte este preparado ya para cuando el campo crezca.
 @export_range(0.0, 120.0, 1.0) var distancia_maxima := 42.0
 
-## Radio del corte, en metros. Es la mitad del ancho de corte del cabezal: una
-## desbrozadora normal corta de 40 a 50 cm, o sea de 0,20 a 0,25 de radio. Con
-## 0,12, que es lo que se puso al principio, el rastro salia finisimo, como si
-## fuera un punzon. Ahora esta en 0,40 (un 60 % mas que antes) para que el
-## rastro se vea de sobra mientras se prueba.
-@export_range(0.05, 1.0, 0.01) var radio_corte := 0.40
 ## Dejar un tocón corto en vez de pelar el suelo. Con false el rastro se ve
 ## limpio; con true se ve el pelo, como un cesped recien cortado.
 ## Si esta activo, cortar deja un tocón de altura_tocon en vez de tumbar la
@@ -789,4 +783,4 @@ func _physics_process(_delta: float) -> void:
 		if not _buscada:
 			return
 	if _desbrozadora.cortando:
-		cortar(_desbrozadora.punto_de_corte(), radio_corte)
+		cortar(_desbrozadora.punto_de_corte(), _desbrozadora.radio_corte)

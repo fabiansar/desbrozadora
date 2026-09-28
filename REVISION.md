@@ -14,9 +14,13 @@ verdes; esas cifras no corresponden a la escena plana actual.
 La interacción experimental para coger/soltar la desbrozadora con `E` y `Q` se
 retiró; la herramienta vuelve a permanecer anclada al arnés.
 
+El radio de corte reside ahora en `Desbrozadora.radio_corte` (1,0 m efectivo);
+los dos campos lo comparten. El primer intento de 0,13 m, igual al radio físico
+aproximado de la cuchilla, dejaba una pasada demasiado estrecha para verse.
+
 El parseo del editor y el arranque de la escena durante 60 fotogramas pasaron sin
-errores; el recorrido integrado de movimiento dio **48/48**. La suite completa
-queda pendiente de ejecutarse.
+errores; el recorrido integrado de movimiento y corte dio **55/55**. La suite
+completa queda pendiente de ejecutarse.
 
 Lo que se puede jugar hoy esta en [LEEME.md](LEEME.md), el detalle por archivo en
 [DOCUMENTACION.md](DOCUMENTACION.md) y la hoja de ruta en
@@ -63,9 +67,10 @@ Lo que se puede jugar hoy esta en [LEEME.md](LEEME.md), el detalle por archivo e
 - **FOV horizontal ajustable:** base de 100°, con `ajuste_fov` entre −20° y +20°;
   `main.tscn` lo ajusta actualmente a +20°. Esta última corrección queda para
   probar manualmente.
-- **Recorrido integrado de movimiento añadido:** 48 comprobaciones combinan
+- **Recorrido integrado de movimiento:** 55 comprobaciones combinan
   paneos, barridos, WASD, correr, agacharse, saltar y acelerar, incluida la
-  mirada alta con el motor encendido; última pasada limpia, 0 fallos.
+  mirada alta con el motor encendido y el corte compartido de ambos campos;
+  última pasada limpia, 0 fallos.
 
 ## 2. Los bugs que se han resuelto, y que conviene no repetir
 
@@ -184,13 +189,13 @@ daba media vuelta y la camara con el, y el mundo daba un tiron de 180 grados.
 Ahora `_colocar()` le resta el giro del cuerpo y la guiñada de la camara en el
 mundo es siempre la mirada. Con `S` se mide 0,4 grados de giro.
 
-### j) La prueba que se rompia sola al cambiar un valor del Inspector
+### j) El radio de corte pertenece a la herramienta, no a la hierba
 
-La prueba del ancho de corte comparaba `hierba.radio_corte` con un `0.40`
-escrito a mano. Al subir la hierba en el Inspector el cabezal paso a 0,54 y la
-prueba fallo **sin que el corte hubiera cambiado nada**. Una prueba que compara
-un valor con un literal no comprueba comportamiento: comprueba que nadie haya
-tocado el Inspector.
+Antes cada campo tenía su propio `radio_corte` y las pruebas leían ese valor,
+aunque el cabezal era el mismo. Ahora la fuente única es
+`Desbrozadora.radio_corte`; ambos campos y la medida de resistencia consultan ese
+radio. La prueba también verifica que `Hierba` y `MalezaAlta` ya no exporten esa
+propiedad.
 
 ### k) La herramienta de medir la foto que no medi nada
 
@@ -400,14 +405,15 @@ no dibuje nada.
 Configuración efectiva, leída de `main.tscn` (los defaults de
 `scripts/hierba.gd` son distintos):
 
-| Campo | Altura | Densidad | Formación | Radio | Cuadrante | Recorte | Corte |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `Hierba` | 0,69 m | 60/m² | 0,70 | 66 m | 24 m | 80 m | 1,00 m |
-| `MalezaAlta` | 1,45 m | 18/m² | 0,78 | 50 m | 12 m | 16 m | 0,73 m |
+| Campo | Altura | Densidad | Formación | Radio de siembra | Cuadrante | Recorte |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `Hierba` | 0,69 m | 60/m² | 0,70 | 66 m | 24 m | 80 m |
+| `MalezaAlta` | 1,33 m | 60/m² | 0,24 | 90 m | 12 m | 16 m |
 
-La maleza tiene dureza 1,8. Ambos campos se siembran directamente sobre el suelo
-plano, sin exclusiones de terreno o aldea. El suelo temporal mide 160 × 160 m y
-su collider alcanza un radio de 80 m.
+La maleza tiene dureza 3,3. Ambos campos se siembran sobre el plano sin
+exclusiones por terreno o aldea. El radio efectivo de corte común es 1,0 m y lo
+define la herramienta, no los campos. El suelo temporal mide 160 × 160 m y su
+collider alcanza un radio de 80 m.
 
 La medición Vulkan del mapa anterior registró **8,3 ms de mediana**, limitada por
 VSync a 120 fps, así que no aislaba el coste de la hierba. La medición visual de

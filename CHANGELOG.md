@@ -39,10 +39,22 @@ sin asistente.
   headless, sin errores. `test_movimiento_integrado.gd`: **48/48** correctas. La
   suite completa queda pendiente.
 
-La prueba focalizada `tools/test_movimiento_integrado.gd` cubre 48 comprobaciones
+## Radio de corte común — 2026-09-28
+
+- `radio_corte` deja de ser una propiedad de `Hierba`: pasa a
+  `Desbrozadora.radio_corte`, que representa el cabezal montado.
+- El primer valor, 0,13 m (radio geométrico de la cuchilla), no dejaba una pasada
+  visible. Se amplió a un radio efectivo de 1,0 m para alcanzar suficientes
+  hojas, manteniendo un único valor para corte y resistencia.
+- Se quitaron los dos overrides diferentes de `main.tscn` y se actualizaron las
+  pruebas para asegurar que ningún campo de vegetación tenga su propio radio.
+- Parseo de Godot correcto y prueba integrada con corte en ambos campos:
+  **55/55**. La suite completa queda pendiente.
+
+La prueba focalizada `tools/test_movimiento_integrado.gd` cubre 55 comprobaciones
 combinadas de paneo, giro, WASD, carrera, agachado, salto y acelerador, incluida
-la mirada alta con el motor en marcha; ultima ejecucion: **48 correctas, 0
-fallos**. Detecto tambien que el crouch bajaba la vista dos veces; ahora
+la mirada alta con el motor en marcha y el corte compartido de ambos campos;
+última ejecución: **55 correctas, 0 fallos**. Detectó también que el crouch bajaba la vista dos veces; ahora
 `Jugador` es el unico que mueve la cabeza y la camara solo suma el bamboleo. No
 sustituye a la suite larga.
 

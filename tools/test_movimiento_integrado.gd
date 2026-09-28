@@ -41,6 +41,7 @@ func _ejecutar() -> void:
 	_comprobar(_jugador.is_on_floor(), "inicio apoyado en el suelo")
 	_comprobar(absf(_camara.global_position.y - 1.62) < 0.08,
 		"altura inicial de camara estable")
+	_probar_radio_corte_compartido()
 
 	await _probar_paneo_y_barrido()
 	await _probar_wasd_carrera_y_motor()
@@ -55,6 +56,26 @@ func _ejecutar() -> void:
 	_comprobar(_vector_finito(_jugador.global_position), "posicion final finita")
 	_comprobar(_barrido_en_rango(), "barrido final dentro de los topes del arnes")
 	_finalizar()
+
+
+func _probar_radio_corte_compartido() -> void:
+	print("-- radio del cabezal compartido por los campos --")
+	_comprobar(_herramienta.radio_corte > 0.5,
+		"el radio efectivo deja un ancho de pasada visible (%.2f m)"
+		% _herramienta.radio_corte)
+	for nombre in ["Hierba", "MalezaAlta"]:
+		var campo := _mundo.get_node_or_null(nombre) as Hierba
+		_comprobar(campo != null, "%s está disponible para cortar" % nombre)
+		if campo == null or campo.total() == 0:
+			continue
+		var punto := campo.posicion_hoja(campo.total() / 2)
+		var de_pie_antes := campo.total_de_pie()
+		var cortadas := campo.cortar(punto, _herramienta.radio_corte)
+		_comprobar(cortadas > 1,
+			"el mismo cabezal deja un parche visible en %s (%d hojas)"
+			% [nombre, cortadas])
+		_comprobar(campo.total_de_pie() == de_pie_antes - cortadas,
+			"el corte se registra correctamente en %s" % nombre)
 
 
 func _probar_paneo_y_barrido() -> void:

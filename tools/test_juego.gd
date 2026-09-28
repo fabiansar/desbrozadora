@@ -390,11 +390,11 @@ func _cuadrantes_de_la_hierba(h: Hierba) -> void:
 		if h.altura_hoja(i) > 0.99:
 			sitio = h.posicion_hoja(i)
 			break
-	var cortadas: int = h.cortar(sitio, h.radio_corte)
+	var cortadas: int = h.cortar(sitio, herramienta.radio_corte)
 	_ok_si(cortadas > 0 and h.total_de_pie() == antes - cortadas,
 		"cortar sigue bajando el recuento de las que quedan de pie (%d -> %d)"
 		% [antes, h.total_de_pie()])
-	_ok_si(h.de_pie(sitio, h.radio_corte) == 0,
+	_ok_si(h.de_pie(sitio, herramienta.radio_corte) == 0,
 		"y ya no queda ninguna de pie en el sitio")
 
 	# La caja de cada cuadrado. Con un solo MultiMesh para todo el campo la caja
@@ -435,11 +435,14 @@ func _hierba_prueba() -> void:
 	_ok_si(hierba != null, "la hierba esta en la escena")
 	if hierba == null:
 		return
+	_ok_si(not _tiene_propiedad(hierba, "radio_corte")
+		and (maleza == null or not _tiene_propiedad(maleza, "radio_corte")),
+		"ningún campo de hierba define su propio radio de corte")
 	_ok_si(hierba.total() > 10000, "hay hierba de verdad (%d hojas)" % hierba.total())
 	_ok_si(hierba.total_de_pie() == hierba.total(), "al empezar esta toda de pie")
-	_ok_si(hierba.radio_corte > 0.1,
-		"el cabezal tiene un ancho de corte util (radio %.2f m, %.0f cm)"
-		% [hierba.radio_corte, hierba.radio_corte * 200.0])
+	_ok_si(herramienta.radio_corte > 0.0,
+		"el cabezal define el ancho de corte común (radio %.2f m, %.0f cm)"
+		% [herramienta.radio_corte, herramienta.radio_corte * 200.0])
 
 	# Cortar en una hoja sembrada, no en una coordenada fija que puede caer en uno
 	# de los claros del campo agrupado.
@@ -460,20 +463,18 @@ func _hierba_prueba() -> void:
 	# lleva medio campo: tendria que cortar muchisimas mas de las que hay ahi.
 	# Ojo: de_pie cuenta las que siguen en pie, asi que esto va antes del corte,
 	# o las hojas ya cortadas no contarian y la comparacion daria false.
-	var alrededor := hierba.de_pie(sitio, hierba.radio_corte * 1.6)
-	var tumbadas := hierba.cortar(sitio, hierba.radio_corte)
+	var alrededor := hierba.de_pie(sitio, herramienta.radio_corte * 1.6)
+	var tumbadas := hierba.cortar(sitio, herramienta.radio_corte)
 	print("   el cabezal en medio del parche tumba %d hojas" % tumbadas)
 	_ok_si(tumbadas > 0, "el cabezal corta hierba de verdad")
 	_ok_si(tumbadas <= alrededor,
 		"y solo las de debajo suyo, no de mas (%d cortadas, y en el disco amplio habia %d)"
 		% [tumbadas, alrededor])
-	_ok_si(hierba.de_pie(sitio, 0.3) == 0, "justo debajo ya no queda de pie")
+	_ok_si(hierba.de_pie(sitio, herramienta.radio_corte) == 0,
+		"dentro del radio del cabezal no queda hierba de pie")
 	# Y que el ancho de corte sea el que dice el cabezal, ni mas ni menos. Se
-	# mide contra el valor de la propia escena en vez de contra un numero
-	# escrito aqui a mano: `radio_corte` se ajusta en el Inspector cuando se
-	# cambia el cabezal, y una prueba que comparase con un literal fijo se
-	# romperia sola cada vez que se tocara, sin que el corte hubiera cambiado.
-	var ancho := hierba.radio_corte * 0.9
+	# mide contra el valor del cabezal y no contra un numero repetido en la prueba.
+	var ancho := herramienta.radio_corte * 0.9
 	var dentro_ancho := hierba.de_pie(sitio, ancho)
 	_ok_si(dentro_ancho == 0,
 		"dentro del ancho del cabezal no queda ni una hoja de pie (radio %.2f m)"
@@ -481,7 +482,7 @@ func _hierba_prueba() -> void:
 	_ok_si(hierba.de_pie(sitio, 1.0) < cerca, "y queda un hueco en el cesped")
 	_ok_si(hierba.de_pie(sitio_lejos, 1.0) == lejos,
 		"el cesped de al lado no se ha tocado")
-	_ok_si(hierba.cortar(sitio, hierba.radio_corte) == 0,
+	_ok_si(hierba.cortar(sitio, herramienta.radio_corte) == 0,
 		"volver a cortar lo mismo no cuenta dos veces")
 
 	_cuadrantes_de_la_hierba(hierba)
@@ -697,11 +698,10 @@ func _maleza_prueba() -> void:
 		and absf(altura_reproducida - alta_maleza) < 0.02,
 		"el cabezal puede alcanzar la altura muestreada de la maleza")
 
-	# Y se corta con el MISMO radio que el cesped. Si hiciera falta una segadora
-	# aparte, el juego estaria diciendo que la maquina no sirve para su trabajo.
-	_ok_si(maleza.radio_corte > 0.0 and cesped.radio_corte > 0.0,
-		"cada campo usa su radio de corte configurado (%.2f / %.2f m)"
-		% [cesped.radio_corte, maleza.radio_corte])
+	# Ambos tipos de vegetación se cortan con el mismo radio de la herramienta.
+	_ok_si(herramienta.radio_corte > 0.0,
+		"el cabezal proporciona el radio común para césped y maleza (%.2f m)"
+		% herramienta.radio_corte)
 
 	# Las matas. Con formacion alta la maleza sale a pedazos, no como una
 	# alfombra: si saliera repartida por igual seria otro cesped, y entonces no
@@ -902,7 +902,7 @@ func _regenerar_hierba() -> void:
 	_ok_si(hierba.total_de_pie() == hierba.total(),
 		"el campo regenerado empieza sin hojas cortadas")
 	var punto := hierba.posicion_hoja(hierba.total() / 2)
-	var cortadas := hierba.cortar(punto, hierba.radio_corte)
+	var cortadas := hierba.cortar(punto, herramienta.radio_corte)
 	_ok_si(cortadas > 0 and hierba.total_de_pie() == hierba.total() - cortadas,
 		"la rejilla de corte se reconstruye con la siembra")
 
@@ -1105,7 +1105,8 @@ func _resistencia_prueba() -> void:
 	if maleza == null:
 		return
 	var d_claro: float = maleza.densidad_bajo(Vector3(0.0, 0.0, 5000.0), 0.73)
-	var d_maleza: float = maleza.densidad_bajo(maleza.posicion_hoja(0), maleza.radio_corte)
+	var d_maleza: float = maleza.densidad_bajo(
+		maleza.posicion_hoja(0), herramienta.radio_corte)
 	print("   un claro %.1f por m2, dentro de la maleza %.1f por m2"
 		% [d_claro, d_maleza])
 	_ok_si(d_maleza > d_claro,
@@ -1116,7 +1117,7 @@ func _resistencia_prueba() -> void:
 	# justo lo que no se quiere.
 	_ok_si(maleza.coste_maleza() > 1.0,
 		"y ademas cada hoja suya cuesta mas (x%.2f)" % maleza.coste_maleza())
-	_ok_si(herramienta.anticipacion_resistencia > maleza.radio_corte * 0.4,
+	_ok_si(herramienta.anticipacion_resistencia > herramienta.radio_corte * 0.4,
 		"mira por delante del cabezal, no debajo (%.2f m de anticipacion)"
 		% herramienta.anticipacion_resistencia)
 
@@ -1618,6 +1619,13 @@ func _nodo_por_nombre(raiz: Node, nombre: String) -> Node:
 		if encontrado != null:
 			return encontrado
 	return null
+
+
+func _tiene_propiedad(objeto: Object, nombre: String) -> bool:
+	for entrada in objeto.get_property_list():
+		if str(entrada["name"]) == nombre:
+			return true
+	return false
 
 
 ## Busca el nodo del viento a lo ancho de toda la escena, sin cogerse al nodo

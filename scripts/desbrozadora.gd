@@ -39,6 +39,11 @@ signal telemetria_actualizada(rpm_sin_carga: float, rpm_bajo_carga: float,
 @export var giro: Node3D
 ## Empty en el centro del cabezal. Es donde habra que buscar la hierba.
 @export var corte: Node3D
+## Radio efectivo de corte del cabezal, en metros. Es un parámetro de la
+## herramienta, compartido por todos los campos; no es una medida propia de la
+## hierba ni el radio geométrico de la cuchilla. 1 m conserva el ancho de pasada
+## que ya dejaba un rastro visible en el césped. Se ajusta al cambiar cabezal.
+@export_range(0.05, 1.5, 0.01) var radio_corte := 1.0
 ## Sonido del motor.
 @export var motor_sonido: AudioStreamPlayer3D
 ## Revoluciones por minuto maxima.
@@ -538,9 +543,8 @@ func _mide_resistencia(delta: float) -> void:
 	# divide por el area del disco, asi que lo que sale son hojas por m2 y la
 	# cuenta de los dos tipos se puede sumar tal cual.
 	for c in _campos:
-		var r := maxf(c.radio_corte, 0.05)
-		var d := maxf(anticipacion_resistencia, r + 0.20)
-		coste += c.densidad_bajo(punto + _adelante() * d, r) * c.coste_maleza()
+		var d := maxf(anticipacion_resistencia, radio_corte + 0.20)
+		coste += c.densidad_bajo(punto + _adelante() * d, radio_corte) * c.coste_maleza()
 	_densidad_debajo = coste
 	_bruta = clampf(coste / maxf(densidad_corte, 1.0), 0.0, 1.0)
 

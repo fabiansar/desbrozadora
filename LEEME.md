@@ -132,15 +132,18 @@ Cada cuadrado lleva una caja ajustada y se puede apagar por distancia.
 
 Hay **dos campos**, cada uno con su semilla y su material:
 
-| campo | tipo | altura base | densidad | radio de corte | lado de cuadrante |
+| campo | tipo | altura base | densidad | radio de siembra | lado de cuadrante |
 |---|---|---|---|---|---|
-| `Hierba` | cesped | 69 cm | 60 por m2 | 1,00 m | 24 m |
-| `MalezaAlta` | maleza | 145 cm (hasta ~169 cm) | 18 por m2 | 0,73 m | 12 m |
+| `Hierba` | cesped | 69 cm | 60 por m2 | 66 m | 24 m |
+| `MalezaAlta` | maleza | 133 cm | 60 por m2 | 90 m | 12 m |
 
 La escena actual también agrupa el césped (`formacion = 0,70`); la maleza usa
-`formacion = 0,78` y `dureza = 1,8`. Ambos campos se siembran sobre el suelo plano
+`formacion = 0,24` y `dureza = 3,3`. Ambos campos se siembran sobre el suelo plano
 de pruebas, sin exclusiones por terreno o parcelas. El recuento depende de la
-semilla y la formación; los radios de corte son distintos.
+semilla y la formación. El radio de corte **no es propio de estos campos**:
+`Desbrozadora.radio_corte` vale 1,0 m y lo comparten césped y maleza. Es el
+radio efectivo de la pasada para que alcance suficientes hojas y deje un rastro
+visible, no el tamaño geométrico de la cuchilla.
 
 La suite comprueba el reparto, las cajas, el recorte por distancia y el corte de
 ambos campos. Los valores efectivos están en `scenes/main.tscn`; el detalle está

@@ -82,7 +82,6 @@ densidad = 60.0
 borde = 0.85
 lado_cuadrante = 24.0
 distancia_maxima = 80.0
-radio_corte = 1.0
 altura_tocon = 0.15
 
 [node name="MalezaAlta" parent="." unique_id=2099391743 instance=ExtResource("5_hierba")]
@@ -101,7 +100,6 @@ borde = 0.8500000000000001
 semilla = 24601
 lado_cuadrante = 12.0
 distancia_maxima = 16.0
-radio_corte = 0.7300000000000001
 altura_tocon = 0.06
 
 [node name="Viento" type="Node3D" parent="." unique_id=701693324]

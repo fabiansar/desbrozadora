@@ -57,9 +57,11 @@ Las capas de fisica (`scenes/jugador.tscn`, `main.tscn`):
   un angulo fijo. El jugador puede mirar hasta 55 grados hacia arriba. Antes el
   cabezal se salia **a proposito**; ahora se mantiene en pantalla para poder ver
   donde corta la hoja.
-- El corte se busca en un **disco horizontal en X/Z** bajo el cabezal, con radio
-  `radio_corte`. La altura del cabezal no manda: asi el corte depende de la
-  hoja, no de la maquina. Con `radio_corte = 0.40` el paso es de 80 cm.
+- El corte se busca en un **disco horizontal en X/Z** bajo el cabezal. El radio
+  único `Desbrozadora.radio_corte` pertenece a la herramienta: `Hierba` y
+  `MalezaAlta` usan el mismo valor. El radio efectivo es 1,0 m para que la pasada
+  alcance suficientes hojas y deje un rastro visible; no es la medida literal de
+  la cuchilla.
 - Se corta con el acelerador pulsado. Es lo que hace el `"cortando"` de
   `desbrozadora.gd`.
 
@@ -348,6 +350,7 @@ al nodo de herramienta y se actualizan por separado.
 | Export | Valor | Que hace |
 | --- | --- | --- |
 | `modelo`, `giro`, `corte`, `motor_sonido` | — | nodos que se buscan por nombre, se pueden mover de sitio |
+| `radio_corte` | 1.0 m | radio efectivo del cabezal; común a todos los campos de hierba |
 | `rpm_maximas` | 9000 | tope del motor |
 | `subida_rpm` | 0.85 s | de parado a tope |
 | `bajada_rpm` | 0.6 s | de tope a parado |
@@ -433,8 +436,8 @@ Tres detalles que aqui importan de verdad:
   cortar la propia maquina en ese mismo fotograma, asi que medir ahi daria cero
   siempre.
 - La distancia de mira no es un numero fijo: tiene que pasar del ancho del
-  cabezal (`max(anticipacion, radio_corte + 0.20)`), o el punto cae dentro de lo
-  recien cortado.
+  cabezal (`max(anticipacion, Desbrozadora.radio_corte + 0.20)`), o el punto cae
+  dentro de lo recién cortado.
 - **El suavizado va aparte de la medida.** Preguntar cada 0,15 s esta bien, pero
   si el filtro se aplicase solo en esos fotogramas, el motor tardaria varios
   segundos en llegar al frenao y en un cesped normal se quedaria a media carga
@@ -561,29 +564,33 @@ numeros: son dos campos, con su semilla, su material y su troceado.
 | Export | Por defecto del script | **`Hierba` (main.tscn)** | **`MalezaAlta` (main.tscn)** | Que hace |
 | --- | --- | --- | --- | --- |
 | `tipo` | 1 | 1 | **2** | 1 = cesped, 2 = maleza |
-| `altura` | 0.38 m | **0.69 m** | **1.45 m** | altura de referencia antes del borde |
-| `variacion_altura` | 0.45 | **1.0** | 0.34 | variación aleatoria de altura |
-| `grosor` | 0.045 m | **0.23 m** | 0.11 m | ancho de la hoja |
-| `variacion_grosor` | 0.35 | **1.0** | 0.7 | variación aleatoria del grosor |
-| `radio` | 34 m | **66 m** | **50 m** | radio del campo |
-| `densidad` | 30 | **60** | 18 | hojas por m2 sembradas |
-| `borde` | 0.72 | **0.85** | 0.9 | fracción del radio donde se aclara el borde |
-| `formacion` | 0 | **0.70** | **0.78** | agrupación en matas; 0 = uniforme |
-| `dureza` | 1.0 | 1.0 | **1.8** | cuanto cuesta cortarla |
+| `altura` | 0.38 m | **0.69 m** | **1.33 m** | altura de referencia antes del borde |
+| `variacion_altura` | 0.45 | **1.0** | **0.09** | variación aleatoria de altura |
+| `grosor` | 0.045 m | **0.23 m** | **0.26 m** | ancho de la hoja |
+| `variacion_grosor` | 0.35 | **1.0** | **0.38** | variación aleatoria del grosor |
+| `radio` | 34 m | **66 m** | **90 m** | radio del campo sembrado |
+| `densidad` | 30 | **60** | **60** | hojas por m2 sembradas |
+| `borde` | 0.72 | **0.85** | **0.85** | fracción del radio donde se aclara el borde |
+| `formacion` | 0 | **0.70** | **0.24** | agrupación en matas; 0 = uniforme |
+| `dureza` | 1.0 | 1.0 | **3.3** | cuanto cuesta cortarla |
 | `tono_pie` | verde | verde (heredado) | **(0.204, 0.157, 0.078)** | color de la base |
 | `tono_punta` | verde claro | verde (heredado) | **(0.478, 0.396, 0.188)** | color de la punta |
 | `semilla` | 90210 | 90210 | **24601** | con la misma sale siempre igual |
 | `lado_cuadrante` | 8 m | **24 m** | 12 m | lado de cada trozo de campo |
 | `distancia_maxima` | 42 m | **80 m** | 16 m | distancia máxima al centro del cuadrante |
-| `radio_corte` | 0.40 m | **1.00 m** | **0.73 m** | radio del área de corte |
 | `dejar_tocon` | true | true | true | cortar deja tocón |
-| `altura_tocon` | 0.08 m | **0.15 m** | 0.30 m | altura del tocón |
+| `altura_tocon` | 0.08 m | **0.15 m** | **0.06 m** | altura del tocón |
 
-El mapa de viento compartido toma el radio mayor, 66 m, y cubre 132 m de lado.
-Los dos campos salen en matas: `formacion = 0.70` para el césped y `0.78` para
-la maleza. La fórmula del generador estima, respectivamente, alrededor del 40,5 %
-y 33,7 % de superficie sembrada; los claros y los bordes excluidos hacen que el
-recuento final varíe con la semilla. La maleza mantiene además una dureza de 1,8.
+El mapa de viento compartido toma el radio mayor, 90 m, y cubre 180 m de lado.
+Los campos tienen formaciones diferentes (`0.70` para césped y `0.24` para
+maleza); la semilla determina el reparto exacto.
+
+**El radio de corte no pertenece a estos campos.** `Desbrozadora.radio_corte`
+vale 1,0 m y ambos campos consultan ese mismo radio para cortar y medir la
+resistencia. El primer intento de usar el radio geométrico de la cuchilla (0,13 m)
+producía una pasada demasiado estrecha para que el corte se viera; por eso este
+es el radio efectivo de simulación. Si cambia el cabezal se ajusta una sola
+propiedad en la herramienta.
 
 `dureza` va aparte de la densidad a proposito. La densidad es "cuantas hojas hay
 debajo"; la dureza es "cuanto cuesta cada una". Con las dos juntas se puede
@@ -599,15 +606,14 @@ lo que tiene debajo.
 
 > **Ojo con estas columnas: son valores distintos y estan en sitios distintos.**
 > La primera columna es el `@export` de `scripts/hierba.gd`; las otras dos son
-> los valores efectivos de `scenes/main.tscn`. Los recuentos publicados en la
-> revisión anterior corresponden al mundo con exclusiones de aldea y ya no son
-> la cifra esperada. En la escena plana actual la siembra no excluye parcelas;
-> consulta el resultado en ejecución con `total()` por cada campo.
+> los valores efectivos de `scenes/main.tscn`. En la última carga headless del
+> plano se sembraron 268.115 hojas de `Hierba` y 31.162 de `MalezaAlta`; el
+> recuento cambia al modificar los campos y se consulta con `total()`.
 >
 > Al cambiar estos numeros, dos cosas se quedan viejas solas: los comentarios que
 > dan recuento de hojas, y las pruebas que comparen con un literal. Por eso la
-> prueba del ancho de corte mide contra `hierba.radio_corte` en vez de contra
-> un 0,40 escrito a mano, y `medir_densidad.gd` lee la densidad de la escena al
+> prueba del ancho de corte lee `Desbrozadora.radio_corte` en vez de duplicar el
+> valor, y `medir_densidad.gd` lee la densidad de la escena al
 > arrancar en vez de tenerla en su lista. Esta tabla refleja los exports de la
 > escena actual, no una medición de hojas ni de rendimiento.
 
