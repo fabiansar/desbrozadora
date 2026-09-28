@@ -4,6 +4,84 @@ Lo que se ha tocado y por que. Para el detalle de como esta cada cosa por dentro
 [DOCUMENTACION.md](DOCUMENTACION.md); para el estado y los problemas que quedan,
 [REVISION.md](REVISION.md).
 
+## Inventario de nueve herramientas y la hoz — 2026-09-28
+
+- La desbrozadora deja de ser un nodo fijo de la escena y pasa a ser un objeto
+  del inventario, equipado en el hueco 1 al abrir el juego. El hueco 2 lleva la
+  **hoz**, que se ha generado en Blender con `tools/crear_hoz_mesh.py` (114
+  triángulos, 45 cm, mango de madera, virola y hoja en media luna con el filo
+  por dentro). Corta cesped y maleza, y no entra en la zarza.
+- La rueda del raton mueve la mano por **nueve huecos**, y la eleccion se dibuja
+  como una rueda de nueve sectores en la esquina superior derecha. Un hueco
+  vacio son las manos vacias: los brazos se quedan al lado del cuerpo, en una
+  pose, y no desaparecen.
+- `G` suelta lo de la mano: se desprende y cae. `E` recoge lo que se esta
+  mirando, va al primer hueco libre y ademas se equipa. Con el inventario lleno
+  el aviso es otro, porque si no el jugador ve "recoger", pulsa y no pasa nada.
+- `Herramienta` (Resource) describe lo que el inventario necesita saber sin
+  instanciarla. Los nodos que van en la mano siguen siendo los de antes: la
+  desbrozadora no se ha tocado. Lo unico que se ha unificado es el contrato con
+  la vegetacion (`tipo_vegetacion`, `cortar_por_banda`, y las cuatro preguntas
+  que hacen las dos herramientas), que antes estaba filtrado por
+  `is Desbrozadora` y hacia que la hoz no cortase nada.
+- Pruebas: `tools/test_inventario.gd` recorre la secuencia entera pedida (soltar
+  y recoger la desbrozadora, cambiar a la hoz con la rueda, soltarla y recogerla,
+  y soltar las dos y recogerlas **al reves**) y comprueba que la herramienta
+  vuelve al hueco que le toca y no al primero. También que solo hay una
+  herramienta montada. Suite focalizada en OK; el recorrido integrado sigue en
+  **71/71** y los tres tests de zarza en OK.
+- Cuatro bugs que salieron por el camino, todos del mismo tipo: lo que se
+  rompia de verdad se escondia en un sitio improbable.
+  - `seleccionar` cambiaba el numero de hueco **antes** de equipar, con lo que
+    la herramienta anterior nunca se guardaba: se quedaba montada y en el grupo
+    a la vez que la nueva, y las dos cortaban.
+  - Un `CanvasLayer` no hereda la visibilidad de su padre, así que el panel de
+    la desbrozadora se quedaba encima con la hoz en la mano.
+  - El pivote de las manos cuelga de "Caderas", y ese nodo esta en el origen del
+    jugador, **a los pies**, no a la cintura. Con offsets de decimetros la hoz y
+    las manos sueltas quedaban enterradas en la maleza.
+  - Dos herramientas soltadas en el mismo punto aparecen encajadas y la fisica
+    las manda cada una a un lado. Ahora se sueltan medio palmo hacia un lado.
+
+## Zarza con raíz, enganches e inundación — 2026-09-28
+
+- La zarza deja de ser un mapa de alturas ("cuanto queda en pie aqui") y pasa a
+  ser una maraña: cada celda guarda su altura, si hay **corona** (raíz, el
+  anclaje al suelo) y a qué vecinos se agarra. Tras cada corte, una **inundación
+  desde las coronas vivas** marca qué se sostiene qué, y todo lo que no quede
+  marcado cae a montones. La regla sale sola: cortar la base de una mata tumba lo
+  que solo se sostenía con ella, y lo de arriba sigue en pie si tiene otro
+  enganche con raíz. Mientras quede una raíz, la zarza vuelve.
+- El cabezal secciona todo lo que asoma por encima de su altura. Antes una
+  pasada a ras de suelo **no cortaba nada** en celdas altas, porque la banda de
+  corte impedía que llegara abajo.
+- `densidad` aclara la hoja, no el tallo. Antes abría huecos estructurales y cada
+  hueco partía la maraña: se perdía un tercio de la zarza sin haberla tocado.
+- Se corrigió el mismo bug de `instance_count` que había en la zarza, también en
+  `Montes`: subir el contador de uno en uno dentro del bucle rehace el buffer del
+  MultiMesh y borra lo anterior, con lo que de toda la pila de escombro se
+  quedaba en pie una sola caja.
+- `scenes/pruebas_zarza.tscn` estaba **rota**: pedía un `overlay_prueba_zarza.gd`
+  que no existía. Se ha escrito y se han montado seis matas que aíslan cada
+  regla, con las raíces marcadas en pantalla (caja roja) y los enganches
+  (raya amarilla).
+- Pruebas: `tools/test_zarza_conexion.gd` (nueva) demuestra la regla de la
+  conexión con dos raíces; `test_zarza_capas` y `test_zarza_capas_recorrido`
+  actualizados al modelo nuevo. Las tres en OK.
+
+## La zarza no se veía en pantalla — 2026-09-28
+
+- La zarza se sembraba bien y **no pintaba nada**: `_dibujar` subía
+  `instance_count` de uno en uno antes de escribir cada hoja, y cada cambio
+  rehace el buffer del MultiMesh. Sobrevivía una sola instancia, la última.
+  Medido con `tools/medir_zarza.gd`: de 2 píxeles a 52.320 en el prado vacío.
+- La zarza además salía **plana**: `INSTANCE_CUSTOM.x` (cuánto le queda de
+  altura) se mandaba como `alto / altura_maxima` en vez de `alto / su altura de
+  origen`, con lo que el shader encogía cada hoja por dos.
+- Aun dibujando, desde el punto de aparición solo se veía el 4 % de la foto: la
+  maleza alta de 0,76 m tapa el 83 % del encuadre. La mata cercana se subió a
+  2,4 m y se apartó a 7 m para que se lea por encima.
+
 Última suite completa automatizada registrada: **202 correctas, 0 fallos y 1
 aviso esperado** en headless; la prueba integrada de movimiento registró
 **48/48**. El 28-09-2026 el usuario probó manualmente la versión actual en Godot

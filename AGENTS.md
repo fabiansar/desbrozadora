@@ -1,6 +1,15 @@
 ---
 # REGLAS DE EJECUCIÓN Y MODOS DE TRABAJO DEL PROYECTO
 
+## RUTA DEL PROYECTO
+
+`/home/n41b4f/Documentos/desarrollos/desbrozadora`
+
+Ese es el directorio real del proyecto. `desarrollos/desbrozadora` va anidado dentro
+de `Documentos`, y el nombre se repite: no vale `Documentos/desbrozadora`. Todas las
+rutas de este archivo son relativas a la raíz del proyecto, y el proyecto se abre
+siempre con `--path .` desde el directorio de arriba.
+
 Proyecto desarrollado en Godot 4.7 (GDScript + Shaders) y pipeline con Blender.
 
 ## MODOS DE OPERACIÓN DE AGENTE
