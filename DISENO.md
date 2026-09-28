@@ -169,15 +169,18 @@ de nada si la maquina no nota que hay algo delante ni si llega a cortarlo.
 - [x] **El morro sube al mirar arriba.** Sin esto, la maleza alta era un muro:
       el cabezal no pasaba de 0,35 m y no habia forma de cortar nada por encima
       de la rodilla.
-- [ ] **Discos y hilo.** Mata, hilo de nylon, cuchilla. Cada uno para un tipo de
-      maleza, con su desgaste y sus limites.
-- [ ] **Consumo de combustible.** El acelerador ya controla las RPM y el sonido
-      del motor cambia con las vueltas; falta que el uso consuma combustible.
-- [ ] **Desgaste y afilado.** La cuchilla pierde filo y hay que revisarla.
+- [x] **Discos y hilo.** Se cambian en caliente con `Q` y el motor parado. Cada
+      uno declara para que tipos de vegetacion vale y cuanto radio de pasada
+      tiene, asi que cambiar de cabezal cambia de verdad como se trabaja. El
+      desgaste y los limites por tipo todavia no.
+- [x] **Consumo de combustible.** El motor lleva deposito, se consume segun la
+      demanda y sube con la carga, y el panel de la herramienta lo enseña.
+- [ ] **Desgaste y afilado.** La cuchilla pierde filo con lo que corta y hay que
+      revisarla, pero no hay forma de recuperarlo todavia.
 
-> **Lo que queda de esta fase y por que.** El desgaste, el combustible y los
-> discos siguen pendientes: son sistemas que se notan mucho cuando están a
-> medias, y sin discos no hay filo que desgastar. Por ahora el suelo de pruebas
+> **Lo que queda de esta fase y por que.** El afilado sigue pendiente: es un
+> sistema que se nota mucho cuando esta a medias, y ahora mismo el desgaste se
+> acumula y no hay manera de arreglarlo. Por ahora el suelo de pruebas
 > es plano; la futura pendiente del valle aún no influye en la resistencia.
 
 ### Entorno actual y mapa definitivo (por hacer)
@@ -213,21 +216,52 @@ de nada si la maquina no nota que hay algo delante ni si llega a cortarlo.
 - [x] Dejar preparado un ajuste del FOV horizontal en el Inspector, de −20° a
       +20°; el script parte de cero y la escena principal lo calibra en +20°.
 
-### Fase 3 - Conduccion
+### Fase 3 - La zarza y las manos  _(hecho en v0.1.0)_
+
+Aqui el juego deja de ser "picar hierba" y pasa a ser **un trabajo con dos partes
+distintas**: abrirse paso, y quitar la cosa de raiz. La diferencia entre las dos
+es la que hace que haya que bajar el morro.
+
+- [x] **La zarza como maraña, no como columna de altura.** Cada celda guarda si
+      hay **corona** (raiz) y a que vecinos se agarra, y una inundacion desde las
+      coronas decide que se sostiene que. De ahi sale la regla central sin
+      escribirla: **cortar la base de una mata tumba lo que solo se sostenia con
+      ella, y lo de arriba sigue en pie si tiene otro enganche con corona**.
+- [x] **La raiz no muere.** Mientras quede una corona, la zarza vuelve. Por eso
+      una pasada por la copa abre paso y no arregla nada: es el trabajo que no
+      vale, y el juego lo ensena sin decir nada.
+- [x] **El enredo se paga.** Con `enredio` alto la copa aguanta los cortes de uno
+      en uno y hay que dar varias pasadas. Un claro se tumba de una.
+- [x] **Los montones de escombro se quedan y hay que apartarlos.** Lo que cae no
+      desaparece: forma una pila que tapa lo de debajo.
+- [x] **Inventario de nueve herramientas, con rueda y no con una tira de
+      cuadrados.** La desbrozadora es un objeto, no un nodo de la escena: se
+      suelta con `G`, se recoge con `E` mirando, y un hueco vacio son las manos
+      vacias. La rueda de la pantalla dice siempre cual llevas y cual tienes.
+- [x] **Una segunda herramienta que se comporta de otra manera.** La hoz, a mano,
+      rapida en la maleza y sin gastar, pero que no entra en la zarza. Existe
+      justo para que la desbrozadora deje de ser la unica respuesta.
+- [ ] **Que la zarza vuelva a brotar.** La regresion se decidio aplazar; sin ella,
+      tumbar la raiz es el final del asunto y no hay nada que volver a hacer.
+- [ ] **Que los montones tengan que reducirse a mano.** La razon de verdad para
+      quitarlos es que una cana cortada en el suelo echa raquis, y esa razon
+      todavia no esta en el juego.
+
+### Fase 4 - Conduccion
 
 - [ ] Conduccion basica de la furgoneta / pickup.
 - [ ] Transporte de herramientas: el espacio de la desbrozadora en la caja.
 - [ ] GPS y navegacion entre aldeas.
 - [ ] Consumo real de combustible en el trayecto.
 
-### Fase 4 - Encargos
+### Fase 5 - Encargos
 
 - [ ] Telefono y bandeja de encargos.
 - [ ] Mapas de fincas con **porcentaje de limpieza requerido** para cobrar.
 - [ ] Cancelar un encargo a medias, y lo que cuesta.
 - [ ] Clientes: aldeas, fincas y facturas que simulen a quien paga.
 
-### Fase 5 - Economia rural
+### Fase 6 - Economia rural
 
 - [ ] Gastos recurrentes: combustible, mantenimiento, averias.
 - [ ] Taller: reparar, cambiar disco, afilar.

@@ -82,11 +82,25 @@ Lo que se ha tocado y por que. Para el detalle de como esta cada cosa por dentro
   maleza alta de 0,76 m tapa el 83 % del encuadre. La mata cercana se subió a
   2,4 m y se apartó a 7 m para que se lea por encima.
 
-Última suite completa automatizada registrada: **202 correctas, 0 fallos y 1
-aviso esperado** en headless; la prueba integrada de movimiento registró
-**48/48**. El 28-09-2026 el usuario probó manualmente la versión actual en Godot
-y confirmó que funciona correctamente. No se repitió la suite completa después
-de esa prueba.
+## Estado de las pruebas en `v0.1.0`
+
+| Prueba | Resultado |
+| --- | --- |
+| `tools/test_juego.gd` (suite completa) | **195 correctas, 6 fallos, 1 aviso** |
+| `tools/test_movimiento_integrado.gd` | 71/71 |
+| `tools/test_inventario.gd` | OK |
+| `tools/test_zarza_conexion.gd` | OK |
+| `tools/test_zarza_capas.gd` | OK |
+| `tools/test_zarza_capas_recorrido.gd` | OK |
+
+Los seis fallos de la suite son de una sola causa y son **trabajo pendiente**: el
+césped bajó de 0,69 a 0,49 m y la maleza de 1,33 a 0,76 m, y las comprobaciones
+siguen esperando las alturas viejas. Comprobado con `git stash`: en el commit
+anterior ya fallaban cinco.
+
+La última ejecución completa antes de estos cambios dio **202 correctas / 0
+fallos**; el 28-09-2026 se probó a mano en Godot y el usuario confirmó que
+funcionaba.
 
 ## Base estable confirmada — 2026-09-28
 

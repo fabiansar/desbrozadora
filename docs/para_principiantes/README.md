@@ -6,13 +6,23 @@ avanzar incluso sin un asistente de IA.
 
 ## Punto de partida estable
 
-La versión base confirmada manualmente por el usuario el 28-09-2026 está fijada
-en el commit **`8da06a626c01250e0dda99fa3df17095e6e7dac0`**
-(`Establece base funcional para continuar`).
-Ese es el punto al que volver si un experimento rompe el proyecto. La guía y los
-cambios posteriores de documentación se guardan en commits posteriores.
+Hay dos puntos de retorno, y conviene saber los dos:
 
-Para localizarlo en la terminal:
+| Punto | Commit | Que es |
+| --- | --- | --- |
+| Base probada a mano | `8da06a6` | lo ultimo que el usuario comprobo en el editor, sin asistente |
+| Version `v0.1.0` | `7975edd` | lo ultimo que se ha subido: zarza con raiz e inventario de nueve herramientas |
+
+**Para volver atras sin riesgo, usa `v0.1.0`**: es la etiqueta de la version, y se
+va a el con un comando, sin escribir el hash:
+
+```bash
+git switch --detach v0.1.0
+git switch main        # para volver al trabajo del dia
+```
+
+La base de `8da06a6` sigue ahi para cuando quieras ver el proyecto sin
+inventario ni zarza, que es mas sencillo de leer. Se localiza con:
 
 ```bash
 git log --oneline --all --grep="Establece base funcional para continuar"

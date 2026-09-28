@@ -3,28 +3,83 @@
 Analisis del estado del proyecto tal y como esta ahora, con lo que esta bien,
 lo que esta raro y lo que falta. Para decidir el siguiente paso.
 
-Ultima revision: base jugable de desbroce sobre el suelo plano inicial. El terreno
-procedural y el layout de la aldea se retiraron para preparar un mapa manual; el
-plugin para esculpirlo desde el editor aún no está elegido. La última suite
-ejecutada antes de los cambios de FOV e interacción dio **202 correctas / 0
-fallos**, con un aviso esperado por la imagen. La medición Vulkan del mapa
-anterior registró **52,4 %** de píxeles cambiados al ocultar el césped y **54,7 %**
-verdes; esas cifras no corresponden a la escena plana actual.
+Ultima revision: **version `v0.1.0`**, con el inventario de nueve herramientas y
+la zarza con raiz. El terreno procedural y el layout de la aldea siguen
+retirados mientras se prepara un mapa manual; el plugin para esculpirlo desde el
+editor aún no está elegido.
 
-La interacción experimental para coger/soltar la desbrozadora con `E` y `Q` se
-retiró; la herramienta vuelve a permanecer anclada al arnés.
+Estado de las pruebas en `v0.1.0`:
 
-El radio de corte reside ahora en `Desbrozadora.radio_corte` (1,0 m efectivo);
-los dos campos lo comparten. El primer intento de 0,13 m, igual al radio físico
-aproximado de la cuchilla, dejaba una pasada demasiado estrecha para verse.
+| Prueba | Resultado |
+| --- | --- |
+| `tools/test_juego.gd` (suite completa) | **195 correctas, 6 fallos, 1 aviso** |
+| `tools/test_movimiento_integrado.gd` | 71/71 |
+| `tools/test_inventario.gd` | OK |
+| `tools/test_zarza_conexion.gd` | OK |
+| `tools/test_zarza_capas.gd` | OK |
+| `tools/test_zarza_capas_recorrido.gd` | OK |
 
-El parseo del editor y el arranque de la escena durante 60 fotogramas pasaron sin
-errores; el recorrido integrado de movimiento y corte dio **55/55**. La suite
-completa queda pendiente de ejecutarse.
+**Los seis fallos de la suite son trabajo pendiente y son de una sola causa**: la
+sesion anterior bajo el cesped de 0,69 a 0,49 m y la maleza de 1,33 a 0,76 m para
+que la maleza no tapara el encuadre, y **las comprobaciones de la suite siguen
+esperando las alturas viejas**. Son las de "la maleza es bastante mas alta que el
+cesped", "le pasa la altura del operario", "viene en matas" y "hay huecos de
+verdad entre mata y mata", mas dos de apoyo del cabezal y de anticipacion que ya
+fallaban antes. Comprobado con `git stash`: en `HEAD` ya fallan cinco. La
+solucion es actualizar las comprobaciones a los valores actuales, no volver a
+subir la maleza: la altura esta bien, lo que se quedaron viejo son los numeros.
+
+Medicion visual de `v0.1.0` (herramienta `tools/medir_zarza.gd`): antes del
+arreglo, la zarza del prado cambiaba **2 pixeles** al ocultarla, o sea que se
+sembraba y no se dibujaba; despues, **52.320** (5,68 % de la foto). Desde los
+ojos del jugador, con todo encendido, la zarza se ve en el 4,08 % de la foto: la
+maleza alta tapa el 82,8 % del encuadre y por eso hay que buscar claros para
+trabajar.
 
 Lo que se puede jugar hoy esta en [LEEME.md](LEEME.md), el detalle por archivo en
 [DOCUMENTACION.md](DOCUMENTACION.md) y la hoja de ruta en
 [DISENO.md](DISENO.md).
+
+---
+
+## 0. Lo nuevo desde la revision anterior
+
+### El inventario y la segunda herramienta
+
+Nueve huecos, la rueda del raton para elegir y una rueda en pantalla que dice
+cual llevas. La desbrozadora paso de ser un nodo fijo de la escena a ser el objeto
+del hueco 1, y la **hoz** (generada en Blender con `tools/crear_hoz_mesh.py`) es
+el hueco 2. `G` suelta y `E` recoge.
+
+Lo que hay que tener presente al tocarlo:
+
+- **La herramienta guardada no se destruye.** Se queda viva en un escondite con
+  el proceso apagado, y por eso conserva la gasolina y el desgaste. Si al soltar
+  se destruyera y al recoger se creara de cero, tirar la maquina al suelo seria
+  la manera de resetearle el deposito.
+- **El grupo `herramienta` solo lo tiene la que esta en la mano.** Cesped, zarza
+  y montones lo consultan en cada fotograma. Con la referencia guardada, al
+  cambiar de herramienta en el inventario seguian cortando con la anterior.
+- **Un `CanvasLayer` no hereda la visibilidad de su padre.** Los paneles de cada
+  herramienta (el de la desbrozadora con sus revoluciones) hay que apagarlos a
+  mano al guardar la herramienta.
+- **El pivote de las manos cuelga de `Caderas`, y ese nodo esta en el origen del
+  jugador, a los pies, no a la cadera.** Cualquier altura de una herramienta
+  equipped ahi va desde el suelo. Con offsets de decimetros, la hoz y las manos
+  sueltas quedaban enterradas en la maleza.
+
+### La zarza como maraña
+
+Dejo de ser un mapa de alturas para ser una maraña con raiz, enganches e
+inundacion. La mecanica esta explicada en [LEEME.md](LEEME.md) y en
+[DOCUMENTACION.md](DOCUMENTACION.md). Dos cosas que siguen pendientes y que se
+decidieron aplazar:
+
+1. **La zarza no vuelve a brotar.** Se decidio que la regresion se deja para mas
+   adelante, asi que ahora mismo tumbar la raiz es el final del asunto.
+2. **Los montones no se pueden quitar de raiz.** Se apartan pasando la maquina,
+   pero no hay ninguna razon de juego todavia que obligue a hacerlo. La razon de
+   verdad (una cana cortada en el suelo echa raquis) es la que le haria falta.
 
 ---
 
@@ -337,9 +392,10 @@ absurdo. Ahora la ganancia es de 0,07 y hay un tope de 8 grados.
 ### 4.5 Los valores de la hierba estan en dos sitios, y ademas son dos campos
 
 Los `@export` de `scripts/hierba.gd` son valores por defecto; los que se juegan
-son los de las dos instancias de `scenes/main.tscn`. Ahora `Hierba` está a
-0,69 m de altura de referencia, 60 hojas/m² y radio 66 m; `MalezaAlta`, a 1,45 m,
-18 hojas/m² y radio 50 m. Ambas usan formación en matas, radios de corte
+son los de las dos instancias de `scenes/main.tscn`. Ahora `Hierba` esta a
+0,49 m de altura de referencia y `MalezaAlta` a 0,76 m, las dos con 60 hojas/m2 y
+radio de siembra 90 m. Las dos bajaron respecto a la version anterior (0,69 y
+1,33 m) porque la maleza tapaba la mitad del encuadre. Ambas usan formación en matas, radios de corte
 diferentes y tamaños de cuadrante diferentes. La tabla exacta está en
 `DOCUMENTACION.md`; hay que mantenerla al cambiar `main.tscn`.
 
@@ -405,10 +461,13 @@ no dibuje nada.
 Configuración efectiva, leída de `main.tscn` (los defaults de
 `scripts/hierba.gd` son distintos):
 
-| Campo | Altura | Densidad | Formación | Radio de siembra | Cuadrante | Recorte |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `Hierba` | 0,69 m | 60/m² | 0,70 | 66 m | 24 m | 80 m |
-| `MalezaAlta` | 1,33 m | 60/m² | 0,24 | 90 m | 12 m | 16 m |
+| Campo | Altura | Densidad | Formación | Radio de siembra | Cuadrante | Recorte | Tocon |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `Hierba` | 0,49 m | 60/m² | 0,70 | 90 m | 24 m | 80 m | 0,15 m |
+| `MalezaAlta` | 0,76 m | 60/m² | 0,24 | 90 m | 12 m | 16 m | 0,06 m |
+
+Los dos campos llevan `densidad` 60/m² y formacion de matas. La maleza tiene
+dureza 3,3 (el cesped 1,0) y es la que frena de verdad a la maquina.
 
 La maleza tiene dureza 3,3. Ambos campos se siembran sobre el plano sin
 exclusiones por terreno o aldea. El radio efectivo de corte común es 1,0 m y lo
@@ -430,13 +489,23 @@ Estado del camino inmediato:
    midiendo la duración real de los desplazamientos.
 3. **Colocar manualmente la aldea y sus assets.** El layout procedural se retiró;
    el flujo futuro será construir escenas y ubicarlas desde el editor.
-4. **Revisar maleza y carga del motor.** La interfaz futura debe mostrar telemetría
-   desacoplada (`telemetria_actualizada`), incluida la RPM bajo carga.
-5. **Integrar la furgoneta y conducción básica.** Vehículo, controles y navegación
+4. **Actualizar la suite a las alturas actuales.** Los seis fallos son
+   comprobaciones que siguen esperando la maleza de 1,33 m. Es lo primero, porque
+   mientras la suite de en rojo no se puede usar de puerta.
+5. **Darle una version que se pueda instalar.** Falta `export_presets.cfg` y una
+   linea con el numero en `project.godot`, para que el ejecutable diga que es.
+   Hasta entonces `v0.1.0` es una etiqueta, no un programa que alguien se baje.
+6. **Integrar la furgoneta y conducción básica.** Vehículo, controles y navegación
    siguen pendientes.
-6. **Continuar el bucle de trabajo:** recoger hierba cortada, añadir sonido de
-   corte y conectar la pendiente del terreno con la resistencia de la máquina.
-7. **Después:** discos intercambiables, combustible, desgaste/afilado y encargos.
+7. **Continuar el bucle de trabajo:** que la zarza vuelva a brotar de la raiz
+   (la regresion que se decidio aplazar), obligar a retirar los montones de las
+   canas, conectar la pendiente del terreno con la resistencia y afilar el filo.
+8. **Después:** encargos, NPCs y la aldea.
+
+Lo que ya no esta pendiente, para que no se repita: la telemetria
+desacoplada esta en `interfaz_herramienta.gd` con la senal
+`telemetria_actualizada`, el sonido de corte esta, y los cabezales ya se
+cambian con `Q` en caliente con el motor parado.
 
 Ojo con una cosa al tocar la hierba: la suite **con ventana** necesita el juego
 cerrado, y sin ventana (headless) no se ve nada de lo visual. Con la GPU por

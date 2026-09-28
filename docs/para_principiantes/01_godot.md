@@ -45,6 +45,11 @@ propiedades. La pestaña **Script** abre el código asociado. El panel inferior
 | Movimiento, ratón y agachado | `scripts/jugador.gd` |
 | Cámara GoPro y encuadre | `scripts/camara_gopro.gd` |
 | Barrido, inclinación, motor y corte | `scripts/desbrozadora.gd` |
+| La hoja, el motor y los depósitos | `scripts/motor_desbrozadora.gd` y `scripts/cabezal_desbrozadora.gd` |
+| Los huecos, la rueda y soltar/coger | `scripts/inventario.gd` y `scripts/rueda_inventario.gd` |
+| La segunda herramienta | `scripts/hoz.gd` y `scenes/hoz.tscn` |
+| La zarza: raíz, enganches e inundación | `scripts/zarza.gd` |
+| Los montones de escombro y los trozos | `scripts/montes.gd` y `scripts/restos.gd` |
 | Siembra y corte de hierba | `scripts/hierba.gd` |
 | Viento que mueve las hojas | `scripts/viento.gd` y `shaders/hierba.gdshader` |
 | Suelo plano temporal | `scenes/main.tscn`, nodo `Suelo` |
@@ -57,12 +62,27 @@ scenes/main.tscn
   ├── Suelo     → plano y colisión para pruebas
   ├── Bosque    → scripts/bosque.gd; árboles sobre Y=0
   ├── Hierba    → scripts/hierba.gd
+  ├── MalezaAlta→ scripts/hierba.gd, el mismo script con otro tipo
+  ├── Zarzas    → scenes/zarza.tscn, cinco matas
   ├── Viento    → scripts/viento.gd
   └── Player    → scenes/jugador.tscn
-                   ├── Cámara → scripts/camara_gopro.gd
-                   └── Herramienta → scenes/desbrozadora.tscn
-                                      └── scripts/desbrozadora.gd
+                   ├── Cámara     → scripts/camara_gopro.gd
+                   ├── Brazos     → scripts/brazos_primera_persona.gd
+                   ├── Inventario → scripts/inventario.gd
+                   │                └── crea la herramienta del hueco 1
+                   └── Caderas
+                        └── PivoteDesbrozadora
+                             └── Desbrozadora → scenes/desbrozadora.tscn
+                                                └── scripts/desbrozadora.gd
 ```
+
+Dos cosas que sorprenden de este árbol y conviene saber antes de tocar nada:
+
+- **La desbrozadora no está en la escena.** La crea `Inventario` al equipar el
+  hueco 1 y la cuelga del pivote. Si buscas la herramienta en `main.tscn` o en
+  `jugador.tscn` y no la encuentras, está en el inventario.
+- **El nodo `Caderas` está a los pies del jugador, no en la cadera.** El
+  nombre engaña, y por eso cualquier altura que pongas ahí va desde el suelo.
 
 ## 4. El primer cambio: ajustar algo sin programar
 

@@ -110,7 +110,25 @@ Después elige una comprobación apropiada:
 | Sintaxis o escena | Abrir el proyecto en el editor y mirar Output; parseo headless |
 | Movimiento/cámara/herramienta | Recorrido manual y `test_movimiento_integrado.gd` |
 | Corte, hierba, viento o suelo plano | Prueba manual; suite `test_juego.gd` si quieres comprobar todo |
+| Inventario, rueda, soltar o recoger | `test_inventario.gd` |
+| Raíz de zarza, enganches o caída | `test_zarza_conexion.gd` |
 | Modelo Blender | Abrir el GLB con ventana y luego ejecutar el juego |
+
+**Las pruebas focalizadas van mucho más rápido que la suite** y cubren una sola
+cosa, así que para un cambio concreto usa esa antes que `test_juego.gd`. Se
+ejecutan igual, con `--headless`:
+
+```bash
+flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+  --headless --path . --script tools/test_inventario.gd
+
+flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+  --headless --path . --script tools/test_zarza_conexion.gd
+```
+
+Un aviso sobre la suite completa: **ahora mismo da seis fallos** y no son tu
+culpa. La maleza se bajó de 1,33 a 0,76 m para que no tapara el encuadre, y las
+comprobaciones de la suite siguen esperando la altura vieja. Si los ves, son esos.
 
 Parseo rápido, que carga el proyecto en modo editor sin interfaz:
 
@@ -125,6 +143,17 @@ Prueba integrada de movimiento:
 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --headless --path . --script res://tools/test_movimiento_integrado.gd
 ```
+
+Como esto ya tiene nombre de version, cada vez que se termina algo que se pueda
+jugar se marca el commit con una etiqueta, y esa etiqueta es la version:
+
+```bash
+git tag -a v0.1.0 -m "Primera version jugable"
+git push origin v0.1.0
+```
+
+La regla que se sigue: **minor** (`v0.2.0`) para una cosa grande jugable, y
+**patch** (`v0.1.1`) para arreglar cosas.
 
 Suite completa:
 

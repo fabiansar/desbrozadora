@@ -38,6 +38,13 @@ los brazos dinámicos siguen los agarres de la máquina. La cámara va adelantad
 la cara y parte mirando la zona de trabajo para producir una lectura GoPro del
 cuerpo y la herramienta.
 
+La segunda herramienta, la **hoz** (`models/hoz.glb`, generada con
+`tools/crear_hoz_mesh.py`), sigue la misma regla: madera mate en el mango, acero
+en la virola y en la hoja, silueta de media luna con el filo por dentro y la punta
+por debajo de la mano, que es lo que la hace reconocible como una hoz y no como
+un cuchillo curvo. Va en 114 triangulos, que es lo que se ve en primera persona
+sin mirar de cerca.
+
 Esta es una primera calibración, no el resultado visual final. Hay que revisar en
 el juego la proporción que ocupa el torso, la separación/lectura de las piernas y
 la relación entre manos, máquina y campo durante paneo, agachado y carrera. El

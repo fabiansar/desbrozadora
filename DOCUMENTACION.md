@@ -18,17 +18,20 @@ main.tscn (Mundo)
 ├── Relleno        DirectionalLight3D, luz de relleno sin sombras
 ├── Bosque         arboles de prueba sobre el plano (colision capa 2)
 ├── Hierba         césped agrupado, 60 hojas/m², cuadrantes de 24 m
-├── MalezaAlta     maleza en matas, 18 hojas/m², cuadrantes de 12 m
+├── MalezaAlta     maleza en matas, 60 hojas/m², cuadrantes de 12 m
+├── Zarzas         cinco matas de zarza con raíz, sobre el mismo suelo
 ├── Viento         el mapa del viento, UNO para los dos campos
 └── Player         el jugador (CharacterBody3D)
     ├── Cabeza     pivote a 1,62 m; la lente va 0,30 m hacia delante
     │   └── Camara la camara en primera persona
     ├── Cuerpo      modelo low-poly del operario
     │   └── Modelo  personaje_trabajo.glb
-    ├── Brazos      brazos de primera persona, ligados a los puños
+    ├── Brazos      brazos de primera persona, ligados a la herramienta
+    ├── Inventario  los nueve huecos y la rueda, con las guardadas dentro
+    ├── RuedaInventario  CanvasLayer: la rueda y los avisos
     └── Caderas     donde va colgada la maquina
         └── PivoteDesbrozadora
-            └── Desbrozadora   Node3D, siempre colgada del arnés
+            └── Desbrozadora   Node3D, lo que lleva en la mano en el hueco 1
 ```
 
 Lo de `Caderas` es importante y no es un detalle de colocacion: la maquina
@@ -36,6 +39,16 @@ cuelga de las caderas y **no** de la camara, porque el arnes es lo que justifica
 que los dos lados sean distintos. `desbrozadora.gd` coloca el pivote en cada
 fotograma segun hacia donde se mira, asi que ni `main.tscn` ni `jugador.tscn` le
 fijan ninguna transformacion.
+
+Y ojo con una cosa de ese arbol que sale de nuevo: **`Caderas` esta en el origen
+del jugador, y el origen del jugador esta a los pies**, no a la cadera. El
+nombre engaña. Cualquier altura que se ponga ahi va desde el suelo: la cintura
+de un operario de 1,7 m esta ahi en el 0,85, no en el 0.
+
+La desbrozadora **ya no esta en la escena**: la crea `Inventario` al equipar el
+hueco 1, y la lleva al pivote. La escena de la herramienta sigue siendo
+`scenes/desbrozadora.tscn`, y la de la hoz `scenes/hoz.tscn`; lo unico que cambia
+es quien las pone y donde.
 
 Las capas de fisica (`scenes/jugador.tscn`, `main.tscn`):
 
@@ -45,6 +58,7 @@ Las capas de fisica (`scenes/jugador.tscn`, `main.tscn`):
 | 2 | `bosque` | troncos y copas de los arboles |
 | 3 | `jugador` | el jugador |
 | 4 | `hierba` | la hierba (por si algun dia hay colision) |
+| 8 | `suelto` | las herramientas que estan en el suelo, para poder cogerlas |
 
 **Decisiones que ya estan tomadas y no hay que volver a mirar:**
 
@@ -817,7 +831,204 @@ igual). Va en la capa 2.
 
 ---
 
-## 11. `tools/` — pruebas y medicion
+## 11. El inventario, la rueda y la hoz
+
+### `scripts/herramienta.gd` — que es una herramienta
+
+Un `Resource`, no un script del nodo, y a proposito: lo que el inventario necesita
+saber de una herramienta (que escena instantiate, como se llama, que caja tiene en
+el suelo) se puede mirar **sin crearla**. El mismo recurso describe las dos.
+
+| Campo | Que es |
+| --- | --- |
+| `id` | la clave con la que la busca el inventario |
+| `nombre` | lo que sale escrito en la rueda |
+| `escena` | la escena del nodo que va en la mano |
+| `caja` | la caja de colision cuando esta en el suelo |
+| `tipos_compatibles` | 1 cesped, 2 maleza, 3 zarza |
+| `radio_corte` | para la resistencia y para lo que mide la vegetacion |
+
+Los dos recursos estan en `resources/herramientas/`, y los cabezales de la
+desbrozadora en `resources/cabezales/`. Ojo con esto: **un `.tres` que apunta a
+un modelo se trae el modelo aunque la pieza no este en escena**. Con la tecla `Q`
+el jugador cambia de cabezal, y los tres se cargan con `preload` en
+`desbrozadora.gd`; si sus `.glb` estuvieran fuera del repositorio, en un clon
+nuevo esos `preload` no encontrarian el modelo, el script no compilaria y el
+juego no arrancaria. Ya paso, y por eso los tres modelos estan dentro.
+
+### `scripts/inventario.gd` — los nueve huecos
+
+Nueve ids (`StringName`) en un array, un numero de seleccion, y tres metodos que
+hacen todo: `equipar`, `soltar_en_mano` y `recoger`. La rueda solo llama a
+`mover_seleccion`, que es un `posmod` sobre el numero.
+
+Cuatro decisiones que no son obvias y que costaron un bug cada una:
+
+- **La herramienta guardada no se destruye.** `_instancia()` la crea la primera
+  vez y la guarda en `_vivas`; al guardar solo se apaga (`visible = false`,
+  `process_mode = DISABLED`) y se cuelga de un nodo `Guardadas`. Con eso conserva
+  la gasolina y el desgaste. Si se destruyera, tirar la maquina al suelo seria la
+  forma de resetear el deposito.
+- **Que hay en la mano se guarda aparte de la seleccion** (`_en_mano`). Si
+  `equipar()` mirara "el hueco seleccionado" para guardar lo anterior, dependeria
+  de que la seleccion se cambiara *despues*; cambiandola antes se guardaba la
+  nueva en vez de la vieja, y las dos quedaban montadas a la vez. Hay prueba de
+  esto: `solo hay una herramienta montada, no dos`.
+- **El grupo `herramienta` solo lo tiene la equipada.** Cesped, maleza, zarza y
+  montones lo buscan cada fotograma con `get_first_node_in_group`, y no guardan
+  la referencia: con la referencia guardada seguian cortando con la que ya no
+  llevabas.
+- **Los `CanvasLayer` hay que apagarlos a mano.** No heredan la visibilidad del
+  padre, que es otra capa de dibujo. Sin `_interfaces_de()`, al cambiar a la hoz
+  se quedaba el panel de la desbrozadora con las revoluciones congeladas.
+
+Al soltar se crea un `RigidBody3D` en la **capa 8** (`CAPA_SUELTO`), que el
+jugador **no** lleva en su mascara: se anda por encima de una herramienta sin que
+el suelo se hunda ni se le falsee el apoyo. Se suelta medio palmo hacia un lado,
+porque dos herramientas soltadas en el mismo punto aparecen encajadas y la fisica
+las manda cada una a un lado. Para recoger hay que **mirar**: un rayo desde la
+camara de tres metros, no un area alrededor del cuerpo, porque con un area cogias
+lo que tuvieras al lado sin mirar. Lo recogido va al primer hueco libre y se
+equipa, y sin hueco no se puede y se dice, que si no el jugador ve el aviso, pulsa
+y no pasa nada.
+
+### `scripts/rueda_inventario.gd` — la rueda de la pantalla
+
+Un `CanvasLayer` con un `Control` que se dibuja entero en `_draw`: nueve sectores
+de anillo en la esquina de arriba a la derecha, el elegido resaltado y el numero
+dentro. Los huecos vacios se dibujan tambien, porque un hueco vacio es un estado
+de verdad y si no se dibujara el circulo pareceria roto en vez de vacio.
+
+Abajo van tres lineas de texto **separadas**: el nombre de lo que llevas, el aviso
+momentaneo (`suelta: ...`) y el `E recoger`. Compartiendo linea, el aviso tapaba
+justo el `E recoger` en el momento en que mas hace falta, que es despues de
+soltar algo.
+
+### `scripts/hoz.gd` — la segunda herramienta
+
+Sin motor, sin barrido, sin resistencia, sin combustible. Un palo con un filo.
+Corta lo que hay en el arco de la hoja mientras el acelerador este pulsado, y la
+hoja baja con la mirada (`-30 grados - 0,7 * pitch`).
+
+**Aqui no corta nada desde la hoja.** Corta cada campo de vegetacion en su propio
+`_physics_process`, al estilo de siempre: la hoja solo contesta a las cuatro
+preguntas que le hacen (`cortando`, `cabezal_puede_cortar`, `punto_de_corte`,
+`radio_corte_actual` y `registrar_corte`). Si la hoz cortara por su cuenta *y* el
+campo cortara tambien, cada hoja se contaria dos veces.
+
+La pose esta en coordenadas del pivote, que esta **a los pies** (ver la seccion
+1). La mano va a `ALTURA_MANOS = 0,82` m del suelo, a la cintura, y el filo baja
+de ahi unos cuarenta centimetros. Con la mano mas arriba se ve mejor, pero el filo
+queda por encima de la maleza y no corta nada de lo que esta en pie.
+
+---
+
+## 12. La zarza como maraña
+
+### `scripts/zarza.gd` — raíz, enganches e inundación
+
+Antes hubo dos modelos y los dos dejaban la mecanica coja: un grafo de ramas con
+anclajes (resolvia la fisica pero no daba juego) y un mapa de alturas (se cortaba
+por capas, pero no tenia manera de saber **que sostiene a que**).
+
+Ahora cada celda guarda tres cosas: cuanta vegetacion le queda, si hay **corona**
+(raiz, el anclaje al suelo) y a que vecinos se agarra (mascara de cuatro bits, en
+el orden de `DIRECCIONES`). Cuando el cabezal corta su franja, una **inundacion
+desde las coronas vivas** marca que celda se sostiene con cual, y todo lo que no
+queda marcado cae a montones.
+
+De ahi salen las reglas sin escribir ninguna excepcion:
+
+| Corte | Que pasa | Por que |
+| --- | --- | --- |
+| a la base de una mata | cae todo lo que solo se sostenia con ella | la raiz ya no esta |
+| en medio de una cana | cae el fragmento que se perdia; **el resto sigue en pie si tiene otro enganche con corona** | hay otro camino a una raiz |
+| donde ya no hay nada | nada | no hay celda |
+| por la copa | abre paso, no tumba | la raiz sigue |
+
+Los enganches se calan con el campo de distancia a la corona mas cercana: cada
+celda se agarra a los vecinos que la **acercan** a una corona, que es como se
+sostiene de verdad (la cana nace de la raiz, se curva y se apoya en lo que hay de
+camino a la raiz siguiente). Con `enredio` alto se engancha ademas a las que no la
+sostienen: es una cana que pasa por encima de otra sin tocarla, y son esas lineas
+cruzadas las que hacen que la copa de un zarzal denso aguante y haya que dar
+varias pasadas.
+
+Cuatro cosas de la implementacion que hay que tener presentes:
+
+- **El cabezal secciona todo lo que asoma por encima de su altura**, y ya no hay
+  banda de corte. Antes una pasada a ras de suelo no cortaba nada en celdas
+  altas, porque la banda hacia que el cabezal no llegara abajo.
+- **`densidad` aclara la hoja, no el tallo.** Donde hay loma hay cana haya
+  follaje o no. Antes `densidad` abria huecos estructurales y cada hueco partia la
+  maraña: se perdia un tercio de la zarza sin haberla tocado. El hueco de
+  follaje se hace con una altura de 0,22.
+- **La estructura (`_cana`) va aparte de la altura.** Un hueco de follaje deja la
+  cana en pie; una cana cortada ya no sostiene a nadie aunque le quede un palmo
+  de tallo. Por eso una corona cuenta como viva si le queda **una sola** celda de
+  cana.
+- **La inundacion es una pila sobre un array plano**, sin objetos por celda ni
+  recursividad: son unas dos mil celdas y se llama en cada corte, con la fisica
+  corriendo.
+
+### `scripts/montes.gd` y `scripts/restos.gd`
+
+`Montes` es el escombro que se queda en el suelo: una rejilla de celdas de 0,5 m
+con la altura del material, dibujada con un MultiMesh de cajas sin colision (el
+jugador no deberia tropezar). `Restos` son los trozos sueltos, como particulas de
+GPU con tiempo de vida, no como objetos: un resto que ha tocado el suelo y se
+queda dibujado para siempre fue el bug que motivo pasarlos a particulas.
+
+`Montes.aportar_varios()` existe por una razon concreta: una caida de verdad son
+cientos de celdas a la vez, y con un `aportar()` por celda se redibujaba la pila
+entera cientos de veces en el mismo fotograma.
+
+### El `instance_count` de los MultiMesh
+
+**La trampa que mas veces ha mordido a este proyecto**, y esta en dos sitios a la
+vez (zarza y montones), mas como aviso para el que venga:
+
+```gdscript
+# MAL: subir el contador dentro del bucle
+for i in n:
+    mm.instance_count = i + 1
+    mm.set_instance_transform(i, ...)
+
+# BIEN: el total, una vez, antes del bucle
+mm.instance_count = n
+for i in n:
+    mm.set_instance_transform(i, ...)
+```
+
+Cada vez que se cambia `instance_count`, Godot **rehace el buffer del MultiMesh y
+borra** las transformadas y los datos que hubiera escrito. Subirlo de uno en uno
+mientras se rellena deja la escena con una sola instancia en pie, la ultima, y las
+demas en el origen: **no hay ningun error, el contador es el correcto, y en
+pantalla no se ve nada**. En la zarza eso hacia que 3.072 hojas sembradas
+dejaran verse una sola. Se mide con `tools/medir_zarza.gd`: de 2 pixeles a 52.320.
+
+### `scripts/vegetacion.gd` — el contrato comun
+
+Tres metodos, y existen para que las herramientas no tengan que saber de que clase
+es cada campo: `tipo_vegetacion()` (1 cesped, 2 maleza, 3 zarza),
+`cortar_por_banda(centro, radio)` y lo que ya estaba (`densidad_bajo`,
+`coste_maleza`). La base devuelve cero en `cortar_por_banda` a proposito: una
+vegetacion que no se sabe cortar no tiene que inventar un sistema, tiene que
+decir que no.
+
+### `scenes/pruebas_zarza.tscn` — donde se ve la mecanica
+
+Seis matas que aislan cada regla: una sola mata, tres matas, una muy enredada, una
+alta y dos pegadas. Con `marcar_anclajes` se dibujan las coronas (caja roja) y los
+enganches (raya amarilla), y `scripts/overlay_prueba_zarza.gd` pone arriba a la
+derecha cuantas raices quedan y si la mata esta tumbada o no.
+
+**Esa escena estaba rota**: pedia un `overlay_prueba_zarza.gd` que no existia, y
+nadie se dio cuenta porque no se abria.
+
+---
+
+## 13. `tools/` — pruebas y medicion
 
 | Archivo | Que hace |
 | --- | --- |
@@ -826,6 +1037,14 @@ igual). Va en la capa 2.
 | `mirar_hierba.gd` | tres fotos con render real y cuanto ocupa cada una |
 | `medir_densidad.gd` | frame time con distintas densidades y radios |
 | `medir_foto.gd` | **la comprobacion visual**: mide pixeles de la foto a render real |
+| `test_inventario.gd` | la secuencia entera del inventario: soltar, rueda, recoger y el orden invertido |
+| `test_zarza_conexion.gd` | la mecanica de la zarza: raiz, enganches y que cae lo que pierde el apoyo |
+| `test_zarza_capas.gd` | el corte por capas sobre `capas_zarza.tscn` y los montones |
+| `test_zarza_capas_recorrido.gd` | las tres zonas recorridas con el jugador y la herramienta reales |
+| `medir_zarza.gd` | **si la zarza se dibuja de verdad**: apaga el nodo y cuenta los pixeles que cambian |
+| `foto_inventario.gd` | cinco fotos de la rueda, la hoz, las manos vacias y el "E recoger" |
+| `foto_pruebas_zarza.gd` | la zarza antes, con pasada alta y con pasada a la raiz |
+| `foto_zarza.gd` | una foto de la escena de capas desde una camara alta |
 | `diag_hierba.gd` | AABB, reparto por cuadrante y datos de instancia |
 | `foto.gd` | una foto suelta |
 | `ver_encuadre.gd` | que mallas entran en la foto y a que grados del centro |
@@ -833,6 +1052,7 @@ igual). Va en la capa 2.
 | `crear_motor.py` | genera `audio/motor.wav` |
 | `crear_desbrozadora_mesh.py` | genera la desbrozadora y **los tres cabezales sueltos**, y los mide antes de exportar |
 | `crear_desbrozadora_100x.py` | generador de un modelo alternativo de prueba, no usado en `main.tscn` |
+| `crear_hoz_mesh.py` | genera la **hoz** en `models/hoz.glb`, y comprueba medidas y ejes |
 | `crear_furgoneta_mesh.py` | genera la furgoneta de la futura fase de conducción |
 | `crear_personaje_mesh.py` | genera el operario low-poly en `models/personaje_trabajo.glb` |
 | `probar_cambio.py` | comprueba el alineamiento de un cabezal intercambiable |
@@ -915,7 +1135,7 @@ pueden comparar.
 
 ---
 
-## 12. Rendimiento medido (referencia de la escena anterior)
+## 14. Rendimiento medido (referencia de la escena anterior)
 
 Medición registrada con una AMD Radeon RX 6600, Forward+, Vulkan 1.4 y
 `tools/medir_densidad.gd`. El jugador se oculta durante la captura, pero el resto
