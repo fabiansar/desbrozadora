@@ -1,6 +1,9 @@
 class_name Desbrozadora
 extends Node3D
 
+signal telemetria_actualizada(rpm_sin_carga: float, rpm_bajo_carga: float,
+		resistencia: float)
+
 ## La desbrozadora del operario: va colgada del arnes, no en las manos.
 ##
 ## No esta pegada a la camara. Cuelga de un nodo "Caderas", que esta entre el
@@ -59,11 +62,10 @@ extends Node3D
 ## bajo, mas dura el twist y mas se nota que la maquina va por delante. A 2,6 se
 ## tarda algo mas de medio segundo.
 @export var rapidez_caderas := 2.6
-## Distancia del arnes al cabezal, en metros. Es fija: la maquina va atada al
-## arnes, no la sostiene nadie en el aire, asi que el alcance no depende de la
-## postura. Lo que cambia de un lado a otro es la DIRECCION, y por eso el
-## cabezal barre un arco.
-@export var alcance := 1.15
+## Alcance horizontal del cabezal desde el operario, en metros. Se mantiene
+## separado de la geometría del modelo para que al alargar la barra el código
+## pueda compensar la posición del conjunto y conservar los agarres.
+@export var alcance := 1.56
 # --- El arnes y el barrido -------------------------------------------------
 
 ## La maquina no se lleva en las manos: va colgada de un arnes en la cadera
@@ -94,6 +96,12 @@ extends Node3D
 ## suma a lo que ya barre el hecho de mirar a un lado. Con 26 se nota el
 ## barrido sin que se salga del arco ergonomicico.
 @export var barrido_teclado := 26.0
+## Cuanto manda la mirada en el barrido, o sea, quantas veces mas barre la
+## maquina de lo que gira la vista. Con 1 era metro a metro y se notaba poco:
+## la maquina iba tan pegada a los muslos que casi no se veia el efecto de
+## mirar a un lado, que es justo lo que tiene que pasar. Con 1,8, 20 grados de
+## raton echan la maquina 36, que ya se ve claro sin que se vaya sola.
+@export_range(0.0, 3.0, 0.05) var seguimiento_ojos := 1.8
 ## Cuanto mas pesa la maquina hacia la IZQUIERDA, de 1 a mas. Multiplica el
 ## peso del muelle, y el peso es lo que de verdad marca como se mueve (la
 ## rigidez se cancela, esta explicado en _avanzar_hacia_el_objetivo). Con 1,6 el
@@ -124,8 +132,8 @@ extends Node3D
 # --- La vertical ---------------------------------------------------------
 
 ## Inclinacion del tubo en reposo, en grados. Negativa = morro hacia abajo.
-## Apuntando al frente, sin trabajar, la maquina se lleva bastante alta.
-@export var inclinacion_reposo := -16.0
+## -22 grados orienta el eje hacia delante y abajo como en la referencia.
+@export var inclinacion_reposo := -22.0
 ## Cuanto baja el morro al acelerar, en grados. El motor a fondo es cuando la
 ## maquina se echa sobre el terreno.
 @export var inclinacion_acelerando := 22.0
@@ -193,12 +201,19 @@ extends Node3D
 ## se DECIDE cuando mirar, y este otro el ritmo con el que se MUYVE el motor.
 @export_range(0.05, 2.0, 0.05) var constante_resistencia := 0.45
 
-
-## Las pruebas y el futuro sistema de corte preguntan aqui.
-var rpm := 0.0
-var cortando := false
+## RPM en vacío, de solo lectura para los consumidores.
+var _rpm := 0.0
+var rpm: float:
+	get:
+		return _rpm
+## Estado de corte derivado de las RPM; no se almacena por separado para evitar
+## que el booleano y la velocidad del motor puedan divergir.
+var cortando: bool:
+	get:
+		return _rpm > rpm_maximas * 0.15
 
 var _girado := 0.0
+var _giro_carrete_acumulado := 0.0
 ## El barrido de la maquina, en radianes, ya con inercia. Este es el estado:
 ## el objetivo es lo que se le pide, esto es lo que hace de verdad.
 var _barrido := 0.0
@@ -280,6 +295,7 @@ func _process(delta: float) -> void:
 	_suavizar_resistencia(delta)
 	_mover_barrido(delta)
 	_colocar(delta)
+	telemetria_actualizada.emit(_rpm, rpm_efectiva(), _resistencia)
 
 
 ## Se mide la maqueta una vez y se guarda el resultado.
@@ -326,21 +342,19 @@ func _acelerador(delta: float) -> void:
 	var objetivo := rpm_maximas if acelerado else 0.0
 	var paso := (rpm_maximas / maxf(subida_rpm, 0.01)) if acelerado \
 		else (rpm_maximas / maxf(bajada_rpm, 0.01))
-	rpm = move_toward(rpm, objetivo, paso * delta)
-	cortando = rpm > rpm_maximas * 0.15
+	_rpm = move_toward(_rpm, objetivo, paso * delta)
 	# El peso del cuerpo sobre la maqueta. Antes la maqueta se movia sola, sin
 	# relacion con el motor; esto es lo que la hace trabajar.
-	_trabajando = clampf(rpm / maxf(rpm_maximas, 1.0), 0.0, 1.0)
+	_trabajando = clampf(_rpm / maxf(rpm_maximas, 1.0), 0.0, 1.0)
 	if giro != null:
-		_girado += TAU * vueltas_maximas * (rpm / maxf(rpm_maximas, 1.0)) * delta
-		_girado = fmod(_girado, TAU)
-		# El Z, no el Y. La cuchilla va TUMBADA, con su eje en la vertical, y el
-		# Z del modelo es la vertical: la escena le da un giro de 180 grados en
-		# Y, que no toca el Z. Girando sobre el Y, que es el eje a lo largo del
-		# tubo, la cuchilla daria vueltas de lado a lado. Y el nodo "Giro" del
-		# modelo va sin inclinacion, porque en YXZ cualquier inclinacion previa
-		# se sumaria a esta y la dejaria de girar plana.
-		giro.rotation.z = _girado
+		var incremento := TAU * vueltas_maximas \
+			* (_rpm / maxf(rpm_maximas, 1.0)) * delta
+		_giro_carrete_acumulado += incremento
+		_girado = fmod(_girado + incremento, TAU)
+		# Este modelo nuevo tiene el eje de la cuchilla en Y. El modelo anterior
+		# usaba Z, por eso el eje no se puede asumir solo por el nombre del nodo.
+		# El nodo Giro va sin inclinacion para que la rotacion quede plana.
+		giro.rotation.y = _girado
 	_sonido()
 
 
@@ -369,7 +383,13 @@ func _mover_barrido(delta: float) -> void:
 		return
 	# 1) Lo que se le pide: mirar de lado mas el barrido a proposito con A y D.
 	var entrada := Input.get_axis("mover_izquierda", "mover_derecha")
-	var por_ojos := _envolver(_yaw_mirada() - _jugador.rotation.y)
+	# La mirada manda MAS que metro a metro. Antes iba con seguimiento_ojos = 1 y
+	# la maquina apenas se movia al mover el raton: el ojo pedia 20 grados y
+	# la maquina acababa casi en la linea del cuerpo. Con el multiplicador, la
+	# misma mirada la echa el doble de lado, que es lo que se busca: que el
+	# raton lleve la herramienta.
+	var diferencia_mirada := _envolver(_yaw_mirada() - _jugador.rotation.y)
+	var por_ojos := diferencia_mirada * seguimiento_ojos
 	# Al reves del signo del eje: D (mover_derecha = 1) echa la maquina a la
 	# derecha, que es el lado corto. El valor del export esta en GRADOS, asi que
 	# hay que pasarlo a radianes: sin esto, 26 se leia como 26 radianes, que son
@@ -452,15 +472,12 @@ func _factor_barrido() -> float:
 	return 1.0 - frenao_barrido * _resistencia
 
 
-## Las vueltas que el motor da de verdad, con el frenao de la maleza ya
-## aplicado. `rpm` sigue siendo el acelerador pelado, que es lo que se pregunta
-## al apretar y lo que mira el sonido; esto es lo que corta.
-##
-## Se dejo separado a proposito: si se frenase `rpm` directamente, apagar el
-## motor dejaria la maquina a media potencia y el sonido no cuadraria con lo
-## que se ve.
+## Estimación de las RPM disponibles después de aplicar la carga de maleza.
+## `rpm` sigue la demanda del acelerador y alimenta el sonido actual. Esta
+## estimación se publica para telemetría; todavía no modifica el sonido ni la
+## rotación del carrete mientras se calibra el modelo de carga.
 func rpm_efectiva() -> float:
-	return rpm * (1.0 - frenao_motor * _resistencia)
+	return _rpm * (1.0 - frenao_motor * _resistencia)
 
 
 ## Que frenao se nota ahora mismo, de 0 a 1. 0 es un claro y 1 es maleza
@@ -486,8 +503,8 @@ func _adelante() -> Vector3:
 ## Pregunta a la maleza de delante cuanto cuesta. Solo mide; el suavizado esta
 ## en _suavizar_resistencia(), que va aparte.
 ##
-## Se pregunta cada intervalo_resistencia segundos: mirar la rejilla de corte de
-## casi 500.000 hojas en cada fotograma seria tirar la CPU, y ademas la
+## Se pregunta cada intervalo_resistencia segundos: consultar la rejilla de
+## corte en cada fotograma no aporta información útil y además la
 ## respuesta va lentisima de todos modos. Y solo con el motor echado, que con el
 ## motor parado no se esta cortando nada.
 func _mide_resistencia(delta: float) -> void:
@@ -586,7 +603,7 @@ func _colocar(delta: float) -> void:
 		0.0, 1.0)
 	var objetivo_incl := deg_to_rad(inclinacion_reposo
 		- _trabajando * inclinacion_acelerando * hasta_suelo
-		+ _trabajando * inclinacion_alta * hasta_alto)
+		+ inclinacion_alta * hasta_alto)
 	_inclinacion_actual = move_toward(_inclinacion_actual, objetivo_incl,
 		deg_to_rad(rapidez_inclinacion) * delta)
 	_caida = move_toward(_caida, _trabajando * caida_max * hasta_suelo,
@@ -704,18 +721,18 @@ func _sonido() -> void:
 	# bandera, si el sonido se acababa por lo que fuera, el motor se callaba
 	# para siempre sin que nadie lo volviera a arrancar. Preguntando al propio
 	# reproductor, si se para, se rearranca solo.
-	if rpm > 60.0:
+	if _rpm > 60.0:
 		if not motor_sonido.playing:
 			motor_sonido.play()
 	elif motor_sonido.playing:
 		motor_sonido.stop()
 	# El tono sube con las revoluciones: eso es lo que se oye cuando acelera, y
 	# no solo que esta encendido.
-	motor_sonido.pitch_scale = clampf(0.55 + 1.15 * (rpm / maxf(rpm_maximas, 1.0)),
+	motor_sonido.pitch_scale = clampf(0.55 + 1.15 * (_rpm / maxf(rpm_maximas, 1.0)),
 		0.4, 2.2)
-	if rpm > 1.0:
+	if _rpm > 1.0:
 		motor_sonido.volume_db = linear_to_db(
-			clampf(rpm / maxf(rpm_maximas, 1.0), 0.05, 1.0))
+			clampf(_rpm / maxf(rpm_maximas, 1.0), 0.05, 1.0))
 	else:
 		motor_sonido.volume_db = -60.0
 
@@ -753,15 +770,13 @@ func punto_de_corte() -> Vector3:
 ## es solo la velocidad de giro; cuando haya hierba habra que sumar la del
 ## jugador.
 func velocidad_corte() -> float:
-	return vueltas_maximas * (rpm / maxf(rpm_maximas, 1.0)) * TAU * 0.05
+	return vueltas_maximas * (_rpm / maxf(rpm_maximas, 1.0)) * TAU * 0.05
 
 
-func get_rpm() -> float:
-	return rpm
-
-
-func get_cortando() -> bool:
-	return cortando
+## Rotación acumulada del carrete desde que arrancó la escena, en radianes.
+## Se conserva aparte de `_girado`, que es la fase envuelta que escribe el nodo.
+func giro_carrete_acumulado() -> float:
+	return _giro_carrete_acumulado
 
 
 ## Hacia donde mira el jugador, en radianes. Se le pregunta al jugador, que es
@@ -828,13 +843,13 @@ func _altura_del_suelo(altura_manos: float) -> float:
 	if _pitch_mirada() < deg_to_rad(8.0):
 		return 0.0
 	var espacio := get_world_3d().direct_space_state
-	# OJO: las conversiones van por las CADERAS y no por esta maquina. Esta
-	# maquina esta girada (morro, ladeo, giro de caderas), y si se usara su
-	# to_local() el punto del suelo entraria torcido y la altura saldria mal.
-	# Las caderas no giran respecto al mundo, que es justo lo que se necesita.
+	# Se lanza bajo el centro de corte de la pose del fotograma anterior. Usar
+	# una coordenada fija de alcance fallaba al alargar la barra o barrer de lado:
+	# el rayo consultaba otra columna del terreno y dejaba el cabezal flotando.
+	var corte_actual := punto_de_corte()
 	var caderas := _caderas if _caderas != null else self
-	var origen := caderas.to_global(
-		Vector3(0.0, altura_manos + 1.0, -alcance))
+	var origen := Vector3(corte_actual.x,
+		maxf(corte_actual.y, altura_manos) + 1.0, corte_actual.z)
 	var q := PhysicsRayQueryParameters3D.create(origen, origen + Vector3.DOWN * 4.0)
 	# Se aparta al jugador del rayo. La capsula del jugador es alta y en una
 	# pendiente el rayo la puede rozar, y si la Roquea la maquina se apoya en el
@@ -885,8 +900,4 @@ func _buscar(root: Node, nombre: String) -> Node:
 		return null
 	if root.name == nombre:
 		return root
-	for hijo in root.get_children():
-		var encontrado := _buscar(hijo, nombre)
-		if encontrado != null:
-			return encontrado
-	return null
+	return root.find_child(nombre, true, false)

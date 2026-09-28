@@ -38,16 +38,15 @@ extends Camera3D
 ## ladeo viene de a saltos (depende de lo rapido que gires el raton) y sin
 ## esto la camara se ponia recta de golpe al dejar de girar.
 @export_range(0.0, 1.0, 0.01) var retardo_ladeo := 0.30
-## Anger que se suma al correr.
+## Aumento de FOV que se suma al correr, en grados.
 @export var angular_correr := 12.0
-## Anger normal. El de una GoPro muy angular es de 90 grados o mas.
+## FOV horizontal base. El de una GoPro muy angular es de 90 grados o mas.
 @export_range(40.0, 140.0, 1.0) var angular := 100.0
-## Velocidad a la que se agacha la camara, en metros por segundo.
-@export var rapidez_agachado := 9.0
+## Ajuste adicional del FOV horizontal, en grados. Cero conserva el encuadre.
+@export_range(-20.0, 20.0, 1.0) var ajuste_fov := 0.0
 ## Cuanto se le perdona al cabezal, en grados, para que no quede justo en el
 ## borde de la foto. Ver _pitch_limitado().
-@export var margen_cabezal := 4.0
-
+@export var margen_cabezal := 8.0
 ## Jugador al que se sigue. Si es null se busca en la escena.
 @export var jugador: Jugador
 ## Nodo "cabeza" del jugador: de aqui cuelga la camara.
@@ -68,7 +67,6 @@ var _pitch_suave := 0.0
 var _fase := 0.0
 var _ladeo_suave := 0.0
 var _peso := 0.0
-var _altura := 0.0
 var _primer_fotograma := true
 ## La desbrozadora, para no perder el cabezal de vista al mirar arriba.
 var herramienta: Desbrozadora
@@ -83,7 +81,7 @@ func _ready() -> void:
 	# KEEP_WIDTH para que el angular sea el horizontal: es como se mide el de
 	# una camara de accion y como se ve el campo de vision al jugar.
 	keep_aspect = Camera3D.KEEP_WIDTH
-	fov = angular
+	fov = angular + ajuste_fov
 	if jugador != null:
 		_yaw_suave = jugador.get_yaw()
 		_pitch_suave = jugador.get_pitch()
@@ -113,11 +111,10 @@ func _process(delta: float) -> void:
 
 ## Cuanto se puede levantar la vista sin que el cabezal se salga de la foto.
 ##
-## El cabezal va 1,27 m por debajo de la camara y 1,18 m por delante, o sea unos
-## 47 grados por debajo del horizonte, y con un angular de 100 grados solo se
-## ven 34 por debajo del eje. Mirar recto, o mirar arriba, deja al cabezal
-## fuera. Y no vale: se van a cortar zarza alta y hay que ver donde corta la
-## hoja SIEMPRE, que si no se trabaja a ciegas.
+## La posicion del cabezal cambia con el alcance y la inclinacion de la maquina,
+## por lo que no se usa una distancia o un angulo fijo. Se consulta el punto de
+## corte actual: mirar recto o arriba no debe dejarlo fuera de la imagen. Se van
+## a cortar zarza alta y hay que ver donde corta la hoja SIEMPRE.
 ##
 ## En vez de taparle el raton al jugador, que se nota fatal, lo que hace la
 ## camara es bajarse sola lo justo para que el cabezal no se salga. El jugador
@@ -206,9 +203,6 @@ func _colocar(giro_tras_lag: float, bamboleo: Vector3, delta: float) -> void:
 	var vertical := bamboleo.x
 	var lateral := bamboleo.y
 	var rodada := bamboleo.z
-	# Agacharse: la camara baja, y el bamboleo se suma encima.
-	var objetivo_altura := -0.55 if Input.is_action_pressed("agacharse") else 0.0
-	_altura = move_toward(_altura, objetivo_altura, rapidez_agachado * delta)
 	# La rodada combina el paso con el ladeo de la mirada. El ladeo sale de la
 	# misma diferencia de yaw que el retardo: si la camara va tarde, la cabeza
 	# queda ladeada, como cuando giras el cuello. Se corta en ladeo_giro para
@@ -245,14 +239,15 @@ func _colocar(giro_tras_lag: float, bamboleo: Vector3, delta: float) -> void:
 		deg_to_rad(_ladeo_suave + clampf(ladeo_herramienta, -tope_ladeo_herramienta,
 			tope_ladeo_herramienta))
 		+ deg_to_rad(rodada))
-	if cabeza != null:
-		position = Vector3(lateral, _altura + vertical, 0.0)
-	else:
-		position = Vector3(lateral, _altura + vertical, 0.0)
+	# La altura de agachado la aplica Jugador sobre el pivote Cabeza. Aqui solo
+	# se suma el bamboleo: bajarla tambien en este nodo duplicaba el crouch.
+	position = Vector3(lateral, vertical, 0.0)
 
 
 func _angular(delta: float) -> void:
-	var objetivo := angular + (angular_correr if jugador.get_correr() else 0.0)
+	var objetivo := angular + ajuste_fov
+	if jugador.get_correr():
+		objetivo += angular_correr
 	fov = lerpf(fov, objetivo, minf(1.0, delta * 4.5))
 
 

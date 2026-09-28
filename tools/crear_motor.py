@@ -17,7 +17,8 @@ import wave
 
 FUERZA = 22050
 SEGUNDOS = 2.0
-SALIDA = os.path.expanduser("~/Documentos/desarrollos/desbrozadora/audio/motor.wav")
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SALIDA = os.path.join(PROJECT_DIR, "audio", "motor.wav")
 
 # Un bucle tiene que casar con el final: se usan periodos enteros sobre la
 # longitud del bucle, o si no se oye un "clic" en cada vuelta.

@@ -3,9 +3,10 @@
 Simulador de desbrozadora en Godot 4.7. Andas por un huerto, llevas una
 desbrozadora y lo que toca, se cae.
 
-Estado: **jugable de punta a punta**. Se anda, se corre, se salta, se mira, se
-acelera la desbrozadora, suena el motor, hay bosque, hay suelo de tierra y hay
-hierba que se dobla con el viento y que se corta donde pasas.
+Estado: **prototipo jugable del trabajo de desbroce**. Se anda, se corre, se
+salta, se mira, se acelera la desbrozadora, suena el motor y se corta hierba. El
+mundo ya tiene terreno con pendiente y una aldea distribuida por parcelas; la
+aldea sigue en integración visual y sus modelos todavía son placeholders.
 
 ## Como se juega
 
@@ -17,8 +18,8 @@ hierba que se dobla con el viento y que se corta donde pasas.
 | `Ctrl` / `C` | Agacharse |
 | Raton | Mirar |
 | **Raton izq.** | **Acelerar la desbrozadora (y con ella se corta)** |
-| Raton der. | Capturar / soltar el raton |
-| `R` | Reiniciar la prueba |
+| `Esc` | Liberar el raton |
+| Clic en la ventana | Volver a capturar el raton |
 
 **Para cortar, hay que acelerar.** Con el motor parado el cabezal no corta, y
 la hierba solo se dobla si el motor esta a medias. El acelerador es el boton
@@ -26,12 +27,18 @@ izquiero, como en una desbrozadora de verdad.
 
 ### La camara nunca pierde el cabezal
 
-La camara se descuelga de la cabeza del jugador por un angulo fijo, asi que el
-cabezal, que va 1,27 m por debajo y 1,18 m por delante, queda unos 47 grados por
-debajo del horizonte. Con el angular de 100 grados solo entran 34 grados por
-debajo del eje, de modo que mirando recto, y mas todavia mirando arriba, la
-herramienta se salia de la foto. Y no puede pasar: se van a cortar zarza alta y
-hay que ver donde corta la hoja **siempre**.
+La camara se descuelga de la cabeza del jugador y comprueba el punto de corte
+real de la herramienta en cada fotograma. Como la distancia y la inclinacion del
+cabezal cambian con la pose, no dependen de un angulo fijo: mirando arriba la
+vista se acomoda para mantener la zona de trabajo en la foto. El FOV horizontal
+base es 100° y se abre 12° al correr; hay un ajuste adicional de ±20° en el
+Inspector. Cero deja intacto el FOV base; la escena principal lo tiene ahora
+20° por encima del base. El ajuste no cambia la posición de la cámara.
+
+La barra de la desbrozadora mide ahora **2,06 m** y la máquina completa unos
+**2,46 m**; el alcance de trabajo está ajustado a 1,56 m para llevar el motor
+detrás del operario. El detalle de medidas está en
+[DOCUMENTACION.md](DOCUMENTACION.md).
 
 Asi que la camara se baja sola lo justo para que el cabezal siga dentro del
 encuadre (`CamaraGopro._pitch_limitado`): uno mira con el raton todo lo que
@@ -44,6 +51,24 @@ Ahora la camara mide su giro **en el mundo** y le resta el del cuerpo, asi que s
 mira siempre hacia donde mira el jugador, vaya hacia donde vaya. Lo comprueban
 las pruebas: el cabezal se ve en las 10 inclinaciones de la gama, y con `S` la
 camara se mueve 0,4 grados en vez de 180.
+
+## Primer cuerpo en primera persona
+
+El personaje low-poly conserva el torso y la parte inferior visibles en primera
+persona; se ocultan la cabeza y los brazos estáticos, y las mangas dinámicas
+siguen los puños de la herramienta. La cámara se adelanta a la cara para evitar
+quedar dentro del pecho y arranca inclinada hacia la zona de trabajo. La pose
+sigue en calibración visual. Para guardar una captura Vulkan:
+
+```bash
+flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+  --path . --script res://tools/foto_personaje.gd --rendering-driver vulkan
+```
+
+La imagen queda en `capturas/personaje_primera_persona.png` y mira 80 grados
+hacia abajo para inspeccionar cuerpo y herramienta. El asset completo
+se genera con `tools/crear_personaje_mesh.py` y se abre para revisar en Blender
+con `tools/abrir_modelo.py`.
 
 ## Como se ejecuta
 
@@ -65,7 +90,16 @@ timeout 400 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --headless --path . --script tools/test_juego.gd
 ```
 
-Acabo de salir: **183 correctas, 0 fallos, 1 aviso**. El aviso es que la
+Para validar solo el recorrido combinado de movimiento (paneo, barrido, WASD,
+correr, agacharse, saltar y acelerar) sin esperar a toda la suite:
+
+```bash
+flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+  --headless --path . --script res://tools/test_movimiento_integrado.gd
+```
+
+Última ejecución registrada antes del ajuste de FOV: **202 correctas, 0 fallos,
+1 aviso**. El aviso es que la
 comprobacion de imagen no se puede hacer en headless, y se cierra aparte con una
 herramienta que va en 3 segundos:
 
@@ -74,8 +108,9 @@ timeout 300 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --path . --script tools/medir_foto.gd --rendering-driver vulkan
 ```
 
-Esa mide si la hierba se dibuja de verdad, y ahora mismo da **93,9 % de pixeles
-cambiados al ocultarla** y un 76,3 % de pixeles verdes. Sale en `capturas/`.
+Esa mide si la hierba se dibuja de verdad. En la configuración actual la última
+medición registró **52,4 % de píxeles cambiados** al ocultar `Hierba` y **54,7 %
+de píxeles verdes**. Las capturas se guardan en `capturas/`.
 
 > **No repitas la suite entera con ventana.** Se puede, pero con la GPU por
 > software de esta maquina va a un fps y la suite tarda doce minutos. Para
@@ -88,29 +123,34 @@ cambiados al ocultarla** y un 76,3 % de pixeles verdes. Sale en `capturas/`.
 
 ### Como esta repartida la hierba
 
-El campo no es un solo MultiMesh, sino **cuadrados de 8 m**, cada uno con el
-suyo. Un unico MultiMesh de 100 m tiene una caja tan grande que siempre se solapa
-con la pantalla, se mire donde se mire, asi que el motor no descartaba nada y
-dibujaba las hojas enteras en cada fotograma. Con los cuadrados, cada uno lleva
-su caja ajustada y ademas se apagan los que estan lejos de la camara.
+El campo no es un solo MultiMesh: se reparte en cuadrados, cada uno con el suyo.
+El tamaño se configura por campo para equilibrar culling y llamadas de dibujo.
+Cada cuadrado lleva una caja ajustada y se puede apagar por distancia.
 
 Hay **dos campos**, cada uno con su semilla y su material:
 
-| campo | tipo | alto | densidad | corte | en |
+| campo | tipo | altura base | densidad | radio de corte | lado de cuadrante |
 |---|---|---|---|---|---|
-| `Hierba` | cesped | 71 cm | 60 por m2 | 0,73 m | 146 cuadrados de 8 m |
-| `MalezaAlta` | maleza | 145 cm | 18 por m2 | 0,73 m | 62 cuadrados de 12 m |
+| `Hierba` | cesped | 69 cm | 60 por m2 | 1,00 m | 24 m |
+| `MalezaAlta` | maleza | 145 cm (hasta ~169 cm) | 18 por m2 | 0,73 m | 12 m |
 
-El cesped da **471.239 hojas** y la maleza **31.162**. La maleza sale en **matas**
-y no como una alfombra: con `formacion = 0,78` solo se siembra el 34 % del
-terreno, asi que se ven claros de verdad por los que se pasa sin cortarse nada.
-Se corta con la misma maquina y el mismo radio que el cesped, que es la condicion
-para que no se note como otra herramienta.
+La escena actual también agrupa el césped (`formacion = 0,70`); la maleza usa
+`formacion = 0,78` y `dureza = 1,8`. Ambos campos se siembran sobre el terreno y
+respetan las zonas ocupadas de la aldea. El recuento de hojas depende de la
+semilla y de las exclusiones del terreno; no se fija aquí como cifra permanente.
+Los radios de corte son distintos en la configuración actual.
 
-Esto lo comprueban las pruebas: que al repartir no se pierda ninguna hoja, que
-ningun cuadrante salga vacio, que las cajas sean manejables, que el recorte por
-distancia encienda y se apague, que los dos campos esten sembrados y que
-caminando por encima se corten los dos.
+La suite comprueba el reparto, las cajas, el recorte por distancia y el corte de
+ambos campos. Los valores efectivos están en `scenes/main.tscn`; el detalle está
+en [DOCUMENTACION.md](DOCUMENTACION.md).
+
+### Terreno y aldea
+
+El terreno ocupa 240 × 240 m y se construye en fragmentos de 12 m, con pendiente,
+ondulación, terrazas y surcos. La aldea usa una cuadrícula de 4 × 3 parcelas de
+15 × 12 m. Su distribución y las consultas que excluyen hierba/bosque ya están
+integradas; las casas, muros, caminos y plantas aún no tienen modelos `.glb` en
+`assets/models/aldea/`.
 
 ### Mirar como queda de verdad
 
@@ -138,7 +178,8 @@ scripts/    la logica de cada cosa
 shaders/    el de la hierba y el del suelo
 tools/      las pruebas y las herramientas de medicion
 audio/      el motor
-models/     la desbrozadora
+    models/     la desbrozadora, el personaje y modelos auxiliares
+    assets/     catálogo pendiente de modelos para la aldea
 ```
 
 Los detalle de cada archivo estan en [DOCUMENTACION.md](DOCUMENTACION.md), el

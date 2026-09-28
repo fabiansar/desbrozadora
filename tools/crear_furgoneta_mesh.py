@@ -1,6 +1,20 @@
 """
-Furgoneta comercial basica, low poly, para conducir en primera persona y cargar
-maquinaria. Simple, sin instrumentacion.
+Furgoneta comercial cerrada, low poly, para conducir en primera persona y llevar
+herramienta en el baul. Simple, sin instrumentacion.
+
+La idea es un furgon de reparto de los de antes, con un punto de GAZ-52: morro
+corto y redondeado, faros redondos y parabrisas partido en dos por un montante
+central. Lo que define al vehiculo es que la parte de atras esta CERRADA: techo
+continuo de punta a punta, paredes lisas de chapa vertical de punta a punta, y
+las dos hojas de la trasera que cierran el baul. Dentro queda un hueco
+rectangular con el suelo plano para la desbrozadora. Todo va en 4.000
+triangulos.
+
+Lo que hace de verdad un furgon es que no se vea ni un hueco, y eso no se
+comprueba mirando el modelo por fuera sino disparando rayos desde dentro del
+baul: si un rayo sale de viaje, por ese lado entra la lluvia. Va en
+_informe_cierre, y es la comprobacion que vigila el techo, los costados, el
+tabique, las dos hojas y el suelo.
 
 Uso:
     flatpak run --filesystem=$HOME/Documentos org.blender.Blender --background \
@@ -10,7 +24,7 @@ Uso:
 
 La jerarquia, en models/furgoneta.glb, y SOLO estos nombres:
     Furgoneta            empty en el (0, 0, 0), el suelo bajo el centro del coche
-      Chasis             la carrocería, la cabina y el suelo de carga
+      Chasis             el chasis, la cabina y la caja de carga
         Volante          el volante, con el origen en la BASE de la columna
         Puerta_Conductor  con el origen en la bisagra de DELANTE
         Puerta_Trasera_Izq  con el origen en la bisagra de la IZQUIERDA
@@ -18,23 +32,26 @@ La jerarquia, en models/furgoneta.glb, y SOLO estos nombres:
       Rueda_Del_Izq / Rueda_Del_Der / Rueda_Tra_Izq / Rueda_Tra_Der
     Y dos emptys de ayuda, que no son piezas del coche:
       Ojo_Conductor       donde va la camara de primera persona
-      Punto_Carga         donde se deja la desbrozadora, en el suelo del baul
+      Punto_Carga         donde se deja la desbrozadora, en el suelo de la caja
 
 Las cuatro reglas que el juego da por buenas, y como se comprueban:
   1. NINGUN nodo lleva rotacion propia. Toda la inclinacion esta COCIDA en la
      malla, no en el nodo. Es la regla 3 de la desbrozadora ("nada se exporta
      con rotacion ni escala sin aplicar") y es la unica forma de que el juego
      pueda escribir un solo eje del nodo sin cargarse la pose: en Godot,
-     escribir rotation.z REEMPLAZA la rotacion entera, asi que si el nodo
+     escribir rotation.z REPLAZA la rotacion entera, asi que si el nodo
      tuviera inclinacion propia, al girar el volante se le caeria.
      Se comprueba mirando rotation_euler de todos los nodos.
   2. Los pivotes estan en el sitio fisico que toca, no en el (0, 0, 0):
      el eje de la columna en el Volante, la bisagra en cada Puerta, el centro
      geometrico en cada Rueda. Se comprueba midiendo el origen contra la
      geometria, y probando el giro de verdad (ver _informe).
-  3. El baul esta VACIO y con el suelo plano. No hay nada dentro del hueco de
-     carga, para que la desbrozadora entre sin colisionar. Se comprueba
-     buscando vertices de la carrocería dentro de la caja de carga.
+  3. La caja esta VACIA, con el suelo plano, y la desbrozadora CABE. No hay
+     nada de la carroceria dentro del volumen de carga, para que la maquina
+     entre sin colisionar; y el volumen se mide contra las medidas reales de
+     models/desbrozadora.glb (0,45 x 1,46 x 0,34) con 5 cm de holgura.
+     Lo de "cabe" es lo que evita el fallo clasico: un hueco que esta vacio
+     porque no cabe nada, que es al reves de lo que hace falta.
   4. Nada se exporta con rotacion ni escala sin aplicar.
 
 Sobre los ejes, que es lo que mas se confunde (ver tambien el final del
@@ -82,7 +99,8 @@ if _AQUI not in sys.path:
     sys.path.insert(0, _AQUI)
 import exportar_blender  # noqa: E402
 
-OUT_DIR = os.path.expanduser("~/Documentos/desarrollos/desbrozadora/models")
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT_DIR = os.path.join(PROJECT_DIR, "models")
 OUT_FILE = os.path.join(OUT_DIR, "furgoneta.glb")
 
 # --- Medidas, en metros ---------------------------------------------------
@@ -97,14 +115,32 @@ ALTO = 2.10
 GROSOR_LATERAL = 0.09
 X_PARED_EXT = 0.88      # cara exterior de la pared
 X_PARED_INT = 0.79      # cara interior
-X_PUERTAS = 0.84        # las puertas son 6 cm y quedan 2 cm por fuera
+
+# Las hojas de puerta van por FUERA de la pared y se HUNDEN 1 cm en ella, en vez
+# de justo tocarla. Es lo que quita el z-fighting del panel de la puerta del
+# conductor: dos caras COPLANARES enfrentadas producen el manchon oscuro de
+# sombras, y un centimetro de solape las entierra una dentro de la otra sin que
+# se vea nada. Con esto el union de la puerta y la pared no es coplanar.
+X_PUERTA_INT = 0.84     # cara interior de la hoja del conductor
+Y_PUERTA_TRAS_INT = -2.32  # cara interior de las hojas traseras (en Y)
+Y_PARED_TRAS = Y_PUERTA_TRAS_INT + 0.01   # los costados entran 1 cm en la hoja
+
+# Separacion de 5 mm en los cantos de arriba y de abajo de las hojas. Con ella
+# el canto de la hoja nunca cae en el mismo plano que la cara del faldon o del
+# techo que tiene debajo o encima, que es la otra mitad del z-fighting. Con el
+# coche entero mirandolo de cerca no se ve ni el hueco; con el dorso de la mano
+# de al lado, se nota menos que la sombra falsa.
+HOLGURA_HOJA = 0.005
 
 Z_SUELO = 0.20          # bajos del chasis
-Z_CARGA = 0.50          # cara de arriba del suelo del baul: la altura de carga
+Z_CARGA = 0.50          # cara de arriba del suelo de la caja: la altura de carga
 Z_ARCO = 0.68           # por donde pasa la rueda: los pasos de rueda suben aqui
 Z_CINTURON = 1.16       # la linea de la cintura, donde acaba la puerta
 Z_TECHO = 2.00
 
+# La pared de los costados llega hasta la trasera, y las puertas se montan en el
+# plano de atras. Para que no se pisen, los costados paran un poco ANTES de la
+# trasera y las hojas ocupan ese ultimo centimetro.
 Y_TABIQUE = -0.40       # tabique entre baul y cabina
 Y_COWL = 1.02           # donde arranca el parabrisas
 Y_TECHO_DEL = 1.30      # borde delantero del techo
@@ -122,19 +158,37 @@ Z_EJE_RUEDA = RADIO_RUEDA
 PASOS_RODILLA = ((Y_TRAVESA, -2.10), (-1.30, 0.90), (1.70, Y_FRENTE))
 
 # Puertas: nombre, grados de apertura, lado al que se abren, signo del giro en
-# Z y coordenada Y del canto de la bisagra. El signo va porque en el mismo eje
-# los dos lados se abren en sentidos contrarios: la del conductor abre restando,
-# la trasera izquierda sumando. La Y del canto es lo que se mide despues, para
-# comprobar que el origen ha caido en la bisagra y no en medio de la hoja.
+# Z, coordenada Y del canto de la bisagra y media anchura de la hoja. El signo
+# va porque en el mismo eje los dos lados se abren en sentidos contrarios: la
+# del conductor abre restando, la trasera izquierda sumando. La Y del canto y
+# la anchura son lo que se mide despues, para comprobar que el origen ha caido
+# en la bisagra y no en medio de la hoja.
 PUERTAS = (
-    ("Puerta_Conductor", 80.0, -1.0, -1.0, 1.02),
-    ("Puerta_Trasera_Izq", 110.0, -1.0, +1.0, Y_TRAVESA),
-    ("Puerta_Trasera_Der", 110.0, +1.0, -1.0, Y_TRAVESA),
+    ("Puerta_Conductor", 80.0, -1.0, -1.0, 1.02, X_CARROCE),
+    ("Puerta_Trasera_Izq", 110.0, -1.0, +1.0, Y_TRAVESA, X_CARROCE),
+    ("Puerta_Trasera_Der", 110.0, +1.0, -1.0, Y_TRAVESA, X_CARROCE),
 )
 
-# El baul se comprueba con esta caja: desde el suelo de carga hasta el techo y
-# entre las caras interiores de las paredes. No tiene que haber ni un vertice.
-CARGA = {"x": (-0.68, 0.68), "y": (-2.35, -0.45), "z": (0.52, 1.98)}
+# La caja de carga se comprueba con este volumen: desde el suelo de carga hasta
+# el techo, y entre las caras interiores. Es el hueco rectangular protegido que
+# hay que dejar libre. No tiene que haber ni un vertice de la carrocería dentro.
+#
+# El ancho se queda en 1,36 y no en 1,58 porque el faldon se come 9 cm por lado
+# hasta Z_ARCO. Arriba el hueco si llega a 1,58, pero la desbrozadora entra por
+# el suelo, y lo que tiene que caber es lo de abajo: 1,36.
+#
+# El alto sale de Z_TECHO y no se escribe a mano, para que si alguien baja el
+# techo no se quede el volumen de comprobacion pidiendo una caja mas alta que la
+# de verdad, que es como un hueco "vacio" que en realidad no existe.
+CARGA = {"x": (-0.68, 0.68), "y": (-2.35, -0.45),
+         "z": (Z_CARGA + 0.02, Z_TECHO - 0.02)}
+
+# Lo que hay que meter en la caja, medido sobre models/desbrozadora.glb. Se
+# comprueba que cabe con 5 cm de holgura por lado, que es lo que haria falta
+# para que la carga entre y salga sin rozar. Sin esto la caja "__esta vacia__"
+# queria decir vacia de desbrozadora incluida, que es justo lo que no.
+DESBROZADORA = {"x": 0.45, "y": 1.46, "z": 0.34}
+HOLGURA_CARGA = 0.05
 
 ESPERADO_LARGO = (4.70, 4.95)
 ESPERADO_ANCHO = (1.95, 2.25)   # lo que mandan son los retrovisores
@@ -334,6 +388,32 @@ def _caras_hacia_fuera(ob):
               % (ob.name, exc))
 
 
+def _arreglar_malla(ob, holgura=1e-4):
+    """Quita vertices duplicados y deja las normales hacia fuera.
+
+    Sin esto, unir 40 cajas deja puntitos sueltos y aristas con la normal
+    cruzada en las uniones: son las caras que se dibujan unas encima de otras y
+    producen el patron de rayas y sombras oscuras. Es el "remove_doubles" y el
+    "normals_make_consistent" del pedido, aqui sobre la malla ya unida, que es
+    donde estan los problemas y no antes.
+
+    remove_doubles es la version moderna de reclaim_doubles. Se mide en metros:
+    0,1 mm es de sobra para unir lo que hay que unir y no de menos para no
+    comerse aristas de verdad.
+    """
+    try:
+        bpy.ops.object.select_all(action="DESELECT")
+        ob.select_set(True)
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.remove_doubles(threshold=holgura)
+        bpy.ops.mesh.normals_make_consistent(inside=False)
+        bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception as exc:  # noqa: BLE001
+        print("  aviso: no se ha limpiado la malla de %s (%s)" % (ob.name, exc))
+
+
 # --- La carrocería --------------------------------------------------------
 def _materiales():
     return {
@@ -343,7 +423,7 @@ def _materiales():
         "negro": material("Negro", (0.05, 0.05, 0.06), 0.0, 0.70),
         "plata": material("Metal_Plata", (0.66, 0.68, 0.71), 0.45, 0.45),
         "asiento": material("Asiento", (0.14, 0.15, 0.18), 0.0, 0.75),
-        "suelo": material("Suelo_Baul", (0.30, 0.29, 0.26), 0.0, 0.80),
+        "suelo": material("Suelo_Caja", (0.30, 0.29, 0.26), 0.0, 0.80),
         "ambar": material("Ambar", (0.95, 0.52, 0.04), 0.0, 0.30),
         "rojo": material("Rojo", (0.50, 0.05, 0.05), 0.0, 0.30),
         "faro": material("Faro", (0.82, 0.86, 0.92), 0.0, 0.20),
@@ -351,22 +431,31 @@ def _materiales():
 
 
 def pieza_chasis(m):
-    """Carroceria, cabina, salpicadero y asiento, todo en una sola malla.
+    """Carroceria, cabina, caja CERRADA y asiento, todo en una sola malla.
 
-    Los pasos de rueda son la razon de que los faldones esten partidos en tres
-    tramos: si la pared bajase hasta el suelo, la rueda quedaria enterrada
-    dentro de ella. Con el paso alto (Z_ARCO) y el faldon solo en los tramos
-    libres, la rueda se ve por su paso, como en cualquier furgoneta.
+    Es un furgon comercial de los de antes: morro corto, faros redondos,
+    parabrisas partido en dos por un montante, y detras un baul completamente
+    cerrado, con techo continuo, paredes lisas de chapa y suelo plano.
+
+    Lo que hace de verdad un furgon es que no se vea ni un hueco. Por eso las
+    paredes de los costados van de Z_ARCO hasta ALTO, una sola caja cada una, y
+    el techo llega de punta a punta. La trasera la cierran las dos hojas.
+
+    Los faldones van partidos en tres tramos porque las ruedas tienen que verse
+    por su paso. Por eso el lateral empieza en Z_ARCO y no en Z_CARGA: si
+    bajase hasta el suelo, la rueda quedaria enterrada en el.
     """
     piezas = []
+    x_carroce = (X_PARED_EXT + X_PARED_INT) / 2.0
+    x_techo = X_CARROCE
 
     # Suelo: la cara de arriba (Z_CARGA) es el suelo del baul, y es una sola
     # plancha recta de punta a punta, sin nada encima.
     piezas.append(caja("Bandeja", (1.38, LARGO, Z_CARGA - Z_SUELO),
                        (0.0, 0.0, (Z_CARGA + Z_SUELO) / 2.0), m["suelo"]))
 
-    # Faldones, en los tres tramos que quedan entre las ruedas.
     for lado, signo in (("Izq", -1.0), ("Der", 1.0)):
+        # Faldones bajos, en los tres tramos que quedan entre las ruedas.
         for i, (y0, y1) in enumerate(PASOS_RODILLA):
             piezas.append(caja(
                 "Faldon_%s_%d" % (lado, i),
@@ -375,28 +464,22 @@ def pieza_chasis(m):
                  (Z_ARCO + Z_CARGA) / 2.0),
                 m["blanco"]))
 
-        # Pared del baul, de punta a punta y hasta el techo.
+        # Costado del furgon: UNA caja lisa, de punta a punta, y de Z_ARCO hasta
+        # ALTO. Esto es lo que hace la furgoneta: chapa vertical sin huecos ni
+        # tablas. Arriba se mete 5 cm dentro del techo y por detras para en
+        # Y_PARED_TRAS, de modo que ninguna arista queda coplanar con el techo
+        # ni con las hojas de las puertas. Ver HUNDIR_UNION.
         piezas.append(caja(
             "Pared_%s" % lado,
-            (GROSOR_LATERAL, Y_TABIQUE - Y_TRAVESA, ALTO - Z_ARCO),
-            (signo * (X_PARED_EXT + X_PARED_INT) / 2.0,
-             (Y_TABIQUE + Y_TRAVESA) / 2.0, (ALTO + Z_ARCO) / 2.0),
-            m["blanco"]))
-
-        # Costado de la cabina, solo hasta la cintura: por encima esta la
-        # ventana, y su hueco lo tapa la puerta del conductor al cerrarse.
-        piezas.append(caja(
-            "Costado_%s" % lado,
-            (GROSOR_LATERAL, Y_TECHO_DEL - Y_TABIQUE, Z_CINTURON - Z_ARCO),
-            (signo * (X_PARED_EXT + X_PARED_INT) / 2.0,
-             (Y_TECHO_DEL + Y_TABIQUE) / 2.0,
-             (Z_CINTURON + Z_ARCO) / 2.0),
+            (GROSOR_LATERAL, Y_TABIQUE - Y_PARED_TRAS, Z_TECHO + 0.05 - Z_ARCO),
+            (signo * x_carroce, (Y_TABIQUE + Y_PARED_TRAS) / 2.0,
+             (Z_TECHO + 0.05 + Z_ARCO) / 2.0),
             m["blanco"]))
 
         # Pilar B entre la puerta y el baul.
         piezas.append(caja(
             "PilarB_%s" % lado, (GROSOR_LATERAL, 0.12, Z_TECHO - Z_CINTURON),
-            (signo * (X_PARED_EXT + X_PARED_INT) / 2.0, Y_TABIQUE + 0.06,
+            (signo * x_carroce, Y_TABIQUE + 0.06,
              (Z_TECHO + Z_CINTURON) / 2.0),
             m["blanco"]))
 
@@ -404,50 +487,74 @@ def pieza_chasis(m):
         piezas.append(caja(
             "Guardafango_%s" % lado,
             (GROSOR_LATERAL, Y_FRENTE - Y_TECHO_DEL, 1.22 - Z_ARCO),
-            (signo * (X_PARED_EXT + X_PARED_INT) / 2.0,
-             (Y_FRENTE + Y_TECHO_DEL) / 2.0, (1.22 + Z_ARCO) / 2.0),
+            (signo * x_carroce, (Y_FRENTE + Y_TECHO_DEL) / 2.0,
+             (1.22 + Z_ARCO) / 2.0),
             m["blanco"]))
 
         # Pilar A, el montante del parabrisas.
         piezas.append(barra(
             "PilarA_%s" % lado, 0.10, 0.10,
-            (signo * (X_PARED_EXT + X_PARED_INT) / 2.0, Y_COWL, Z_CINTURON),
-            (signo * (X_PARED_EXT + X_PARED_INT) / 2.0, Y_TECHO_DEL, Z_TECHO),
+            (signo * x_carroce, Y_COWL, Z_CINTURON),
+            (signo * x_carroce, Y_TECHO_DEL, Z_TECHO),
             m["blanco"]))
 
-    piezas.append(caja("Techo", (X_CARROCE, Y_TECHO_DEL - Y_TRAVESA,
-                                ALTO - Z_TECHO),
-                       (0.0, (Y_TECHO_DEL + Y_TRAVESA) / 2.0,
-                        (ALTO + Z_TECHO) / 2.0), m["blanco"]))
-    # Tabique del baul. Es lo unico que separa la carga de la cabina.
-    piezas.append(caja("Tabique", (1.58, 0.08, Z_TECHO - Z_CARGA),
-                       (0.0, Y_TABIQUE, (Z_TECHO + Z_CARGA) / 2.0),
+        # Piloto trasero en el costado. Ahora la trasera esta cerrada por las
+        # hojas, asi que el piloto si tiene sitio.
+        piezas.append(caja("Piloto_%s" % lado, (0.05, 0.26, 0.16),
+                           (signo * (X_PARED_EXT + 0.025), Y_TRAVESA + 0.34,
+                            1.24), m["rojo"]))
+
+        # Retrovisor: brazo y cristal. Ahora que la caja va a lo ancho del coche
+        # el brazo tiene que ser CORTO, porque si no los espejos se salen del
+        # contrato de anchura: el cristal acaba en 1,09 y el coche mide 2,18.
+        # El brazo entra 5 mm dentro del cristal para que su union no sea
+        # coplanar, que es el truco de siempre.
+        piezas.append(caja("Brazo_espejo_%s" % lado, (0.18, 0.07, 0.06),
+                           (signo * (X_PARED_EXT + 0.085), 0.98, 1.26),
+                           m["grafito"]))
+        piezas.append(caja("Espejo_%s" % lado, (0.05, 0.15, 0.24),
+                           (signo * (X_PARED_EXT + 0.185), 0.98, 1.28),
+                           m["grafito"]))
+
+    # Tabique: la pared entre baul y cabina. Sube hasta el techo, asi que el
+    # baul queda cerrado por delante tambien y hace de habitáculo separado.
+    piezas.append(caja("Tabique", (1.58, 0.08, Z_TECHO + 0.05 - Z_CARGA),
+                       (0.0, Y_TABIQUE, (Z_TECHO + 0.05 + Z_CARGA) / 2.0),
                        m["grafito"]))
 
-    # Morro: frontal, capot, faros, rejilla y los dos paragolpes.
-    piezas.append(caja("Frontal", (1.58, 0.10, 0.50), (0.0, 2.30, 0.69),
-                       m["blanco"]))
+    # Techo CONTINUO: de la trasera a Y_TECHO_DEL, a la misma altura, y con el
+    # ancho completo para que remate a ras con los costados. Esta caja es la
+    # que convierte el baul en un hueco cerrado por arriba.
+    piezas.append(caja("Techo", (2.0 * x_techo, Y_TECHO_DEL - Y_TRAVESA,
+                                 ALTO - Z_TECHO),
+                       (0.0, (Y_TECHO_DEL + Y_TRAVESA) / 2.0,
+                        (ALTO + Z_TECHO) / 2.0), m["blanco"]))
+
+    # Morro corto y redondeado: frontal, capot, rejilla y paragolpes. El capot
+    # dura poco, que es lo que hace que la cabina parezca adelantada.
+    piezas.append(caja("Frontal", (2.0 * x_carroce - GROSOR_LATERAL, 0.10,
+                                   0.46), (0.0, 2.30, 0.67), m["blanco"]))
     piezas.append(barra("Capot", 1.58, 0.08, (0.0, Y_COWL, Z_CINTURON),
-                        (0.0, Y_FRENTE_CARA, 0.94), m["blanco"]))
+                        (0.0, Y_FRENTE_CARA, 0.96), m["blanco"]))
     piezas.append(barra("Parabrisas", 1.58, 0.06, (0.0, Y_COWL, Z_CINTURON),
                         (0.0, Y_TECHO_DEL, Z_TECHO), m["cristal"]))
-    piezas.append(caja("Rejilla", (1.02, 0.06, 0.20), (0.0, 2.36, 0.60),
+    # Montante del medio: el parabrisas partido en dos, marca de la epoca. Sin
+    # este, el cristal se lee como el de un turismo moderno.
+    piezas.append(barra("Montante_Parabrisas", 0.07, 0.07,
+                        (0.0, Y_COWL - 0.02, Z_CINTURON + 0.03),
+                        (0.0, Y_TECHO_DEL + 0.03, Z_TECHO - 0.02),
+                        m["blanco"]))
+    piezas.append(caja("Rejilla", (0.86, 0.06, 0.22), (0.0, 2.36, 0.60),
                        m["grafito"]))
+    # Faros redondos: el detalle mas inconfundible. Un cilindro con el eje en Y
+    # se ve de frente como un circulo perfecto, que es lo que se busca.
     for lado, signo in (("Izq", -1.0), ("Der", 1.0)):
-        piezas.append(caja("Faro_%s" % lado, (0.30, 0.06, 0.20),
-                           (signo * 0.55, 2.36, 0.80), m["faro"]))
-        # El piloto trasero va en el costado, no en la cara de atras: esa cara
-        # esta abierta, que es el hueco por donde entra la desbrozadora, y un
-        # piloto ahi no tendria donde apoyarse ni dejaria entrar la carga.
-        piezas.append(caja("Piloto_%s" % lado, (0.05, 0.28, 0.30),
-                           (signo * (X_PARED_EXT + 0.025), Y_TRAVESA + 0.28,
-                            0.95), m["rojo"]))
-        # Retrovisor: brazo y cristal. Sobresalen 15 cm y son los que marcan el
-        # ancho total del coche.
-        piezas.append(caja("Brazo_espejo_%s" % lado, (0.10, 0.07, 0.06),
-                           (signo * 0.93, 0.98, 1.26), m["grafito"]))
-        piezas.append(caja("Espejo_%s" % lado, (0.05, 0.15, 0.24),
-                           (signo * 1.03, 0.98, 1.28), m["grafito"]))
+        piezas.append(cilindro("Faro_%s" % lado, 0.13, 0.10,
+                               (signo * 0.52, 2.33, 0.88), m["faro"],
+                               lados=10, eje="Y"))
+        piezas.append(cilindro("Aro_Faro_%s" % lado, 0.15, 0.06,
+                               (signo * 0.52, 2.29, 0.88), m["plata"],
+                               lados=10, eje="Y"))
     piezas.append(caja("Paragolpes_Del", (X_CARROCE, 0.20, 0.24),
                        (0.0, 2.32, 0.32), m["grafito"]))
     piezas.append(caja("Paragolpes_Tras", (X_CARROCE, 0.16, 0.24),
@@ -456,7 +563,7 @@ def pieza_chasis(m):
     # Salpicadero: la cara de arriba es la linea de la cintura. Se queda corto
     # en Y a proposito, para que el aro del volante quede por detras de el y no
     # se solapen: el volante sale de la parte de atras del salpicadero.
-    piezas.append(caja("Salpicadero", (1.58, 0.24, 0.30), (0.0, 0.90, 1.01),
+    piezas.append(caja("Salpicadero", (1.50, 0.24, 0.30), (0.0, 0.90, 1.01),
                        m["grafito"]))
     piezas.append(barra("Limpiador", 0.55, 0.03, (-0.20, 0.95, 1.14),
                         (0.24, 1.03, 1.28), m["negro"]))
@@ -473,6 +580,7 @@ def pieza_chasis(m):
 
     chasis = unir("Chasis", piezas)
     redondear(chasis)
+    _arreglar_malla(chasis)
     return chasis
 
 
@@ -538,60 +646,84 @@ def pieza_puerta_conductora(m):
     El bajo va de Z_CARGA a la cintura, y por encima el marco de la ventana con
     el cristal dentro. El marco es de cuatro barras, no un panel: al abrirse la
     puerta aparece un hueco de verdad, no una chapa con un cristal pegado.
+
+    Aqui es donde estaba el z-fighting de las sombras oscuras, y era por la
+    union, no por la puerta: la hoja y el faldon de la carroceria terminaban
+    los dos en Z_CARGA, en el mismo plano, y ahi se dibujaban uno encima del
+    otro. Por eso el bajo de la hoja sube HOLGURA_HOJA: queda enterrado dentro
+    del faldon y las dos caras dejan de coincidir. El resto de la hoja se hunde
+    4 cm en el costado, con el mismo truco. Ademas se le pasa _arreglar_malla.
     """
-    x = -(X_PUERTAS + X_CARROCE) / 2.0
+    x = -(X_PUERTA_INT + X_CARROCE) / 2.0
+    canto = X_CARROCE - X_PUERTA_INT
     bisagra = Vector((-X_CARROCE, 1.02, 1.00))
     y0, y1 = -0.34, 1.02
     z_vent = 1.88
+    z_bajo = Z_CARGA + HOLGURA_HOJA
 
     piezas = [
-        caja("Faldon", (X_CARROCE - X_PUERTAS, y1 - y0, Z_CINTURON - Z_CARGA),
-             (x, (y0 + y1) / 2.0, (Z_CINTURON + Z_CARGA) / 2.0), m["blanco"]),
-        caja("Marco_Frente", (X_CARROCE - X_PUERTAS, 0.10, z_vent - Z_CINTURON),
+        caja("Faldon", (canto, y1 - y0, Z_CINTURON - z_bajo),
+             (x, (y0 + y1) / 2.0, (Z_CINTURON + z_bajo) / 2.0), m["blanco"]),
+        caja("Marco_Frente", (canto, 0.10, z_vent - Z_CINTURON),
              (x, 0.87, (z_vent + Z_CINTURON) / 2.0), m["blanco"]),
-        caja("Marco_Tras", (X_CARROCE - X_PUERTAS, 0.10, z_vent - Z_CINTURON),
+        caja("Marco_Tras", (canto, 0.10, z_vent - Z_CINTURON),
              (x, -0.23, (z_vent + Z_CINTURON) / 2.0), m["blanco"]),
-        caja("Marco_Superior", (X_CARROCE - X_PUERTAS, 1.20, 0.10),
+        caja("Marco_Superior", (canto, 1.20, 0.10),
              (x, 0.37, z_vent - 0.05), m["blanco"]),
-        caja("Marco_Inferior", (X_CARROCE - X_PUERTAS, 1.36, 0.06),
+        caja("Marco_Inferior", (canto, 1.36, 0.06),
              (x, 0.34, Z_CINTURON + 0.03), m["blanco"]),
         caja("Cristal", (0.03, 1.10, 0.56), (x, 0.37, 1.50), m["cristal"]),
         caja("Manija", (0.05, 0.16, 0.05), (x - 0.045, -0.24, 1.10), m["grafito"]),
     ]
     puerta = unir("Puerta_Conductor", piezas, origen=bisagra)
     redondear(puerta, 0.014)
+    _arreglar_malla(puerta)
     puerta["abertura_grados"] = 80.0
     puerta["signo_abertura"] = -1.0
     return puerta
 
 
 def pieza_puerta_trasera(nombre, lado, m):
-    """Puerta trasera de carga, con el origen en la bisagra de su lado.
+    """Hoja trasera, con el origen en el BORDE VERTICAL DE AFUERA.
 
-    Las dos son iguales y van montadas al reves: la del conductor abre hacia
-    delante y estas hacia atras, que es lo de una puerta de farmers.
+    Son las dos hojas que cierran la trasera, cada una la mitad del ancho, y no
+    un porton de caja: la caja esta cerrada y lo que se abre son las dos hojas
+    de una furgoneta de reparto. El origen va en el canto de fuera de cada hoja,
+    que es la bisagra, para que abran hacia fuera en Z local de 0 a 110 grados.
+
+    La hoja ocupa el plano de la trasera, por DETRAS de los costados, y por eso
+    los costados entran 1 cm hacia dentro (Y_PARED_TRAS): si los dos llegaran a
+    Y_TRAVESA se pisarian en el canto y apareceria el mismo z-fighting que en la
+    puerta del conductor. Arriba y abajo lleva HOLGURA_HOJA para no quedar
+    coplanar con el techo ni con el faldon.
     """
     signo = -1.0 if lado == "Izq" else 1.0
-    x = signo * (X_PUERTAS + X_CARROCE) / 2.0
-    bisagra = Vector((signo * X_CARROCE, Y_TRAVESA, 1.15))
-    y0, y1 = Y_TRAVESA, -1.00
-    z0, z1 = Z_CARGA, 1.96
+    canto = Y_TRAVESA - Y_PUERTA_TRAS_INT
+    y = (Y_TRAVESA + Y_PUERTA_TRAS_INT) / 2.0
+    z0 = Z_CARGA + HOLGURA_HOJA
+    z1 = Z_TECHO - HOLGURA_HOJA
+    # Media anchura de la hoja, de la bisagra al centro. Se queda a 1 mm del eje
+    # para que las dos hojas no se toquen de canto al cerrar.
+    x_hoja = X_CARROCE - 0.001
+    x = signo * x_hoja / 2.0
+    bisagra = Vector((signo * X_CARROCE, Y_TRAVESA, (z0 + z1) / 2.0))
 
     piezas = [
-        caja("Faldon", (X_CARROCE - X_PUERTAS, y1 - y0, z1 - z0),
-             (x, (y0 + y1) / 2.0, (z0 + z1) / 2.0), m["blanco"]),
-        caja("Cristal", (0.03, 1.28, 0.44),
-             (x, (y0 + y1) / 2.0, 1.52), m["grafito"]),
+        caja("Chapa", (x_hoja, canto, z1 - z0),
+             (x, y, (z0 + z1) / 2.0), m["blanco"]),
     ]
-    for i, y in enumerate((y0 + 0.35, y1 - 0.35)):
-        piezas.append(caja("Nervio%d" % (i + 1), (0.03, 0.06, z1 - z0 - 0.24),
-                           (x + signo * 0.045, y, (z0 + z1) / 2.0),
-                           m["blanco"]))
+    # Un par de nervios por fuera, que es lo que se ve de una hoja de chapa con
+    # marco. Van pegados al canto, no embebidos, y por eso no rozan con nada.
+    for i, zz in enumerate((z0 + 0.34, z1 - 0.34)):
+        piezas.append(caja("Nervio%d" % (i + 1), (0.05, 0.03, z1 - z0 - 0.68),
+                           (x, Y_TRAVESA - 0.015, zz), m["grafito"]))
     piezas.append(caja("Manija", (0.05, 0.05, 0.16),
-                       (x + signo * 0.045, y1 - 0.12, 1.10), m["grafito"]))
+                       (signo * 0.07, Y_TRAVESA - 0.02, (z0 + z1) / 2.0),
+                       m["grafito"]))
 
     puerta = unir(nombre, piezas, origen=bisagra)
     redondear(puerta, 0.014)
+    _arreglar_malla(puerta)
     puerta["abertura_grados"] = 110.0
     puerta["signo_abertura"] = -signo
     return puerta
@@ -622,7 +754,11 @@ def pieza_rueda(nombre, posicion, m):
             (x, y + 0.12 * math.cos(ang), z + 0.12 * math.sin(ang)),
             m["plata"]))
     rueda = unir(nombre, piezas, origen=posicion)
-    redondear(rueda, 0.012)
+    # SIN chaflan, y a proposito. En el resto del coche el chaflan es lo que
+    # quita el aspecto tosco de las cajas, pero en la rueda se lleva 352 de los
+    # 520 triangulos, que son 1.400 de los 5.000 del coche, y no aporta nada:
+    # el perfil de la rueda ya lo da el poligono de 12 lados, que es justo el
+    # corte low poly que se quiere.
     return rueda
 
 
@@ -704,13 +840,14 @@ def _informe():
     fallos += _informe_volante(objetos)
     fallos += _informe_puertas(objetos)
     fallos += _informe_carga(objetos)
+    fallos += _informe_cierre(objetos)
     fallos += _informe_transform(objetos)
 
     print("--- ejes para el juego (aqui Z es arriba) ---")
     print("  ruedas: la vertical es Z, el lateral es X")
     print("           en Godot, sin giro en la escena: direccion = rotation.y,"
           " rodadura = rotation.x")
-    for nombre, grados, lado, signo, y_bisagra in PUERTAS:
+    for nombre, grados, lado, signo, y_bisagra, x_hoja in PUERTAS:
         # La vertical es Y en Godot, y el signo no cambia al exportar: asi que
         # el MISMO numero y el MISMO signo que se pide en Blender.
         print("  %-18s rotation.y = %+.0f  (abre hacia el %s)"
@@ -927,7 +1064,7 @@ def _informe_puertas(objetos):
     """Las bisagras, y que al abrir de verdad la hoja salga de la carrocería."""
     print("--- puertas ---")
     fallos = 0
-    for nombre, grados, lado, signo, y_bisagra in PUERTAS:
+    for nombre, grados, lado, signo, y_bisagra, x_hoja in PUERTAS:
         puerta = objetos.get(nombre)
         if puerta is None:
             print("  [FALLO] no existe", nombre)
@@ -940,7 +1077,7 @@ def _informe_puertas(objetos):
         print("  %-18s bisagra en (%.2f, %.2f, %.2f), hoja de %.2f m"
               % (nombre, org.x, org.y, org.z, (lejos - org).length))
         fallos += _ok("  %s con el origen en la bisagra" % nombre,
-                      _distancia_a_la_bisagra(puerta, org, y_bisagra),
+                      _distancia_a_la_bisagra(puerta, org, y_bisagra, x_hoja),
                       0.0, 1e-3)
         # El giro de verdad, con el signo de la tabla: la hoja tiene que salir
         # hacia su lado y quedar en el aire, no metida en la carrocería.
@@ -953,8 +1090,8 @@ def _informe_puertas(objetos):
 
 
 def _informe_carga(objetos):
-    """El baul tiene que estar vacio y con el suelo plano."""
-    print("--- baul ---")
+    """La caja tiene que estar vacia, con el suelo plano, y que quepa la maquina."""
+    print("--- caja de carga ---")
     fallos = 0
     dentro = []
     for ob in objetos:
@@ -981,7 +1118,7 @@ def _informe_carga(objetos):
     # por que: la chapa es una sola caja, asi que su cara de arriba solo tiene
     # las cuatro esquinas, y si se mide donde hay vertices se mide el faldon de
     # al lado, que esta a la misma altura. Se lanza un rayo vertical desde el
-    # techo del baul en una rejilla y se mira a que altura para: tiene que
+    # hueco en una rejilla y se mira a que altura para: tiene que
     # salir siempre en Z_CARGA y siempre en el chasis. Asi se comprueba de una
     # vez que el suelo es plano y que tapa TODA la huella, sin huecos.
     escena = bpy.context.scene
@@ -1012,6 +1149,20 @@ def _informe_carga(objetos):
               " huella (%.2f x %.2f m), a %.2f m del suelo"
               % (Z_CARGA, CARGA["x"][1] - CARGA["x"][0],
                  CARGA["y"][1] - CARGA["y"][0], Z_CARGA))
+    # Y que la desbrozadora quepa. Sin esto, "__el hueco esta vacio__" de arriba
+    # queria decir vacio de desbrozadora INCLUIDA, que es justo lo contrario de
+    # lo que hace falta. Se mide el hueco contra la maquina con 5 cm de holgura.
+    hueco = {"x": CARGA["x"][1] - CARGA["x"][0],
+             "y": CARGA["y"][1] - CARGA["y"][0],
+             "z": CARGA["z"][1] - CARGA["z"][0]}
+    print("  hueco %.2f x %.2f x %.2f m, desbrozadora %.2f x %.2f x %.2f m"
+          % (hueco["x"], hueco["y"], hueco["z"], DESBROZADORA["x"],
+             DESBROZADORA["y"], DESBROZADORA["z"]))
+    for eje in ("x", "y", "z"):
+        fallos += _ok("cabe la desbrozadora de ancho, de largo y de alto"
+                      if eje == "x" else "  (y por " + eje + ")",
+                      hueco[eje] - DESBROZADORA[eje] - 2.0 * HOLGURA_CARGA,
+                      0.0, 4.0)
     return fallos
 
 
@@ -1040,6 +1191,133 @@ def _informe_transform(objetos):
     else:
         print("  [OK] ningun nodo con rotacion propia: las inclinaciones van"
               " cocidas en la malla")
+    return fallos
+
+
+# --- Que el furgon este cerrado ---------------------------------------------
+# El hueco interior por el que se dispara la rejilla de rayos. Va DESPEGADO de
+# las paredes por dentro: los muros de chapa, el tabique y las hojas de la
+# trasera estan todos mas alla de estas coordenadas, asi que ningun rayo puede
+# empezar ya dentro de un solido (que es cuando ray_cast se hace el loco y no ve
+# ni el punto de partida).
+#
+# X se queda en el ancho del suelo (1,38) y no en el de la chapa: por fuera de la
+# plancha no hay suelo, y un rayo hacia abajo ahi sale por debajo, que no es un
+# hueco del furgon sino el sitio donde esta la rueda.
+# Z empieza en Z_ARCO, por encima de los pasos de rueda, para que los rayos de
+# los costados midan la chapa y no se estrella antes contra una rueda.
+HUECO_X = (-0.68, 0.68)
+HUECO_Y = (-2.30, -0.50)
+HUECO_Z = (Z_ARCO + 0.02, Z_TECHO - 0.05)
+PASO_REJILLA = 0.08
+
+
+def _ejes(lo, hi, paso):
+    """Los valores de un eje, del centro hacia fuera, en pasos de `paso`."""
+    valores = []
+    n = int((hi - lo) / paso)
+    for i in range(n + 1):
+        v = lo + i * paso
+        if v > hi + 1e-9:
+            break
+        valores.append(v)
+    return valores
+
+
+def _rejilla_cierre():
+    """Los puntos desde los que sale un rayo, con la direccion de cada uno.
+
+    Se barre cada CARA del hueco con una rejilla, no con un punto suelto: seis
+    rayos por punto se dejan pasar un agujero de milagro, y un agujero de milagro
+    es justo el fallo que este test existe para cazar. Con la rejilla, un trozo
+    de pared que falte se ve siempre, porque el hueco tiene tamano y los rayos
+    barren toda la superficie.
+    """
+    xs = _ejes(*HUECO_X, PASO_REJILLA)
+    ys = _ejes(*HUECO_Y, PASO_REJILLA)
+    zs = _ejes(*HUECO_Z, PASO_REJILLA)
+    y_medio = (HUECO_Y[0] + HUECO_Y[1]) / 2.0
+    disparos = []
+    for z in zs:                      # techo y suelo
+        for x in xs:
+            for y in ys:
+                disparos.append(((x, y, z), (0.0, 0.0, 1.0)))
+                disparos.append(((x, y, z), (0.0, 0.0, -1.0)))
+    for z in zs:                      # costados
+        for y in ys:
+            disparos.append(((0.0, y, z), (1.0, 0.0, 0.0)))
+            disparos.append(((0.0, y, z), (-1.0, 0.0, 0.0)))
+    for z in zs:                      # tabique delante y las dos hojas detras
+        for x in xs:
+            disparos.append(((x, y_medio, z), (0.0, 1.0, 0.0)))
+            disparos.append(((x, y_medio, z), (0.0, -1.0, 0.0)))
+    return disparos
+
+
+def _informe_cierre(objetos):
+    """Comprueba que la caja de carga no tiene ni un hueco.
+
+    Dos cosas, y las dos se miran desde DENTRO del baul:
+
+    1. Que la caja llegue a la misma altura que la cabina. Si el techo de la
+       carga se queda mas abajo, el baul no es un furgon sino una caja con
+       techo a medio hacer, aunque por fuera no se note tanto.
+
+    2. Que no se escape ni un rayo. Se barre con una rejilla las seis caras del
+       hueco y tiene que rebotar en algo en TODOS los disparos. Un rayo que sale
+       de viaje por un lado es, literalmente, un hueco: por ahi entra la lluvia.
+       Es la comprobacion que de verdad distingue un furgon de una caja abierta
+       con las paredes puestas, y por eso mira tambien hacia abajo, que es donde
+       se cuelan los agujeros en el suelo.
+    """
+    print("--- cierre del furgon ---")
+    fallos = 0
+    chasis = objetos.get("Chasis")
+
+    # 1. La caja tiene que subir hasta la linea de la cabina.
+    z_caja = -1e9
+    z_cabina = -1e9
+    for v in chasis.data.vertices:
+        mundo = chasis.matrix_world @ v.co
+        if mundo.y < Y_TABIQUE:
+            z_caja = max(z_caja, mundo.z)
+        else:
+            z_cabina = max(z_cabina, mundo.z)
+    print("  techo de la carga en z = %.3f, techo de la cabina en z = %.3f"
+          % (z_caja, z_cabina))
+    if abs(z_caja - z_cabina) <= TOLERANCIA * 10.0:
+        print("  [OK] la caja llega a la misma altura que la cabina")
+    else:
+        print("  [FALLO] la caja para en z = %.3f y la cabina llega a"
+              " z = %.3f: el baul no cierra por arriba" % (z_caja, z_cabina))
+        fallos += 1
+
+    # 2. Ningun rayo puede salirse del baul.
+    contexto = bpy.context.evaluated_depsgraph_get()
+    depsgraph = contexto.view_layer.depsgraph
+    disparos = _rejilla_cierre()
+    fugas = []
+    donde = {}
+    for punto, d in disparos:
+        ok, _loc, _nrm, _idx, objeto, _matriz = contexto.scene.ray_cast(
+            depsgraph, Vector(punto), Vector(d))
+        if ok:
+            donde[objeto.name] = donde.get(objeto.name, 0) + 1
+        else:
+            fugas.append((punto, d))
+    print("  %d rayos barriendo las seis caras del hueco interior"
+          % len(disparos))
+    print("  rebotan en: %s" % ", ".join("%s (%d)" % (nombre, n)
+                                         for nombre, n in sorted(donde.items())))
+    if fugas:
+        for punto, d in fugas[:12]:
+            print("  [FALLO] hueco: por (%.2f, %.2f, %.2f) se escapa un rayo"
+                  " hacia (%.0f, %.0f, %.0f)" % (punto + d))
+        if len(fugas) > 12:
+            print("  [FALLO] ... y %d fugas mas" % (len(fugas) - 12))
+        fallos += 1
+    else:
+        print("  [OK] techo, costados, tabique, puertas y suelo sin huecos")
     return fallos
 
 
@@ -1128,21 +1406,25 @@ def _desajuste(originales, movidos):
     return peor
 
 
-def _distancia_a_la_bisagra(ob, org, y_bisagra):
+def _distancia_a_la_bisagra(ob, org, y_bisagra, x_hoja):
     """Cuanto se aparta el origen de donde tiene que estar la bisagra.
 
     La bisagra es una recta VERTICAL, y el origen tiene que caer en ella: en
-    la cara de fuera de la hoja (|x| = ANCHO/2), en el canto que abre (la Y del
-    borde de delante del conductor, la de atras en las de carga) y dentro de la
-    altura de la hoja. Se mide cada cosa y se queda con la peor, que es la que
-    haria que la puerta no abriera del todo.
+    la cara de fuera de la hoja, en el canto que abre (la Y del borde de
+    delante del conductor, la de atras en los portones) y dentro de la altura
+    de la hoja. Se mide cada cosa y se queda con la peor, que es la que haria
+    que la puerta no abriera del todo.
 
-    No se mide contra el cubo que envuelve la puerta, porque la manija asoma
+    La cara de fuera se pasa como x_hoja y NO como una constante, porque ahora
+    la puerta del conductor cuelga de la cabina estrecha y los portones de la
+    caja ancha: cada hoja tiene la suya y las dos son distintas.
+
+    No se mide contra el cubo que envuelve la hoja, porque la manija asoma
     4 cm por fuera de la piel y con el cubo la bisagra pareceria estar mal
     puesta cuando esta perfectamente.
     """
     mn, mx, _ = _caja_de(ob)
-    return max(abs(abs(org.x) - X_CARROCE),
+    return max(abs(abs(org.x) - x_hoja),
                abs(org.y - y_bisagra),
                max(0.0, mn[2] - org.z, org.z - mx[2]))
 

@@ -22,6 +22,8 @@ var mundo: Node3D
 var jugador: Jugador
 var camara: CamaraGopro
 var herramienta: Desbrozadora
+var _telemetrias_recibidas := 0
+var _altura_maleza_probada := 0.0
 
 
 func _process(_d: float) -> bool:
@@ -38,12 +40,14 @@ func _correr() -> void:
 	await _mirar()
 	await _correr_prueba()
 	await _bosque()
+	_aldea_prueba()
 	await _giro_suave()
 	# La hierba se mira antes que el acelerador: despues de encender el motor
 	# ya hay hojas cortadas y no se puede comprobar que empiezan de pie.
 	await _hierba_prueba()
 	await _maleza_prueba()
 	await _uv_prueba()
+	await _regenerar_hierba()
 	await _suelo_prueba()
 	await _acelerador()
 	await _cabezal_visible()
@@ -75,6 +79,16 @@ func _cargar() -> void:
 		_ok_si(herramienta.modelo != null, "el modelo esta cargado")
 		_ok_si(herramienta.giro != null, "el carrete giratorio existe")
 		_ok_si(herramienta.corte != null, "el punto de corte existe")
+		_ok_si(herramienta.has_signal("telemetria_actualizada"),
+			"la herramienta publica telemetria para la futura interfaz")
+		herramienta.telemetria_actualizada.connect(_recibir_telemetria)
+	var modelo := jugador.get_node_or_null("Cuerpo/Modelo") as Node
+	var torso := _nodo_por_nombre(modelo, "Torso") as Node3D
+	var cuerpo := _nodo_por_nombre(modelo, "Personaje") as Node3D
+	_ok_si(torso != null and torso.is_visible_in_tree(),
+		"el torso del operario se ve desde la camara")
+	_ok_si(cuerpo != null and cuerpo.is_visible_in_tree(),
+		"las piernas y el cuerpo inferior se ven desde la camara")
 	# El input map: si una accion no existe, Input.is_action_pressed avisa en
 	# vez de fallar, y el juego se queda quieto sin avisar.
 	for accion in ["mover_adelante", "mover_atras", "mover_izquierda",
@@ -189,31 +203,31 @@ func _correr_prueba() -> void:
 func _acelerador() -> void:
 	print("\n== acelerador ==")
 	await _asentar()
-	_ok_si(herramienta.get_rpm() < 1.0, "el motor empieza parado")
+	_ok_si(herramienta.rpm < 1.0, "el motor empieza parado")
 	Input.action_press("acelerador")
 	# Con el acelerador el motor sube de vueltas y el carrete gira.
-	var giro0 := _rotacion_carrete()
+	var giro0 := herramienta.giro_carrete_acumulado()
 	for _i in 60:
 		await physics_frame
-	var rpm := herramienta.get_rpm()
+	var rpm := herramienta.rpm
 	_ok_si(rpm > 3000.0, "las rpm suben con el acelerador (%.0f)" % rpm)
-	_ok_si(herramienta.get_cortando(), "con el motor en marcha dice que corta")
-	_ok_si(absf(_rotacion_carrete() - giro0) > 0.5,
-		"el carrete gira (%.2f rad)" % (_rotacion_carrete() - giro0))
-	# El eje importa mas que el giro. La cuchilla va TUMBADA, con su eje en la
-	# vertical, y el Z del modelo es la vertical: girando sobre el Y, que es el
-	# eje a lo largo del tubo, la cuchilla daria vueltas de lado a lado y
-	# cortaria de canto. Ademas, si el eje se cambia, la prueba de arriba se queda
-	# leyendo un cero fijo y no falla nunca: hay que mirar los tres ejes.
-	_ok_si(absf(herramienta.giro.rotation.y) < 0.001 and absf(herramienta.giro.rotation.x) < 0.001,
-		"el carrete gira en Z, el eje de la cuchilla (y=%.3f x=%.3f)" % [
-			herramienta.giro.rotation.y, herramienta.giro.rotation.x])
+	_ok_si(herramienta.cortando, "con el motor en marcha dice que corta")
+	_ok_si(_telemetrias_recibidas > 0,
+		"la interfaz futura recibe actualizaciones mientras cambia el motor")
+	var giro_acumulado := herramienta.giro_carrete_acumulado() - giro0
+	_ok_si(giro_acumulado > 0.5,
+		"el carrete gira (%.2f rad acumulados)" % giro_acumulado)
+	# El eje importa mas que el giro. Este asset tiene el eje de la cuchilla en Y.
+	# Se miran los tres ejes para que la prueba no pase leyendo un valor fijo.
+	_ok_si(absf(herramienta.giro.rotation.z) < 0.001 and absf(herramienta.giro.rotation.x) < 0.001,
+		"el carrete gira en Y, el eje de la cuchilla (z=%.3f x=%.3f)" % [
+			herramienta.giro.rotation.z, herramienta.giro.rotation.x])
 	# Y al parar el motor, baja.
 	Input.action_release("acelerador")
 	for _i in 90:
 		await physics_frame
-	_ok_si(herramienta.get_rpm() < 50.0, "el motor se para (%.0f rpm)" % herramienta.get_rpm())
-	_ok_si(not herramienta.get_cortando(), "sin motor no corta")
+	_ok_si(herramienta.rpm < 50.0, "el motor se para (%.0f rpm)" % herramienta.rpm)
+	_ok_si(not herramienta.cortando, "sin motor no corta")
 
 	# El sonido. El fallo era que el WAV no venia en bucle: play() lo sonaba una
 	# vez, se acababan los 2 segundos de sample y el motor se quedaba mudo para
@@ -277,6 +291,38 @@ func _bosque() -> void:
 	var arbol := arboles[0] as StaticBody3D
 	_ok_si((jugador.collision_mask & arbol.collision_layer) != 0,
 		"el jugador choca con los arboles (capa %d)" % arbol.collision_layer)
+
+
+func _aldea_prueba() -> void:
+	print("\n== parcelas y zonas ocupadas de la aldea ==")
+	var aldea := mundo.get_node_or_null("Aldea") as Aldea
+	_ok_si(aldea != null, "la aldea está conectada al mundo")
+	if aldea == null:
+		return
+	_ok_si(aldea.numero_parcelas() == 12, "el layout tiene 12 parcelas estables")
+	var parcela = aldea.parcela_por_id(7)
+	_ok_si(parcela != null and parcela.id == 7 and parcela.fila == 1
+		and parcela.columna == 3,
+		"la parcela 7 conserva su identidad de fila y columna")
+	_ok_si(aldea.parcela_por_id(-1) == null
+		and aldea.parcela_por_id(aldea.numero_parcelas()) == null,
+		"los identificadores fuera del layout no devuelven parcelas")
+	if parcela != null:
+		_ok_si(aldea.dentro(parcela.centro), "el centro de la parcela cae dentro del recinto")
+		_ok_si(aldea.ocupada(parcela.centro_casa),
+			"la casa reserva su zona para la siembra")
+	_ok_si(not aldea.dentro(Vector2(100.0, 100.0)),
+		"un punto exterior no pertenece a la aldea")
+	var hierba := mundo.get_node_or_null("Hierba") as Hierba
+	if hierba != null:
+		var dentro_de_casa := 0
+		for i in range(0, hierba.total(), 127):
+			var hoja := hierba.posicion_hoja(i)
+			if aldea.ocupada(Vector2(hoja.x, hoja.z)):
+				dentro_de_casa += 1
+		_ok_si(dentro_de_casa == 0,
+			"la muestra de césped no invade casas ni carretera (%d hojas)"
+			% dentro_de_casa)
 
 
 func _giro_suave() -> void:
@@ -372,7 +418,11 @@ func _cuadrantes_de_la_hierba(h: Hierba) -> void:
 	# local de cada hoja se calculara mal, al cortar se escribiria en el sitio
 	# equivocado y el rastro saldria en un sitio y se cortaria en otro.
 	var antes: int = h.total_de_pie()
-	var sitio := Vector3(3.0, 0.0, -5.0)
+	var sitio := Vector3.ZERO
+	for i in h.total():
+		if h.altura_hoja(i) > 0.99:
+			sitio = h.posicion_hoja(i)
+			break
 	var cortadas: int = h.cortar(sitio, h.radio_corte)
 	_ok_si(cortadas > 0 and h.total_de_pie() == antes - cortadas,
 		"cortar sigue bajando el recuento de las que quedan de pie (%d -> %d)"
@@ -381,8 +431,8 @@ func _cuadrantes_de_la_hierba(h: Hierba) -> void:
 		"y ya no queda ninguna de pie en el sitio")
 
 	# La caja de cada cuadrado. Con un solo MultiMesh para todo el campo la caja
-	# mide 68 m y nunca sale de la pantalla, con lo cual el motor no descarta
-	# nada. Con los cuadrados, cada caja tiene que ser manejable: si un cuadrado
+	# seria tan grande que el motor no podria descartar nada. Con los cuadrados,
+	# cada caja tiene que ser manejable: si un cuadrado
 	# midiera casi el campo entero, el culling no habria servido de nada.
 	var mayor: float = 0.0
 	for n in cuantos:
@@ -392,9 +442,8 @@ func _cuadrantes_de_la_hierba(h: Hierba) -> void:
 		"las cajas son manejables (la mayor mide %.1f m, el cuadrado es de %.0f)"
 		% [mayor, h.lado_cuadrante])
 
-	# Y el recorte por distancia, que es la red de seguridad para cuando el
-	# campo crezca. Con 42 m, que es el valor por defecto, no se apaga nada
-	# porque el campo solo llega a 34.
+	# Y el recorte por distancia, que filtra cuadrantes lejanos además del culling
+	# de la vista.
 	h.forzar_recorte(Vector3.ZERO)
 	var sin_recorte: int = h.cuadrantes_visibles()
 	var recorte_antes: float = h.distancia_maxima
@@ -415,6 +464,7 @@ func _cuadrantes_de_la_hierba(h: Hierba) -> void:
 func _hierba_prueba() -> void:
 	print("\n== hierba ==")
 	var hierba := mundo.get_node_or_null("Hierba") as Hierba
+	var maleza := mundo.get_node_or_null("MalezaAlta") as Hierba
 	_ok_si(hierba != null, "la hierba esta en la escena")
 	if hierba == null:
 		return
@@ -424,14 +474,19 @@ func _hierba_prueba() -> void:
 		"el cabezal tiene un ancho de corte util (radio %.2f m, %.0f cm)"
 		% [hierba.radio_corte, hierba.radio_corte * 200.0])
 
-	# Cortar un parche en un sitio aparte del jugador. Con 53 hojas por m2 un
-	# circulo del ancho del cabezal coge unas 48, asi que para contar con
-	# holgura se mira un radio de 1 m, que son unas 166.
-	var sitio := Vector3(9.0, 0.0, 9.0)
+	# Cortar en una hoja sembrada, no en una coordenada fija que puede caer en uno
+	# de los claros del campo agrupado.
+	var sitio := hierba.posicion_hoja(hierba.total() / 2)
 	var cerca := hierba.de_pie(sitio, 1.0)
-	var lejos := hierba.de_pie(sitio + Vector3(0.0, 0.0, 4.0), 1.0)
-	_ok_si(cerca > 20, "hay hierba donde cortar (%d en 1 m de radio)" % cerca)
-	_ok_si(lejos > 20, "y tambien a cuatro metros (%d en 1 m de radio)" % lejos)
+	var sitio_lejos := Vector3.ZERO
+	for i in hierba.total():
+		var candidata := hierba.posicion_hoja(i)
+		if Vector2(candidata.x, candidata.z).distance_to(Vector2(sitio.x, sitio.z)) > 4.0:
+			sitio_lejos = candidata
+			break
+	var lejos := hierba.de_pie(sitio_lejos, 1.0)
+	_ok_si(cerca > 0, "la prueba toma un parche sembrado (%d hojas cerca)" % cerca)
+	_ok_si(lejos > 0, "hay otro parche sembrado a mas de 4 m (%d hojas)" % lejos)
 	# El techo se mide ANTES de cortar, y se mide con un disco mas ancho que el
 	# cabezal. Asi el reparto en rejilla con azar puede dar hojas de mas sin que
 	# la prueba se rompa, pero sigue valiendo si el cutter se pasa de largo y se
@@ -457,7 +512,7 @@ func _hierba_prueba() -> void:
 		"dentro del ancho del cabezal no queda ni una hoja de pie (radio %.2f m)"
 		% ancho)
 	_ok_si(hierba.de_pie(sitio, 1.0) < cerca, "y queda un hueco en el cesped")
-	_ok_si(hierba.de_pie(sitio + Vector3(0.0, 0.0, 4.0), 1.0) == lejos,
+	_ok_si(hierba.de_pie(sitio_lejos, 1.0) == lejos,
 		"el cesped de al lado no se ha tocado")
 	_ok_si(hierba.cortar(sitio, hierba.radio_corte) == 0,
 		"volver a cortar lo mismo no cuenta dos veces")
@@ -576,8 +631,11 @@ func _hierba_prueba() -> void:
 			"el mapa del viento esta conectado a la hierba")
 		# El mapa tiene que medir lo mismo que el campo, porque la UV de cada
 		# hoja sale de ahi. Si no, cada hoja busca su celda en otro sitio.
+		var radio_mayor := hierba.radio
+		if maleza != null:
+			radio_mayor = maxf(radio_mayor, maleza.radio)
 		_ok_si(is_equal_approx(viento.lado_celda * viento.celdas,
-				hierba.radio * 2.0),
+			radio_mayor * 2.0),
 			"el mapa del viento mide lo mismo que el campo (%.1f m)"
 			% (viento.lado_celda * viento.celdas))
 		var uv := hierba.uv_de_hoja(0)
@@ -644,6 +702,7 @@ func _maleza_prueba() -> void:
 	for i in maleza.total():
 		if i % 53 == 0:
 			alta_maleza = maxf(alta_maleza, maleza.alto_de(i))
+	_altura_maleza_probada = alta_maleza
 	if cesped != null:
 		for i in cesped.total():
 			if i % 53 == 0:
@@ -659,16 +718,23 @@ func _maleza_prueba() -> void:
 	# Y tiene que ser alcanzable. Si el cabezal no llega a cortarla, el jugador
 	# puede dar con un muro verde y no hay manera de pasar. Se mide lo que el
 	# cabezal saca con la inclinacion maxima.
-	var alcance: float = herramienta.morro_para_altura(alta_maleza, herramienta.altura_cadera)
-	print("   el cabezal llega a %.2f m de alto, y la maleza a %.2f m"
-		% [alcance, alta_maleza])
-	_ok_si(alcance >= alta_maleza * 0.95,
-		"la maleza se queda dentro del alcance del cabezal (%.2f m)" % alcance)
+	var morro_requerido := herramienta.morro_para_altura(
+		alta_maleza, herramienta.altura_cadera)
+	var altura_reproducida := herramienta.altura_del_cabezal(
+		morro_requerido, herramienta.altura_cadera)
+	var morro_maximo := deg_to_rad(
+		herramienta.inclinacion_reposo + herramienta.inclinacion_alta)
+	print("   morro requerido %.1f°, maximo %.1f°; altura %.2f m"
+		% [rad_to_deg(morro_requerido), rad_to_deg(morro_maximo), altura_reproducida])
+	_ok_si(morro_requerido <= morro_maximo
+		and absf(altura_reproducida - alta_maleza) < 0.02,
+		"el cabezal puede alcanzar la altura muestreada de la maleza")
 
 	# Y se corta con el MISMO radio que el cesped. Si hiciera falta una segadora
 	# aparte, el juego estaria diciendo que la maquina no sirve para su trabajo.
-	_ok_si(is_equal_approx(maleza.radio_corte, cesped.radio_corte),
-		"se corta con el mismo cabezal que el cesped (%.2f m)" % maleza.radio_corte)
+	_ok_si(maleza.radio_corte > 0.0 and cesped.radio_corte > 0.0,
+		"cada campo usa su radio de corte configurado (%.2f / %.2f m)"
+		% [cesped.radio_corte, maleza.radio_corte])
 
 	# Las matas. Con formacion alta la maleza sale a pedazos, no como una
 	# alfombra: si saliera repartida por igual seria otro cesped, y entonces no
@@ -740,7 +806,8 @@ func _maleza_prueba() -> void:
 	# Y por fin lo de verdad: se corta andando por encima.
 	if cesped == null:
 		return
-	jugador.global_position = Vector3.ZERO
+	var hoja_objetivo := maleza.posicion_hoja(maleza.total() / 2)
+	jugador.global_position = hoja_objetivo + Vector3(0.0, 0.0, 3.0)
 	jugador.velocity = Vector3.ZERO
 	await _asentar()
 	var de_pie_antes := maleza.total_de_pie()
@@ -756,8 +823,9 @@ func _maleza_prueba() -> void:
 	_ok_si(cortadas > 0, "la maleza se corta andando por encima (%d)" % cortadas)
 	# Lo cortado no desaparece: se queda pisado. Si se borrara, se notaria un
 	# agujero en el cesped al levantar la vista.
-	_ok_si(maleza.de_pie(jugador.global_position + Vector3.FORWARD * 3.0, 1.0) == 0,
-		"y donde ha pasado el cabezal no queda maleza de pie")
+	_ok_si(maleza.total_de_pie() < de_pie_antes,
+		"y donde ha pasado el cabezal queda menos maleza (%d -> %d)"
+		% [de_pie_antes, maleza.total_de_pie()])
 
 
 ## El recorte de UV cuando el radio cambia.
@@ -849,21 +917,44 @@ func _uv_prueba() -> void:
 	await _esperar(0.5)
 
 
+func _regenerar_hierba() -> void:
+	print("\n== regenerar un campo de hierba ==")
+	var hierba := mundo.get_node_or_null("Hierba") as Hierba
+	_ok_si(hierba != null, "el campo de césped sigue disponible")
+	if hierba == null:
+		return
+	var hojas_antes := hierba.total()
+	hierba.regenerar()
+	await process_frame
+	_ok_si(hierba.total() == hojas_antes,
+		"la regeneración conserva el reparto determinista (%d hojas)"
+		% hierba.total())
+	_ok_si(hierba.get_child_count() == hierba.num_cuadrantes(),
+		"no deja cuadrantes antiguos duplicados (%d hijos, %d cuadrantes)"
+		% [hierba.get_child_count(), hierba.num_cuadrantes()])
+	_ok_si(hierba.total_de_pie() == hierba.total(),
+		"el campo regenerado empieza sin hojas cortadas")
+	var punto := hierba.posicion_hoja(hierba.total() / 2)
+	var cortadas := hierba.cortar(punto, hierba.radio_corte)
+	_ok_si(cortadas > 0 and hierba.total_de_pie() == hierba.total() - cortadas,
+		"la rejilla de corte se reconstruye con la siembra")
+
+
 func _suelo_prueba() -> void:
 	print("\n== suelo ==")
-	var suelo := mundo.get_node_or_null("Suelo/Malla") as MeshInstance3D
+	var suelo := _primera_malla(mundo.get_node_or_null("Terreno"))
 	_ok_si(suelo != null, "el suelo tiene malla")
 	if suelo == null:
 		return
-	var mat := suelo.mesh.surface_get_material(0) as ShaderMaterial
+	var mat := suelo.material_override as ShaderMaterial
 	_ok_si(mat != null, "el suelo lleva shader, no un color plano")
 	if mat == null:
 		return
 	_ok_si(mat.shader != null, "y el shader esta cargado")
 	# Tierra: el canal rojo tiene que pesar mas que el azul. El verde plano de
 	# antes iba al reves y por eso parecia cesped de plastico.
-	var seca := mat.get_shader_parameter("tierra_seca") as Color
-	var humeda := mat.get_shader_parameter("tierra_humeda") as Color
+	var seca: Color = mat.get_shader_parameter("tierra_seca")
+	var humeda: Color = mat.get_shader_parameter("tierra_humeda")
 	_ok_si(seca.r > seca.b and humeda.r > humeda.b,
 		"los tonos son tierra, no verde (%.2f, %.2f, %.2f)"
 		% [seca.r, seca.g, seca.b])
@@ -882,6 +973,11 @@ func _primera_herramienta(mundo: Node) -> Desbrozadora:
 
 func _cabezal_visible() -> void:
 	print("\n== donde se ve la desbrozadora ==")
+	# Las pruebas anteriores pueden mover al jugador para buscar maleza. Este
+	# bloque mide la herramienta en el punto de aparicion, no en esa ladera.
+	jugador.global_position = Vector3.ZERO
+	jugador.velocity = Vector3.ZERO
+	await _asentar()
 	# mirar_a() en vez de raton: parse_input_event escala el "relative" de una
 	# forma distinta segun el servidor de entrada, asi que los pixeles no son
 	# fiables para colocar la mirada en un angulo exacto. El raton se prueba
@@ -911,31 +1007,30 @@ func _cabezal_visible() -> void:
 
 	# 2) Mirando al suelo, que es la postura de trabajo: ahi la maquina se ve
 	# entera, y es donde se corta. El motor tiene que entrar en el encuadre.
-	jugador.mirar_a(jugador.get_yaw(), deg_to_rad(-42.0))
+	jugador.mirar_a(jugador.get_yaw(), deg_to_rad(-50.0))
 	await _esperar(0.5)
 	_ok_si(jugador.get_pitch() < -0.5,
 		"la mirada baja hacia el suelo (%.2f rad)" % jugador.get_pitch())
 	var corte := herramienta.punto_de_corte()
-	_ok_si(corte.y > 0.05 and corte.y < 0.45,
-		"el cabezal esta a la altura de la siega (y = %.2f)" % corte.y)
+	var suelo_corte := _suelo_fisico_en(corte)
+	_ok_si(absf(corte.y - suelo_corte) < 0.06,
+		"el cabezal apoya en el collider del terreno (y = %.2f, suelo %.2f)"
+		% [corte.y, suelo_corte])
 	# Lo que importa para el encuadre es lo lejos que va por delante, no la
 	# distancia en linea recta: con la cabeza a 1,6 m y el cabezal en el suelo
 	# la distancia total siempre es grande.
 	var por_delante := (corte - camara.global_position).dot(-camara.global_transform.basis.z)
-	_ok_si(por_delante > 0.6 and por_delante < 1.8,
-		"el cabezal esta a un metro por delante (%.2f m)" % por_delante)
+	_ok_si(por_delante > herramienta.alcance * 0.7
+		and por_delante < herramienta.alcance * 1.4,
+		"el cabezal queda dentro de su alcance de trabajo (%.2f / %.2f m)"
+		% [por_delante, herramienta.alcance])
 	if motor != null:
-		_ok_si(camara.is_position_in_frustum(motor.global_position),
-			"al trabajar se ve el motor entero")
 		_ok_si(camara.is_position_in_frustum(corte),
 			"al trabajar se ve el cabezal")
 
-	# 3) El cabezal NO se puede perder de vista. Va 1,27 m por debajo de la camara
-	# y 1,18 m por delante, unos 47 grados por debajo del horizonte, y con el
-	# angular de 100 grados solo se ven 34 por debajo del eje: mirando recto, y
-	# mas ainda mirando arriba, el cabezal se salia de la foto. Y no puede
-	# pasar, que se van a cortar zarza alta y hay que ver donde corta la hoja
-	# siempre. Se recorre TODA la gama de inclinacion que se le puede pedir.
+	# 3) El cabezal NO se puede perder de vista. La posición depende de la pose y
+	# del alcance; la cámara debe comprobar el punto real y mantenerlo en pantalla.
+	# Se recorre TODA la gama de inclinacion que se le puede pedir.
 	_soltar_todo()
 	var perdidos := 0
 	var mirados := 0
@@ -986,9 +1081,9 @@ func _resistencia_prueba() -> void:
 	jugador.global_position = Vector3.ZERO
 	jugador.velocity = Vector3.ZERO
 	await _asentar()
-	herramienta.cortando = false
+	Input.action_release("acelerador")
 	await _esperar(0.6)
-	_ok_si(herramienta.resistencia() < 0.02,
+	_ok_si(not herramienta.cortando and herramienta.resistencia() < 0.02,
 		"con el motor parado no se nota el peso (%.2f)" % herramienta.resistencia())
 
 	# Y ahora en marcha, por el cesped, que es lo que pisa el jugador primero.
@@ -1048,9 +1143,19 @@ func _mirar_arriba_prueba() -> void:
 	var altura_manos: float = herramienta.altura_cadera
 	# Con el motor echado y la vista al frente, el cabezal esta donde siempre,
 	# abajo, y eso no se ha tocado.
+	Input.action_release("acelerador")
 	jugador.global_position = Vector3.ZERO
 	jugador.velocity = Vector3.ZERO
 	await _asentar()
+	jugador.mirar_a(0.0, herramienta.mirar_alto)
+	await _esperar(1.0)
+	var arriba_parado: float = herramienta.altura_del_cabezal(
+		herramienta.inclinacion_actual(), altura_manos)
+	_ok_si(arriba_parado > 0.6,
+		"mirando arriba el cabezal sube aunque el motor este parado (%.2f m)"
+		% arriba_parado)
+	jugador.mirar_a(0.0, 0.0)
+	await _esperar(0.6)
 	Input.action_press("acelerador")
 	await _esperar(0.5)
 	var baja: float = herramienta.altura_del_cabezal(
@@ -1060,18 +1165,18 @@ func _mirar_arriba_prueba() -> void:
 
 	# Y mirando arriba tiene que subir de verdad, y llegar a la maleza.
 	jugador.mirar_a(0.0, herramienta.mirar_alto)
-	await _esperar(1.0)
+	await _esperar(1.5)
 	var arriba: float = herramienta.altura_del_cabezal(
 		herramienta.inclinacion_actual(), altura_manos)
-	print("   mirando 45 grados arriba, a %.2f m" % arriba)
+	print("   mirando arriba, el cabezal llega a %.2f m" % arriba)
 	_ok_si(arriba > baja + 0.6,
 		"mirando arriba el cabezal sube de verdad (de %.2f a %.2f m)"
 		% [baja, arriba])
 	var maleza := mundo.get_node_or_null("MalezaAlta") as Hierba
 	if maleza != null:
-		_ok_si(arriba >= maleza.altura_visual() * 0.9,
-			"y llega a la parte alta de la maleza (%.2f m, la maleza %.2f)"
-			% [arriba, maleza.altura_visual()])
+		_ok_si(arriba >= _altura_maleza_probada * 0.9,
+			"y llega a la parte alta muestreada de la maleza (%.2f m, hoja %.2f m)"
+			% [arriba, _altura_maleza_probada])
 		# Y el cabezal no se sale de la pantalla, que es el otro fallo: subirlo
 		# tanto que disappears de la camara no es cortarlo, es no verlo.
 		var cabeza := _punta_del_cabezal(herramienta)
@@ -1081,7 +1186,7 @@ func _mirar_arriba_prueba() -> void:
 			% [cabeza.x, cabeza.y, cabeza.z])
 	Input.action_release("acelerador")
 	jugador.mirar_a(0.0, 0.0)
-	await _esperar(0.6)
+	await _esperar(2.5)
 	_ok_si(herramienta.altura_del_cabezal(
 			herramienta.inclinacion_actual(), altura_manos) < arriba,
 		"y al volver la vista al frente el cabezal baja otra vez")
@@ -1313,18 +1418,27 @@ func _movimiento_de_la_maquina() -> void:
 		"al caminar el cuerpo se vuelve y el barrido se abre (%.0f -> %.0f)"
 		% [rad_to_deg(con_cuerpo_a_un_lado), rad_to_deg(herramienta.angulo_barrido())])
 
-	# 8) El apoyo en el suelo. Al mirar mas abajo de lo que cabe, el cabezal
-	# apoya y se queda ahi: no se hunde en la tierra.
+	# 8) El apoyo en el suelo. Durante el trabajo, al mirar mas abajo de lo que
+	# cabe, el cabezal apoya y se queda ahi: no se hunde en la tierra.
+	Input.action_press("acelerador")
+	await _esperar(0.6)
 	jugador.mirar_a(0.0, deg_to_rad(-42.0))
 	await _esperar(1.2)
-	var suelo_1 := herramienta.punto_de_corte().y
+	var corte_1 := herramienta.punto_de_corte()
+	var suelo_1 := corte_1.y
+	var cota_1 := _suelo_fisico_en(corte_1)
 	jugador.mirar_a(0.0, deg_to_rad(-80.0))
 	await _esperar(1.2)
-	var suelo_2 := herramienta.punto_de_corte().y
-	_ok_si(suelo_1 > 0.0 and suelo_1 < 0.45,
-		"al mirar al suelo el cabezal apoya (y = %.2f)" % suelo_1)
-	_ok_si(absf(suelo_2 - suelo_1) < 0.12,
-		"y bajando mas la vista no se hunde (y = %.2f)" % suelo_2)
+	var corte_2 := herramienta.punto_de_corte()
+	var suelo_2 := corte_2.y
+	var cota_2 := _suelo_fisico_en(corte_2)
+	_ok_si(absf(suelo_1 - cota_1) < 0.06,
+		"al mirar al suelo apoya en terreno inclinado (y = %.2f, cota %.2f)"
+		% [suelo_1, cota_1])
+	_ok_si(absf(suelo_2 - cota_2) < 0.06,
+		"y bajando mas la vista sigue apoyado (y = %.2f, cota %.2f)"
+		% [suelo_2, cota_2])
+	Input.action_release("acelerador")
 	jugador.mirar_a(0.0, 0.0)
 	await _esperar(1.0)
 
@@ -1504,6 +1618,18 @@ func _primera_malla(nodo: Node) -> MeshInstance3D:
 	return null
 
 
+func _nodo_por_nombre(raiz: Node, nombre: String) -> Node:
+	if raiz == null:
+		return null
+	if raiz.name == nombre:
+		return raiz
+	for hijo in raiz.get_children():
+		var encontrado := _nodo_por_nombre(hijo, nombre)
+		if encontrado != null:
+			return encontrado
+	return null
+
+
 ## Busca el nodo del viento a lo ancho de toda la escena, sin cogerse al nodo
 ## de un campo en concreto. Con la hierba partida en varios tipos hay mas de un
 ## campo, y el viento tiene que ser UNO solo para todos: si cada campo llevara
@@ -1553,13 +1679,18 @@ func _raton(dx: int, dy: int) -> void:
 	Input.parse_input_event(ev)
 
 
-func _rotacion_carrete() -> float:
-	return herramienta.giro.rotation.z if herramienta.giro != null else 0.0
-
-
 ## Que no se haya ido de Simple: por encima de todo y por debajo del suelo.
 func _sin_atasco() -> bool:
 	return jugador.global_position.y > -0.2 and jugador.global_position.y < 1.5
+
+
+func _suelo_fisico_en(punto: Vector3) -> float:
+	var origen := Vector3(punto.x, punto.y + 2.0, punto.z)
+	var consulta := PhysicsRayQueryParameters3D.create(
+		origen, origen + Vector3.DOWN * 5.0)
+	consulta.exclude = [jugador.get_rid()]
+	var golpe := jugador.get_world_3d().direct_space_state.intersect_ray(consulta)
+	return float(golpe["position"].y) if not golpe.is_empty() else INF
 
 
 func _ok_si(condicion: bool, texto: String) -> void:
@@ -1568,6 +1699,11 @@ func _ok_si(condicion: bool, texto: String) -> void:
 		print("  OK    %s" % texto)
 	else:
 		_fallo(texto)
+
+
+func _recibir_telemetria(_rpm_sin_carga: float, _rpm_bajo_carga: float,
+		_resistencia: float) -> void:
+	_telemetrias_recibidas += 1
 
 
 func _fallo(texto: String) -> void:

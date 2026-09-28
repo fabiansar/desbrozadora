@@ -80,7 +80,9 @@ func _mirar() -> void:
 	print("  instancias: %d" % mm.instance_count)
 	print("  malla: %s" % str(mm.mesh))
 	if mm.mesh != null:
-		print("  vertices de la malla: %d" % mm.mesh.get_surface_count())
+		var arrays := mm.mesh.surface_get_arrays(0)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		print("  vertices de la malla: %d" % vertices.size())
 		print("  aabb de la malla: %s" % str(mm.mesh.get_aabb()))
 	print("  formateado: %d  datos propios: %s"
 		% [mm.transform_format, str(mm.use_custom_data)])
@@ -92,11 +94,10 @@ func _mirar() -> void:
 		% [primero.custom_aabb.size.x, primero.custom_aabb.size.y,
 			primero.custom_aabb.size.z])
 
-	# Lo importante: si el servidor guardo de verdad lo que se le ha puesto. Las
-	# transformadas de instancia salen a identidad a proposito: donde se coloca
-	# cada hoja es el shader, con los datos propios, no el motor.
+	# Lo importante: inspeccionar transforms y datos por instancia. En Vulkan
+	# deben contener posición/escala y INSTANCE_CUSTOM; el renderer headless puede
+	# devolver transforms identidad y colores a cero porque usa un servidor dummy.
 	print("--- lo que hay dentro ---")
-	print("  (las transformadas son identidad: el shader coloca cada hoja)")
 	var total := mm.instance_count
 	var muestra: Array[int] = [0, 1, total / 2, total - 1]
 	for i in muestra:

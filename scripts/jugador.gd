@@ -34,7 +34,7 @@ extends CharacterBody3D
 @export_range(0.0, 85.0, 1.0) var limite_pitch_arriba := 55.0
 ## Con que angulo se empieza mirando, en grados. El mismo motivo: hay que
 ## encuadrar el trabajo de salida, no el horizonte.
-@export_range(-85.0, 0.0, 1.0) var pitch_inicial := -25.0
+@export_range(-85.0, 0.0, 1.0) var pitch_inicial := -40.0
 ## Cuanto se agacha la camara, en metros.
 @export var altura_agachado := -0.55
 ## Velocidad con la que la camara vuelve a su sitio al agacharse.
@@ -50,7 +50,6 @@ extends CharacterBody3D
 ## detras de las manos. Es un export y no una variable a proposito: asi la
 ## cabeza solo se coloca en un sitio, en _agacharse().
 @export var agachado_extra := 0.0
-
 var _yaw := 0.0
 var _pitch := 0.0
 var _offset_agachado := 0.0
@@ -159,6 +158,20 @@ func _girar(delta: float) -> void:
 		# torso tanto como avanzar.
 		var local := _entrada_local()
 		if absf(local.y) < absf(local.x):
+			return
+		# Y hacia atras el cuerpo NO se vuelve. Ojo al signo: en _entrada_local()
+		# W es negativo y S positivo, asi que andar hacia atras es local.y > 0.
+		#
+		# Esto era un fallo gordo: la maquina se mide respecto al cuerpo, asi que
+		# al pulsar S el cuerpo se daba media vuelta y el objetivo de barrido se
+		# le iba 180 grados de golpe. Solo de pulsar S, la maquina se echaba al
+		# tope de un lado, y como el cuerpo seguia girando, no paraba: el
+		# jugador andaba hacia atras y la maquina barria como si estuviera
+		# trabajando al lado. Andar hacia atras tiene que ser solo eso: el
+		# jugador se va hacia atras y la maquina se queda donde estaba, que es
+		# ademas lo que hace una de verdad, que no se le teletransporta de un
+		# lado al otro de las caderas.
+		if local.y > 0.0:
 			return
 		# atan2 con el signo cambiado: en Godot -Z es delante, y el yaw de un
 		# nodo es el giro alrededor de Y, asi que sale con los dos signos

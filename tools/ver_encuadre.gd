@@ -20,14 +20,18 @@ func _initialize() -> void:
 	root.add_child(mundo)
 	for _i in 25:
 		await physics_frame
-	var cam := mundo.get_node("Player/Cabeza/Camara") as Camera3D
+	var jugador := mundo.get_node("Player") as Jugador
+	var cam := jugador.get_node("Cabeza/Camara") as Camera3D
 	print("camara: angular %.0f grados, %.2f m sobre el suelo"
 		% [cam.fov, cam.global_position.y])
 	print("")
-	print("%-12s %-8s %-24s %-8s %s" % ["malla", "visible", "local camara", "cuadro", "nota"])
+	print("%-28s %-8s %-24s %-8s %s" % ["malla", "visible", "local camara", "cuadro", "nota"])
 	var dentro := 0
 	var fuera := 0
-	for n in _mallas(mundo):
+	# El diagnóstico interesa al cuerpo y a la herramienta. Recorrer el mundo
+	# entero incluye cientos de fragmentos de terreno y cuadrantes de vegetación,
+	# que repiten el mismo origen lógico y saturan el informe.
+	for n in _mallas(jugador):
 		var vm := n as VisualInstance3D
 		if not vm.is_visible_in_tree():
 			print("%-12s OCULTA" % n.name)
@@ -46,8 +50,14 @@ func _initialize() -> void:
 			fuera += 1
 			if ang > 33.0:
 				nota += "  (por debajo del borde inferior)"
-		print("%-12s %-8s (%5.2f,%5.2f,%5.2f)   %-8s %s"
+		print("%-28s %-8s (%5.2f,%5.2f,%5.2f)   %-8s %s"
 			% [n.name, "si", loc.x, loc.y, loc.z, "si" if en else "no", nota])
+	var herramienta := _buscar_herramienta()
+	if herramienta != null:
+		print("")
+		print("maquina: origen %s; corte %s; offset de corte local %s"
+			% [str(herramienta.global_position), str(herramienta.punto_de_corte()),
+				str(herramienta._cabeza_local)])
 	print("")
 	print("se ven %d mallas y no se ven %d" % [dentro, fuera])
 	quit(0)
@@ -60,3 +70,10 @@ func _mallas(n: Node) -> Array:
 	for h in n.get_children():
 		r.append_array(_mallas(h))
 	return r
+
+
+func _buscar_herramienta() -> Desbrozadora:
+	for nodo in get_nodes_in_group("herramienta"):
+		if nodo is Desbrozadora:
+			return nodo as Desbrozadora
+	return null

@@ -40,21 +40,11 @@ Las tres reglas de alineacion que importan, y como se comprueban:
   3. Todas las piezas pasan por transform_apply antes de exportarse, para que
      no se queden rotaciones ni escalas sin aplicar en el .glb.
 
-El truco del giro, que es lo importante de este archivo:
-  El disco es HORIZONTAL, o sea que su eje es la VERTICAL. Y el nodo que gira
-  tiene que girar sobre la vertical, no sobre el eje de la maquina.
-  Aqui esta la cuenta, que es donde easy se equivoca:
-    - Godot compone en YXZ, asi que rotation = (x, y, z) da Ry * Rx * Rz.
-    - Si el nodo Gio no tiene inclinacion propia, escribir rotation.z mete
-      exactamente un giro sobre su Z, y su Z es la vertical: la escena le da al
-      modelo un giro de 180 grados en Y, que no cambia el Z. El disco gira plano.
-    - Escribir rotation.y, en cambio, mete un giro sobre el Y de la maquina, que
-      es el eje a lo largo del tubo. El disco horizontal daria una vuelta de lado
-      a lado, y eso es justo lo que se veía antes.
-    - Y una inclinacion propia en X (90 grados) NO arregla nada: en YXZ se
-      combina con la Y y el resultado deja de ser un giro sobre la vertical.
-      Por eso Giro va sin rotacion ninguna.
-  O sea: el disco tumbado obliga a girar sobre Z, y el juego escribe Z.
+El contrato del giro:
+  El disco se construye horizontal en Blender. `export_yup=True` lo convierte en
+  un disco horizontal en Godot, cuyo eje vertical es Y. Por eso el juego anima
+  `Giro.rotation.y`. El nodo `Giro` debe exportarse sin inclinación propia para
+  que esa rotación siga siendo un giro plano y no se mezcle con otra orientación.
 
 Y el truco del enganche, que arregla un error que arrastraba el modelo viejo:
   Las piezas se crean en coordenadas de mundo y se enganchan al padre con
@@ -71,30 +61,106 @@ import os
 import sys
 
 import bpy
+from mathutils import Vector
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 if _AQUI not in sys.path:
     sys.path.insert(0, _AQUI)
 import exportar_blender  # noqa: E402
 
-OUT_DIR = os.path.expanduser("~/Documentos/desarrollos/desbrozadora/models")
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT_DIR = os.path.join(PROJECT_DIR, "models")
 OUT_FILE = os.path.join(OUT_DIR, "desbrozadora.glb")
 
 # --- Medidas, en metros ---------------------------------------------------
-# El motor va en +Y y el cabezal en -Y. La maquina cuelga del (0, 0, 0), que
-# esta en el manillar, y el cabezal queda por debajo y por delante.
-Y_MOTOR = 0.30
-Y_CABEZA = -0.88
+# El motor va en +Y y el cabezal en -Y. La máquina cuelga del (0, 0, 0), que
+# está en el manillar. Se alarga el tramo de trabajo para llevar motor/caja hacia
+# la cadera y dejar el cabezal a una distancia más realista del cuerpo.
+Y_MOTOR = 0.62
+Y_CABEZA = -1.56
 Z_CORTE = -0.222
-RADIO_TUBO = 0.022
-# El tubo llega hasta dentro del codo del cabezal (-0.91) y hasta la caja de
-# engranajes del motor (0.105). Si se queda corto, se ve un hueco en las dos
-# uniones, que es justo lo que hay que evitar.
-LARGO_TUBO = 1.06
-Y_TUBO = -0.36
-# Los agarres van de pie y el origen esta en su punto medio, que es donde el
-# juego cuelga las manos.
-LARGO_EMPUNADURA = 0.180
+# La barra mide 50 mm de grosor y 2,06 m de largo para duplicar aproximadamente
+# el tramo de trabajo y dejar el motor detrás del operario.
+RADIO_TUBO = 0.025
+# El tubo llega hasta dentro del codo del cabezal y hasta la caja de
+# engranajes del motor. Si se queda corto, se ve un hueco en las dos uniones.
+LARGO_TUBO = 2.06
+Y_TUBO = -0.53
+Y_CAJA_MOTOR = 0.47
+
+# El manillar es un tubo que sale de la abrazadera, se abre en U y sube por los
+# dos lados. El camino va de un puño al otro pasando por el origen, que es la
+# abrazadera y el punto donde el juego cuelga las manos.
+# Los puntos que suben son los que hacen la curva: un manillar de verdad se dobla
+# al final, no se dobla todo recto y luego pega dos palos.
+#
+# Y_MA es cuanto se separa la abrazadera del origen, hacia el CABEZAL (Y
+# negativo). El manillar va mas hacia el centro de la barra que antes, que estaba
+# pegado al motor y dejaba toda la barra por delante para la anilla.
+Y_MA = -0.100
+MANILLAR = (
+    (-0.200, Y_MA + 0.045, 0.210),   # puño izquierdo, arriba y atras
+    (-0.222, Y_MA - 0.010, 0.125),
+    (-0.198, Y_MA - 0.022, 0.038),
+    (-0.105, Y_MA - 0.008, 0.000),
+    (0.000, Y_MA, 0.000),           # la abrazadera
+    (0.105, Y_MA - 0.008, 0.000),
+    (0.198, Y_MA - 0.022, 0.038),
+    (0.222, Y_MA - 0.010, 0.125),
+    (0.200, Y_MA + 0.045, 0.210),    # puño derecho
+)
+RADIO_BARRA = 0.017
+RADIO_PUNO = 0.024
+LARGO_PUNO = 0.100
+
+# La anilla del arnes: un collar en la barra con una argolla colgando por
+# debajo. Es el punto donde se cuelga el operario.
+#
+# Va ENTRE el manillar y el cabezal, y separada del manillar. Antes estaba en
+# Y_ANILLA = -0.120, o sea practicamente debajo del manillar, y decia "por
+# delante" cuando en realidad estaba al lado. Ahora se mide desde el manillar,
+# hacia el cabezal, para que la separacion este escrita y no sea casualidad: si
+# se mueve el manillar, la anilla le sigue guardando el hueco.
+SEPARACION_ANILLA = 0.190
+Y_ANILLA = Y_MA - SEPARACION_ANILLA
+
+# El cable del acelerador, del mando del puño derecho al motor. Arranca en el
+# gatillo (el punto se calcula ahi, no aqui, para que le siga si se mueve).
+#
+# Va PEGADO, no cerca: cada punto esta a la distancia justa para que el cable
+# toque el tubo, ni mas ni menos. Primero sigue la curva del manillar por fuera,
+# gira en la esquina y luego baja por delante de la barra hasta la caja de
+# engranajes. La holura de cada tramo se comprueba despues, por tramos, porque
+# un cable que se separa se ve que va por el aire.
+CABLE = (
+    # (punto, tramo, tubo al que tiene que ir pegado)
+    (None, None, None),          # el gatillo, se rellena en la funcion
+    ((0.2324, Y_MA - 0.0100, 0.1440), "manillar", "manillar"),
+    ((0.2170, Y_MA - 0.0220, 0.0430), "manillar", "manillar"),
+    ((0.1444, Y_MA - 0.0100, -0.0020), "manillar", "manillar"),
+    ((0.0780, Y_MA - 0.0040, -0.0200), "manillar", "manillar"),
+    # la esquina: gira del manillar a la barra, sin ir pegado a ninguna de las
+    # dos, que ahi no cabe.
+    ((0.0500, Y_MA + 0.0140, -0.0200), None, None),
+    # y ya por la barra, hacia la caja de engranajes del motor.
+    ((0.0243, 0.0400, -0.0060), "barra", "barra"),
+    ((0.0250, 0.0900, 0.0000), "barra", "barra"),
+    ((0.0250, 0.1450, 0.0000), "barra", "barra"),
+    ((0.0250, 0.2300, 0.0000), "barra", "barra"),
+    ((0.0250, 0.3150, 0.0000), "barra", "barra"),
+    ((0.0250, 0.4000, 0.0000), "barra", "barra"),
+    ((0.0250, 0.4650, 0.0000), "barra", "barra"),
+)
+RADIO_CABLE = 0.007
+
+# El tramo de barra, de la abrazadera a la caja de engranajes. Se usa para
+# comprobar que el cable va pegado ahi.
+BARRA = ((0.0, Y_TUBO - LARGO_TUBO / 2.0, 0.0),
+         (0.0, Y_TUBO + LARGO_TUBO / 2.0, 0.0))
+
+# La abrazadera que une el manillar con la barra. Corta a proposito, para que el
+# cable del acelerador pueda pasar por delante al girar hacia la barra.
+LARGO_ABRAZADERA = 0.024
 
 # Por debajo de esta altura solo hay piezas de corte: el protector, el buje y
 # las puntas. El gearbox y el codo cuelgan por encima y no cuentan para medir
@@ -108,9 +174,9 @@ TRIANGULOS_MAX = 900
 # den el mismo veredicto sobre la misma maquina. El corte esta donde cae el
 # cabezal, unos 0,9 m por delante de las manos; el juego lo mide en tiempo de
 # ejecucion, asi que esto es solo una comprobacion de cordura.
-ESPERADO_LARGO = (1.0, 1.5)
+ESPERADO_LARGO = (2.3, 2.55)
 ESPERADO_ANCHO = (0.15, 0.60)
-ESPERADO_CORTE_Y = (-1.05, -0.80)
+ESPERADO_CORTE_Y = (-1.70, -1.45)
 
 # Lo que hay que medir para decir que algo esta alineado.
 TOLERANCIA = 1e-4
@@ -132,6 +198,12 @@ def material(nombre, rgb, metal=0.0, rugosidad=0.6):
         bsdf.inputs["Roughness"].default_value = rugosidad
     mat.diffuse_color = (rgb[0], rgb[1], rgb[2], 1.0)
     return mat
+
+
+# Fallos de la anilla y del cable, que se comprueban al construir el manillar,
+# antes de unir las piezas. _informe() los suma despues.
+ANILLA_MAL = 0
+CABLE_MAL = 0
 
 
 # --- Piezas sueltas -------------------------------------------------------
@@ -249,6 +321,81 @@ def punta(nombre, r_in, r_out, ancho_in, ancho_out, grosor, mat, angulo=0.0):
     return ob
 
 
+def tubo_trayecto(nombre, puntos, radio, mat, lados=6, referencia=(0.0, 1.0, 0.0)):
+    """Un tubo que sigue una polilinea, sin costuras ni uniones.
+
+    En cada punto del camino se coloca un anillo perpendicular a la tangente, y
+    los anillos vecinos se empolvan. Asi la curva sale continua, que es justo lo
+    que distingue un manillar curvo de una barra recta con dos palos pegados.
+    """
+    arriba = Vector(referencia)
+    camino = [Vector(p) for p in puntos]
+    vertices = []
+    for i, punto in enumerate(camino):
+        if i == 0:
+            tangente = camino[1] - camino[0]
+        elif i == len(camino) - 1:
+            tangente = camino[-1] - camino[-2]
+        else:
+            tangente = camino[i + 1] - camino[i - 1]
+        tangente.normalize()
+        n1 = tangente.cross(arriba)
+        if n1.length < 1e-6:
+            # El camino va en la misma linea que la referencia: se usa otra.
+            n1 = tangente.cross(Vector((0.0, 0.0, 1.0)))
+        n1.normalize()
+        n2 = tangente.cross(n1)
+        for j in range(lados):
+            a = 2.0 * math.pi * j / lados
+            vertices.append(tuple(punto + radio * (math.cos(a) * n1
+                                                   + math.sin(a) * n2)))
+    caras = []
+    for i in range(len(camino) - 1):
+        for j in range(lados):
+            k = (j + 1) % lados
+            caras.append((i * lados + j, i * lados + k,
+                          (i + 1) * lados + k, (i + 1) * lados + j))
+    # Las dos tapas, para que el tubo sea un solido cerrado.
+    caras.append(tuple(range(lados - 1, -1, -1)))
+    base = (len(camino) - 1) * lados
+    caras.append(tuple(base + j for j in range(lados)))
+    return malla_propia(nombre, vertices, caras, mat)
+
+
+def _distancia_camino(punto, camino):
+    """Lo mas lejos que esta un punto de una polilinea, tramos y no puntos.
+
+    Medir solo contra los puntos sueltos da un numero falso: el tubo se crea
+    entre punto y punto, y sus vertices caen en medio, lejos de cualquiera de
+    los dos. Hay que medir contra el tramo entero.
+    """
+    camino = [Vector(p) for p in camino]
+    mejor = 1e9
+    for a, b in zip(camino, camino[1:]):
+        u = b - a
+        largo = u.length
+        if largo < 1e-9:
+            continue
+        t = max(0.0, min(1.0, (punto - a).dot(u) / (largo * largo)))
+        mejor = min(mejor, (punto - (a + u * t)).length)
+    if len(camino) == 1:
+        mejor = (punto - camino[0]).length
+    return mejor
+
+
+def _muestra_camino(camino, paso=0.005):
+    """El camino con puntos intermedios, para poder medir por franjas."""
+    camino = [Vector(p) for p in camino]
+    salida = []
+    for a, b in zip(camino, camino[1:]):
+        largo = (b - a).length
+        n = max(1, int(largo / paso))
+        for i in range(n):
+            salida.append(a + (b - a) * (i / n))
+    salida.append(camino[-1])
+    return salida
+
+
 def unir(nombre, piezas, origen=None):
     """Junta las piezas en un objeto, y opcionalmente le pone el origen."""
     bpy.ops.object.select_all(action="DESELECT")
@@ -300,7 +447,7 @@ def pieza_motor(naranja, oscuro):
     redondear(bloque)
     # La caja de engranajes es del motor, no de la barra. Asi la Barra queda
     # como un unico cilindro recto y se puede medir sin ruido.
-    caja_motor = cilindro("CajaMotor", 0.048, 0.090, (0.0, 0.150, 0.010),
+    caja_motor = cilindro("CajaMotor", 0.048, 0.090, (0.0, Y_CAJA_MOTOR, 0.010),
                           oscuro, 10, "Y")
     return unir("Motor", [bloque, caja_motor])
 
@@ -311,26 +458,138 @@ def pieza_barra(plateado):
     return unir("Barra", [tubo])
 
 
-def pieza_manillar(negro, naranja, oscuro):
-    """Travesano horizontal y los dos agarres VERTICALES.
+def pieza_manillar(mats):
+    """Manillar de cuerno de buey, con los puños arriba.
 
-    Los agarres van de pie, no tumbados en el eje del travesano. Un manillar de
-    bicicleta los lleva tumbados, y ademas el juego cuelga las manos del
-    origen, que aqui es justo el punto donde se cruzan las dos cosas.
+    No son dos palos clavados en una barra recta, que es como parecia antes y no
+    es ergonomic: es un unico tubo que sale de la abrazadera, se abre en U y sube
+    por los dos lados. El camino lo recorre tubo_trayecto para que la curva sea
+    continua, y los puños de goma van en las dos puntas, con los mandos en el
+    derecho.
+
+    Ademas lleva lo que de verdad hace falta en una desbrozadora: la anilla del
+    arnes, colgando de la barra por delante del manillar, y el cable del
+    acelerador hasta el motor.
     """
-    traversano = cilindro("Travesano", 0.018, 0.440, (0.0, 0.0, 0.0),
-                          negro, 8, "X")
-    izquierda = cilindro("EmpuñaduraIzq", 0.026, LARGO_EMPUNADURA,
-                          (-0.200, 0.0, 0.0), negro, 8, "Z")
-    derecha = cilindro("EmpuñaduraDer", 0.026, LARGO_EMPUNADURA,
-                        (0.200, 0.0, 0.0), negro, 8, "Z")
-    # La abrazadera rodea la barra, que pasa por el origen en Y.
-    abrazadera = cilindro("Abrazadera", 0.036, 0.050, (0.0, 0.0, 0.0),
-                          oscuro, 10, "Y")
-    # El acelerador, por delante del agarre derecho.
-    gatillo = caja("Acelerador", (0.038, 0.040, 0.110),
-                   (0.196, -0.040, 0.020), naranja)
-    return unir("Manillar", [traversano, izquierda, derecha, abrazadera, gatillo])
+    barra = tubo_trayecto("BarraManillar", MANILLAR, RADIO_BARRA, mats["negro"], 6)
+    piezas = [barra]
+
+    for lado, punta, anterior in (("Izq", 0, 1), ("Der", -1, -2)):
+        # El eje del puño es el del ultimo tramo de la curva, que es el que dice
+        # hacia donde apunta el puño.
+        hacia = (Vector(MANILLAR[punta]) - Vector(MANILLAR[anterior])).normalized()
+        quat = hacia.to_track_quat("Z", "Y")
+        centro = Vector(MANILLAR[punta]) + quat @ Vector((0.0, 0.0, 0.030))
+
+        puno = cilindro("Puno%s" % lado, RADIO_PUNO, LARGO_PUNO,
+                        (0.0, 0.0, 0.0), mats["goma"], 8, "Z")
+        puno.rotation_mode = "QUATERNION"
+        puno.rotation_quaternion = quat
+        puno.location = centro
+        piezas.append(puno)
+
+        if lado == "Der":
+            # El gatillo cuelga por debajo del puño, y el paro va encima, que es
+            # donde lo llevan las de verdad.
+            gatillo = _en_el_puno("Gatillo", (0.022, 0.040, 0.050),
+                                  (0.0, -0.032, 0.010),
+                                  mats["naranja"], centro, quat)
+            piezas.append(gatillo)
+            piezas.append(_en_el_puno("Paro", (0.018, 0.016, 0.024),
+                                      (0.0, 0.030, 0.030),
+                                      mats["rojo"], centro, quat))
+
+    # El cable sale de debajo del gatillo, no de un punto inventado al lado: si
+    # el gatillo se mueve, el cable le sigue.
+    inicio = tuple(gatillo.matrix_world.translation
+                   + gatillo.matrix_world.to_3x3() @ Vector((0.0, -0.020, 0.0)))
+    camino = [(inicio, None, None)] + [(p, t, c) for p, t, c in CABLE[1:]]
+    cable = tubo_trayecto("Cable", [p for p, _, _ in camino], RADIO_CABLE,
+                          mats["negro"], 4, referencia=(0.0, 0.0, 1.0))
+    piezas.append(cable)
+
+    # La abrazadera que une el manillar con la barra.
+    abrazadera = cilindro("Abrazadera", RADIO_TUBO + 0.011, LARGO_ABRAZADERA,
+                          (0.0, 0.0, 0.0), mats["plateado"], 10, "Y")
+    piezas.append(abrazadera)
+
+    # La anilla del arnes: collar en la barra, por delante del manillar, y
+    # argolla colgando por debajo. Es el punto donde se cuelga el operario.
+    collar = cilindro("CollarArnes", RADIO_TUBO + 0.011, 0.030,
+                      (0.0, Y_ANILLA, 0.0), mats["plateado"], 10, "Y")
+    piezas.append(collar)
+    anilla = toro("AnillaArnes", 0.026, 0.007, (0.0, Y_ANILLA, -0.052),
+                  mats["plateado"], 8, 3)
+    anilla.rotation_euler = (0.0, math.radians(90.0), 0.0)
+    piezas.append(anilla)
+
+    # Las piezas se comprueban aqui, antes de unirlas: despues del join solo
+    # existe el objeto Manillar y estos nombres ya no estan.
+    global ANILLA_MAL, CABLE_MAL
+    for clave in ("PunoIzq", "PunoDer", "AnillaArnes", "Cable", "Gatillo",
+                  "Paro", "Abrazadera"):
+        if not any(p.name == clave for p in piezas):
+            print("  [FALLO] falta la pieza del manillar", clave)
+            ANILLA_MAL += 1
+
+    # matrix_world no esta al dia hasta que el depsgraph se actualiza, y aqui
+    # los objetos son nuevos: sin esto se lee la matriz de antes de moverlos.
+    bpy.context.view_layer.update()
+    org = anilla.matrix_world.translation
+    # Lo que se comprueba es lo que se pidio: separada del manillar, y antes en
+    # la barra, o sea entre el manillar y el cabezal. La separacion se mide de
+    # verdad, no de memoria: si se junta al mango, se ve.
+    holgura = Y_MA - org.y
+    if holgura < SEPARACION_ANILLA - 0.005:
+        print("  [FALLO] la anilla del arnes esta a %.3f m del manillar: tiene"
+              " que estar a %.3f, separada del mango"
+              % (holgura, SEPARACION_ANILLA))
+        ANILLA_MAL += 1
+    elif org.y < Y_CABEZA + 0.10:
+        print("  [FALLO] la anilla del arnes se ha ido al cabezal (%.3f)" % org.y)
+        ANILLA_MAL += 1
+    else:
+        print("  [OK] anilla del arnes en (%.2f, %.2f, %.2f), a %.3f m del"
+              " manillar, antes en la barra"
+              % (org.x, org.y, org.z, holgura))
+
+    # Y el cable tiene que ir PEGADO al tubo, no flotando al lado. Se mide por
+    # tramos, porque el tubo cambia: sigue el manillar, gira en la esquina y
+    # sigue la barra. La esquina se salta, porque ahi no puede ir pegado a los
+    # dos a la vez.
+    #
+    # La holura es la distancia al eje del tubo menos el radio del tubo. Si es
+    # cero, el cable esta tocando; si es positiva, esta en el aire.
+    for nombre, tubo in (("manillar", MANILLAR), ("barra", BARRA)):
+        radio = RADIO_BARRA if nombre == "manillar" else RADIO_TUBO
+        holuras = []
+        for i, (punto, tramo, a_que) in enumerate(camino):
+            if tramo != nombre:
+                continue
+            holuras.append(_distancia_camino(Vector(punto), tubo) - radio)
+        if not holuras:
+            print("  [FALLO] el cable no tiene ningun tramo por la %s" % nombre)
+            CABLE_MAL += 1
+            continue
+        peor = max(holuras)
+        print("  cable por la %s: holura maxima %.4f m" % (nombre, peor))
+        if peor > 0.005:
+            print("  [FALLO] el cable se separa %.4f m de la %s: flota"
+                  % (peor, nombre))
+            CABLE_MAL += 1
+        else:
+            print("  [OK] el cable va pegado a la %s" % nombre)
+
+    return unir("Manillar", piezas)
+
+
+def _en_el_puno(nombre, tamano, offset, mat, centro, quat):
+    """Una pieza pegada al puño, colocada en el sistema del propio puño."""
+    ob = caja(nombre, tamano, (0.0, 0.0, 0.0), mat)
+    ob.rotation_mode = "QUATERNION"
+    ob.rotation_quaternion = quat
+    ob.location = centro + quat @ Vector(offset)
+    return ob
 
 
 def pieza_cabezal(plateado, naranja, oscuro, negro):
@@ -387,6 +646,10 @@ def _materiales():
         "plateado": material("Metal_Plateado", (0.70, 0.72, 0.75), 0.35, 0.55),
         "oscuro": material("Metal_Oscuro", (0.26, 0.27, 0.29), 0.70, 0.45),
         "nailon": material("Nailon", (0.82, 0.79, 0.68), 0.0, 0.70),
+        # Los punos son de goma: mas oscura, mas mate y mas gordos que la barra,
+        # para que se lean de lejos que ahi van las manos.
+        "goma": material("Goma", (0.05, 0.05, 0.06), 0.0, 0.85),
+        "rojo": material("Rojo", (0.70, 0.08, 0.06), 0.0, 0.45),
     }
 
 
@@ -394,7 +657,7 @@ def _montar_maquina(mats):
     """La desbrozadora con su cuchilla de serie. Sin cabezales de repuesto."""
     motor = pieza_motor(mats["naranja"], mats["oscuro"])
     barra = pieza_barra(mats["plateado"])
-    manillar = pieza_manillar(mats["negro"], mats["naranja"], mats["oscuro"])
+    manillar = pieza_manillar(mats)
     cabezal = pieza_cabezal(mats["plateado"], mats["naranja"], mats["oscuro"],
                              mats["negro"])
 
@@ -402,9 +665,8 @@ def _montar_maquina(mats):
     for ob in (motor, barra, manillar, cabezal):
         aplicar(ob)
 
-    # Giro SIN rotacion: el disco va tumbado y el juego lo hace girar sobre su
-    # Z, que es la vertical. Any inclinacion aqui se combinaria con la del
-    # juego en YXZ y el disco dejaria de girar plano.
+    # Giro SIN rotacion: el disco exportado está horizontal y el juego lo anima
+    # sobre Y, el eje vertical de Godot. Una inclinación aquí mezclaría ejes.
     giro = empty("Giro", (0.0, Y_CABEZA, Z_CORTE), 0.06)
     root = empty("Desbrozadora", (0.0, 0.0, 0.0), 0.3)
 
@@ -503,7 +765,12 @@ def _informe():
     print("caja: x[%.3f, %.3f] y[%.3f, %.3f] z[%.3f, %.3f]"
           % (mn[0], mx[0], mn[1], mx[1], mn[2], mx[2]))
 
+    global ANILLA_MAL, CABLE_MAL
     fallos = 0
+    # La anilla y el cable se comprueban al construir el manillar, antes de
+    # unir las piezas, y avisan por pantalla. Se suman aqui, que es donde se
+    # decide si la maquina se exporta.
+    fallos += ANILLA_MAL + CABLE_MAL
     fallos += _ok("largo", mx[1] - mn[1], *ESPERADO_LARGO)
     fallos += _ok("ancho", mx[0] - mn[0], *ESPERADO_ANCHO)
     print("  %d triangulos (el presupuesto es %d)" % (triangulos, TRIANGULOS_MAX))
@@ -549,35 +816,47 @@ def _informe():
         fallos += _sin(plano, "Cabezal_Corta no va horizontal",
                        minimo=0.0, maximo=GROSOR_MAX)
 
-    # --- Regla 4: el manillar es el de una desbrozadora --------------------
+    # --- Regla 4: el manillar se curva hacia arriba ------------------------
     manillar = objetos.get("Manillar")
     if manillar is None:
         print("  [FALLO] no esta la pieza Manillar")
         fallos += 1
     else:
-        # Los agarres de pie: en las puntas del travesano, mas altos que
-        # hondos. Un manillar de bicycle los lleva tumbados a lo largo del
-        # travesano, y entonces esto falla. Se mira solo la zona de los
-        # agarres (x>0,15) porque el travesano es ancho por diseño.
-        puntos = [manillar.matrix_world @ v.co for v in manillar.data.vertices]
-        agarres = [p for p in puntos if abs(p.x) > 0.15]
-        alto = max(p.z for p in agarres) - min(p.z for p in agarres)
-        hondo = max(p.y for p in agarres) - min(p.y for p in agarres)
-        print("  agarres: %.3f m de alto por %.3f m de fondo"
-              % (alto, hondo))
-        if alto < 0.12 or alto <= hondo:
-            print("  [FALLO] los agarres no van verticales: parecen los de una"
-                  " bicicleta")
+        # Lo que distingue un manillar de cuerno de buey de dos palos clavados en
+        # una barra recta es que la altura media SUBE segun te alejas del
+        # centro. Se mide por franjas de X sobre el camino, no sobre la malla: la
+        # malla incluye el cable y los mandos, que la falsearian.
+        camino = _muestra_camino(MANILLAR)
+        franjas = []
+        for x0, x1 in ((0.05, 0.11), (0.11, 0.16), (0.16, 0.30)):
+            zs = [p.z for p in camino if x0 <= abs(p.x) < x1]
+            franjas.append(sum(zs) / len(zs) if zs else 0.0)
+        print("  manillar: altura media por franjas %.3f, %.3f, %.3f m"
+              % tuple(franjas))
+        if not (franjas[0] < franjas[1] < franjas[2] and franjas[2] > 0.10):
+            print("  [FALLO] el manillar no se curva hacia arriba: parece una"
+                  " barra recta con dos palos")
             fallos += 1
         else:
-            print("  [OK] manillar con los agarres verticales")
-        mundo = manillar.matrix_world.translation
-        if math.hypot(mundo.x, mundo.y) > TOLERANCIA or abs(mundo.z) > TOLERANCIA:
-            print("  [FALLO] el manillar no esta centrado en el origen, que es"
-                  " donde van las manos")
+            print("  [OK] manillar curvo, con los punos arriba")
+
+        # Y la barra tiene que cruzar el eje de la maquina, que es donde van las
+        # manos. El manillar ya no esta en Y=0 exacto: esta a Y_MA, hacia el
+        # cabezal, asi que lo que se comprueba es que el punto central de su
+        # camino este en Y_MA. Se mira el camino y no el objeto, porque despues
+        # del unir el origen del objeto se queda donde estaba, en Y=0.
+        central = Vector(MANILLAR[len(MANILLAR) // 2])
+        if abs(central.x) > TOLERANCIA or abs(central.z) > TOLERANCIA:
+            print("  [FALLO] el manillar no esta centrado en X y Z")
+            fallos += 1
+        elif abs(central.y - Y_MA) > TOLERANCIA:
+            print("  [FALLO] el manillar esta en Y=%.3f y deberia estar en %.3f"
+                  % (central.y, Y_MA))
             fallos += 1
         else:
-            print("  [OK] el manillar cruza el origen: ahi van las manos")
+            print("  [OK] el manillar cruza la barra en Y=%.3f, ahi van las"
+                  " manos" % central.y)
+
 
     # Y el disco tiene que quedar por debajo de la barra, no al lado.
     corte = objetos.get("Corte")
@@ -599,8 +878,8 @@ def _informe():
             fallos += 1
 
     # El giro: Giro tiene que estar SIN rotacion. El juego escribe
-    # giro.rotation.z, que es la vertical, y cualquier inclinacion previa se le
-    # sumaria en YXZ y tumbaria el disco.
+    # giro.rotation.y, que es la vertical en Godot; cualquier inclinación previa
+    # se mezclaría con la rotación y el disco dejaría de girar plano.
     giro = objetos.get("Giro")
     if giro is not None:
         if any(abs(a) > 1e-6 for a in giro.rotation_euler):
@@ -608,7 +887,7 @@ def _informe():
                   " juego sea sobre la vertical")
             fallos += 1
         else:
-            print("  [OK] Giro sin rotacion: el juego lo gira sobre su Z vertical")
+            print("  [OK] Giro sin rotacion: el juego lo gira sobre su Y vertical")
         # El origen del cabezal tiene que estar en el centro de giro.
         cabeza = objetos.get("Cabezal_Corta")
         if cabeza is not None:

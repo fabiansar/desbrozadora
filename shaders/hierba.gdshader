@@ -1,8 +1,8 @@
 shader_type spatial;
 render_mode cull_disabled, diffuse_lambert, specular_disabled, shadows_disabled;
 
-// Hierba. Todas las hojas viven en un solo MultiMeshInstance3D, asi que todo
-// esto se ejecuta una vez por hoja y por fotograma, y no hay miles de nodos.
+// Hierba. Cada cuadrante tiene un MultiMeshInstance3D; las hojas no se crean
+// como nodos de escena individuales.
 //
 // Dos cosas:
 //
@@ -32,8 +32,7 @@ varying float v_tono;
 
 void vertex() {
 	// En un MultiMesh el vertex shader NO ve la matriz de cada instancia: solo
-	// ve la del nodo, que ahora es la de un cuadrante entero (unas 1.500 de las
-	// 108.960 que tiene el campo). Asi que no puede
+	// ve la del nodo, que ahora es la de un cuadrante entero. Asi que no puede
 	// saber donde esta cada hoja ni cuanto mide. Lo que si ve son los datos de
 	// la instancia, y ahi va todo lo que hace falta:
 	//

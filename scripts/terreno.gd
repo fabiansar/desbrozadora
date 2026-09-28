@@ -430,6 +430,9 @@ func _malla_de(alturas: PackedFloat32Array, res: int, paso: float,
 func _material() -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = load("res://shaders/suelo.gdshader")
+	m.set_shader_parameter("tierra_seca", Color(0.345, 0.259, 0.169))
+	m.set_shader_parameter("tierra_humeda", Color(0.145, 0.098, 0.062))
+	m.set_shader_parameter("verdin", Color(0.208, 0.271, 0.129))
 	m.set_shader_parameter("escala_manchas", 0.28)
 	m.set_shader_parameter("cantidad_verdin", 0.34)
 	return m

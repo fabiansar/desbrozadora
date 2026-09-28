@@ -1,8 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/jugador.gd" id="1_jugador"]
 [ext_resource type="Script" path="res://scripts/camara_gopro.gd" id="2_camara"]
 [ext_resource type="PackedScene" path="res://scenes/desbrozadora.tscn" id="3_herramienta"]
+[ext_resource type="PackedScene" path="res://models/personaje_trabajo.glb" id="4_personaje"]
+[ext_resource type="Script" path="res://scripts/brazos_primera_persona.gd" id="5_brazos"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_cuerpo"]
 radius = 0.35
@@ -26,7 +28,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.85, 0)
 shape = SubResource("CapsuleShape3D_cuerpo")
 
 [node name="Cabeza" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.62, 0)
+; La GoPro va en la parte frontal de la cabeza, no dentro del pecho. La lente
+; queda delante de la chaqueta para que torso y piernas entren en el encuadre.
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.62, -0.30)
 
 [node name="Camara" type="Camera3D" parent="Cabeza"]
 fov = 100.0
@@ -38,6 +42,14 @@ jugador = NodePath("../..")
 ; detras de la mirada, y ese retraso es lo que hace que al girar de golpe la
 ; maquina se mueva primero y las caderas vayan despues.
 [node name="Caderas" type="Node3D" parent="."]
+
+[node name="Cuerpo" type="Node3D" parent="."]
+
+[node name="Modelo" parent="Cuerpo" instance=ExtResource("4_personaje")]
+position = Vector3(0, 0, -0.10)
+
+[node name="Brazos" type="Node3D" parent="."]
+script = ExtResource("5_brazos")
 
 ; El punto donde se sujetan las manos. OJO: la posicion y la inclinacion las
 ; pone desbrozadora.gd cada fotograma en funcion de hacia donde se mira, asi

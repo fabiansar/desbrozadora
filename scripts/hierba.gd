@@ -6,10 +6,9 @@ extends Node3D
 ## Las hojas van repartidas en CUADRANTES, cada uno con su propio MultiMesh, en
 ## vez de todas juntas en uno solo. El motivo es el culling:
 ##
-## Con un unico MultiMesh de 68 m de lado, su caja envolvente es tan grande que
-## siempre se solapa con la pantalla, se mire donde se mire. El motor no puede
-## descartar nada, asi que dibuja las 109.000 hojas enteras en cada fotograma
-## aunque solo se vea un trozo de cesped. Con cuadrantes, cada uno lleva su caja
+## Con un unico MultiMesh para todo el campo, su caja envolvente seria tan grande
+## que siempre se solaparia con la pantalla. El motor no podria descartar hojas
+## aunque solo se viera un trozo de cesped. Con cuadrantes, cada uno lleva su caja
 ## ajustada a las hojas que tiene dentro, el motor descarta solo los que quedan
 ## fuera de la vista, y el dibujo se reduce a lo que se ve de verdad. Es lo que
 ## deja subir la densidad sin que el portatil se resienta.
@@ -27,8 +26,8 @@ extends Node3D
 ## - El MultiMesh solo existe en el servidor de graficos. En modo headless no
 ##   guarda nada, asi que una prueba en linea de comandos no veria ni una hoja y
 ##   el sistema de corte no se podria comprobar.
-## - Leer 40.000 transformaciones del motor en cada fotograma seria una
-##   chapuza. Con los arrays se va directo.
+## - Leer las transformaciones del motor en cada fotograma seria una chapuza.
+##   Con los arrays se va directo.
 ##
 ## El MultiMesh solo recibe la transformacion y el color de la hoja. El shader
 ## lee INSTANCE_CUSTOM, y de ahi sale cuanto se dobla con el viento y cuanto le
@@ -90,8 +89,8 @@ extends Node3D
 ## Radio del campo, en metros. Fuera no hay hierba, y las hojas del final se
 ## achican para que el campo se acabe sin que se vea un circulo en el suelo.
 @export_range(5.0, 90.0, 1.0) var radio := 34.0
-## Hojas por metro cuadrado. Con 30 salen unas 109.000 hojas en 34 m de radio,
-## que es lo que aguanta un portatil sin despeinarse. Por debajo de 8 se ve ralo.
+## Hojas por metro cuadrado. El total también depende del radio, formación,
+## borde, semilla y zonas que la aldea excluye. Por debajo de 8 se ve ralo.
 @export_range(1.0, 60.0, 0.5) var densidad := 30.0
 ## Desde que fraccion del radio se empieza a achicar el campo. Si vale 1 el
 ## cesped se corta en seco y se ve un circulo perfecto.
@@ -100,11 +99,8 @@ extends Node3D
 ## comparar dos pruebas.
 @export var semilla := 90210
 
-## Lado del cuadrado de cada trozo de campo, en metros. Decide cuantas llamadas
-## de dibujo se hacen y cuanto se ahorra el culling. Con 8 m en un campo de 68 m
-## salen 81 trozos, y mirando al frente solo se dibujan veinte o asi. Con 4 m
-## habria 289: mejor culling, pero demasiadas llamadas de dibujo. 8 m es donde
-## las dos cosas cuadran.
+## Lado del cuadrado de cada trozo de campo, en metros. Se ajusta por instancia
+## para equilibrar la granularidad del culling con el número de llamadas de dibujo.
 @export_range(2.0, 24.0, 0.5) var lado_cuadrante := 8.0
 ## A que distancia se apaga un cuadrante. Con 0 no hay recorte por distancia y
 ## se queda solo el culling de la vista, que tambien funciona. Por defecto va
@@ -193,6 +189,31 @@ func _ready() -> void:
 			% [(1.0 - formacion * 0.85) * 100.0, formacion, dureza])
 
 
+## Vuelve a generar el campo con los exports actuales.
+##
+## Se usa en las herramientas de medición al cambiar densidad o radio. Mantiene
+## el material compartido, pero sustituye todos los cuadrantes y reconstruye la
+## rejilla de corte para que los datos visuales y lógicos sigan sincronizados.
+func regenerar() -> void:
+	for cuadrante in _cuadrantes:
+		if is_instance_valid(cuadrante):
+			cuadrante.queue_free()
+	_cuadrantes.clear()
+	_centros.clear()
+	_ids.clear()
+	_cuadrante_de.clear()
+	_dentro_de.clear()
+	_rejilla.clear()
+	_sembradas = 0
+	_uv_rehechas = 0
+	_radio_uv = 0.0
+	_mirada = Vector3(1.0e9, 0.0, 0.0)
+	_sembrar()
+	_crear_rejilla()
+	print("Hierba tipo %d regenerada: %d hojas en %d cuadrantes"
+		% [tipo, _sembradas, _cuadrantes.size()])
+
+
 ## El material va en override de cada cuadrado porque es ahi donde Godot
 ## rellena INSTANCE_CUSTOM; con un material de superficie se queda vacio.
 func _crear_material() -> void:
@@ -227,8 +248,8 @@ func _mancha(x: float, z: float) -> float:
 
 
 ## Una hoja: tres tramos de dos puntos y la punta. Ocho vertices y seis
-## triangulos, que es lo que se ve sin mirar de cerca y sale muy barato: con
-## 109.000 hojas son unas 650.000, repartidas en 81 llamadas de dibujo.
+## triangulos, que es lo que se ve sin mirar de cerca y sale muy barato. El
+## total de triangulos depende de las hojas que se siembren y sus cuadrantes.
 func _hoja() -> ArrayMesh:
 	var t := SurfaceTool.new()
 	t.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -306,7 +327,7 @@ func _sembrar() -> void:
 				+ rng.randf() * variacion_grosor)
 			# Un centimetro por encima del suelo, para que las raices no pelen
 			# con el terreno. Y la altura la pregunta al terreno si lo hay.
-			if aldea != null and aldea.dentro(Vector2(x, z)):
+			if aldea != null and aldea.ocupada(Vector2(x, z)):
 				continue
 			var y := 0.01
 			if terreno != null:
@@ -716,8 +737,7 @@ func malla() -> ArrayMesh:
 
 
 ## La caja que ocupa el campo entero: la union de las de todos los cuadrados.
-## Antes salia del unico MultiMesh y media 68 m de lado, con lo cual no servia
-## para nada; ahora sale de las cajas de los cuadrados, que si estan ajustadas.
+## Se construye como unión de las cajas de los cuadrantes actuales.
 func caja_del_campo() -> AABB:
 	var unida := AABB()
 	for i in _cuadrantes.size():
@@ -779,5 +799,5 @@ func _physics_process(_delta: float) -> void:
 				break
 		if not _buscada:
 			return
-	if _desbrozadora.get_cortando():
+	if _desbrozadora.cortando:
 		cortar(_desbrozadora.punto_de_corte(), radio_corte)

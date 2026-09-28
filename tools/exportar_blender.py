@@ -29,7 +29,8 @@ import tempfile
 
 import bpy
 
-OUT_DIR = os.path.expanduser("~/Documentos/desarrollos/desbrozadora/models")
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT_DIR = os.path.join(PROJECT_DIR, "models")
 SUFIJO_COLISION = "-col"
 EJES = ("X", "Y", "Z")
 TOLERANCIA = 1e-4

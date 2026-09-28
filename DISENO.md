@@ -137,12 +137,12 @@ Lo que hace que el nucleo se sienta bien antes de ponerle nada alrededor.
 - [x] **Andar hacia atras sin que el mundo gire.** La camara cuelga del cuerpo,
       y con `S` el cuerpo se daba media vuelta y arrastraba la vista. Ahora la
       camara mide su giro en el mundo.
-- [x] Hierba por cuadrantes (chunking). El `MultiMesh` se trocea en cuadrados
-      de 8 m con su caja ajustada, mas un recorte por distancia. Sin esto el
-      motor dibujaba las hojas enteras siempre y la densidad no se podia subir.
+- [x] Hierba por cuadrantes (chunking). Cada campo se reparte en cuadrados de
+      tamaño configurable, con caja ajustada y recorte por distancia. En la
+      escena actual son de 24 m para `Hierba` y 12 m para `MalezaAlta`.
 - [x] Limpiar el `Cube` que sobra en el modelo de la desbrozadora.
 - [x] Suite de pruebas que fija el comportamiento. Empezo en 131 comprobaciones
-      en headless; hoy son **183**.
+      en headless; hoy son **200**.
 
 > La fase 1 se cierra con lo de la camara y el chunking, que no estaban
 > previstos aqui y salieron de jugar: el primero de mirar arriba y perder la
@@ -150,7 +150,7 @@ Lo que hace que el nucleo se sienta bien antes de ponerle nada alrededor.
 > `MultiMesh`. Los dos cumplen el criterio de la seccion 6: se notan en las
 > manos y se pueden medir.
 
-### Fase 2 - El corte que cuesta  _(hecha)_
+### Fase 2 - El corte que cuesta  _(núcleo hecho; equipo y economía pendientes)_
 
 Aqui el terreno empieza a oponer resistencia, y la desbrozadora deja de ser la
 misma segun donde estes.
@@ -171,17 +171,47 @@ de nada si la maquina no nota que hay algo delante ni si llega a cortarlo.
       de la rodilla.
 - [ ] **Discos y hilo.** Mata, hilo de nylon, cuchilla. Cada uno para un tipo de
       maleza, con su desgaste y sus limites.
-- [ ] **Consumo de combustible y RPMs.** El acelerador pasa a ser un recurso que
-      se gasta y un sonido que cambia con las vueltas.
+- [ ] **Consumo de combustible.** El acelerador ya controla las RPM y el sonido
+      del motor cambia con las vueltas; falta que el uso consuma combustible.
 - [ ] **Desgaste y afilado.** La cuchilla pierde filo y hay que revisarla.
 
 > **Lo que queda de esta fase y por que.** El desgaste, el combustible y los
-> discos no se han hecho, y a proposito: son sistemas que se notan mucho cuando
-> estan a medias, y sin un disco el afilado no tiene a que desgastar. Lo primero que
-> haria falta no es el desgaste sino el **terreno con desnivel de verdad**, que
-> es lo que haria que el terreno de verdad oponga resistencia y no solo las
-> matas. Con el terreno llano que hay, la densidad es lo unico que puede oponer
-> algo, y ya se nota.
+> discos siguen pendientes: son sistemas que se notan mucho cuando están a
+> medias, y sin discos no hay filo que desgastar. El terreno con pendiente ya
+> está implementado como base del entorno; la resistencia de la desbrozadora
+> todavía se calcula por la hierba que queda delante, no por la pendiente.
+
+### Base del entorno (implementada; integración visual en curso)
+
+- [x] Terreno procedural de 240 × 240 m, con pendiente, ondulación, terrazas,
+      surcos, colisión y consultas de altura compartidas.
+- [x] Layout modular de aldea en una cuadrícula de 4 × 3 parcelas de 15 × 12 m,
+      conectado con el terreno, el bosque y las zonas de siembra.
+- [ ] Modelos visuales de casas, muros, caminos y vegetación para
+      `assets/models/aldea/`; por ahora las ubicaciones cargan placeholders.
+- [x] Medición Vulkan del campo y comparación visual de `Hierba` con la
+      configuración actual. La mediana está limitada por VSync; no aísla el coste
+      de cada elemento de la escena.
+- [ ] Validación visual final del terreno y la aldea cuando se incorporen sus
+      modelos; mantener pendiente la calibración GoPro del operario.
+
+### Feedback de la sesión actual
+
+- [x] Movimiento, herramienta, encuadre y entorno considerados correctos; quedan
+      mejoras futuras sin bloquear la ampliación del juego.
+- [ ] Revisar la resistencia de la maleza y cómo la carga modifica el motor.
+- [ ] Antes de sumar combustible/desgaste, separar el componente de motor del
+      controlador físico de la desbrozadora; `telemetria_actualizada` define el
+      contrato para la interfaz futura.
+- [ ] Añadir una lectura de RPM en la interfaz, conectada a telemetría de la
+      desbrozadora y no acoplada directamente a su nodo visual.
+- [ ] Antes de añadir crecimiento o recoger recortes, separar los datos de siembra
+      y corte del componente que dibuja los cuadrantes de hierba.
+- [ ] Afinar la perspectiva GoPro para que torso y piernas se lean de forma
+      natural durante el trabajo; la primera integración está visible, pero la
+      calibración visual sigue abierta.
+- [x] Dejar preparado un ajuste del FOV horizontal en el Inspector, de −20° a
+      +20°; el script parte de cero y la escena principal lo calibra en +20°.
 
 ### Fase 3 - Conduccion
 
@@ -216,7 +246,7 @@ Se dejan escritas para que no se rediscutan en cada cambio.
 | El cuerpo gira **hacia donde avanza**, no hacia donde esquiva | A y D tambien barre. Si el cuerpo girase al esquivar, la maquina se mediria respecto a un cuerpo que acaba de dar media vuelta y D barreria al lado contrario del pedido. |
 | La asimetria de inercia va en el **peso**, no en la rigidez | En un muelle criticamente amortiguado `w = k / (2 k peso) = 1 / (2 peso)`: la rigidez se cancela. Multiplicarla no cambia nada. |
 | Sin parabola en el alcance | El alcance es fijo porque la maquina va atada, no sostenida. El arco sale de girar alrededor del arnes, no de estirar el brazo. |
-| **El cabezal se ve siempre; la camara se acomoda** | Va 47 grados por debajo del horizonte y solo entran 34. Un tope de inclinacion de 85 arriba habria bastado para no mirar de frente, pero obligaria a apuntar al suelo para trabajar. Bajando la camara, el jugador mira libre y la herramienta no se pierde. |
+| **El cabezal se ve siempre; la camara se acomoda** | La cámara limita automáticamente el pitch según el punto de corte real y el margen de encuadre. El FOV horizontal tiene un ajuste de ±20° que empieza en cero. |
 | **Los topes de inclinacion son asimetricos** (85 abajo, 55 arriba) | Es lo que deja que la camara tenga sitio para encuadrar el cabezal al mirar arriba, sin que el jugador note el limite. |
 | **La camara mide su giro en el mundo, no en local** | Cuelga del cuerpo, y el cuerpo se vuelve hacia donde camina. En local el giro del cuerpo se le sumaba y `S` daba un tiron de 180 grados. |
 | **La hierba va por cuadrantes, no en un `MultiMesh` entero** | Con una sola caja de 100 m el motor no descarta nada y dibuja todas las hojas siempre. Troceada, cada cuadrado se descarta solo y la densidad se puede subir. |

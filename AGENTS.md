@@ -14,7 +14,7 @@ Proyecto desarrollado en Godot 4.7 (GDScript + Shaders) y pipeline con Blender.
 
 ### 2. `[MODO: SEMI]` (Desarrollo Asistido / Validación Rápida)
 - **Instrucción clave**: Verificación básica pero la prueba grande y el feedback visual lo mantengo yo.
-1. **Ejecuta una verificación sintáctica o de parseo rápida** en terminal tras los cambios, pero **NO corras la suite completa de 130+ tests** para no perder tiempo.
+1. **Ejecuta una verificación sintáctica o de parseo rápida** en terminal tras los cambios, pero **NO corras la suite completa** para no perder tiempo.
 2. Si el cambio requiere un test unitario muy básico o modificar una prueba existente afectada por la firma de un método, hazlo rápidamente.
 3. No intentes resolver bucles de fallos complejos en bucle: si algo falla en la verificación básica, avísame con el error exacto para que yo tome la decisión.
 4. Explícame qué cambió y deja la prueba funcional grande dentro del editor de Godot de mi lado.
@@ -24,8 +24,14 @@ Proyecto desarrollado en Godot 4.7 (GDScript + Shaders) y pipeline con Blender.
 1. Ejecuta la suite completa de pruebas en consola en modo headless tras cada modificación:
    `flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot --headless --path . --script tools/test_juego.gd`
 2. Escribe pruebas unitarias automáticas para cada nueva función o mecánica implementada.
-3. Si un test falla, analiza y corrige el código en un bucle autónomo hasta conseguir 0 fallos en los 130+ tests.
+3. Si un test falla, analiza y corrige el código en un bucle autónomo hasta conseguir 0 fallos en la suite completa.
 4. Al terminar toda la sesión, genera o actualiza el registro de cambios (`CHANGELOG.md`).
+
+## REGLAS DE GIT Y COMMITS
+- Antes de editar, revisa `git status --short` y los últimos commits. Los cambios ya presentes se consideran trabajo del usuario.
+- Mantén cada tarea o función en un commit lógico para que pueda revertirse por separado. Antes de empezar una función grande, propón un checkpoint si el árbol está limpio.
+- No hagas `reset --hard`, `checkout --`, `restore` ni borrados amplios para revertir trabajo sin confirmar. Si los cambios están mezclados, revierte solo los hunks identificados; si no se pueden separar con seguridad, pregunta.
+- No crees commits, los enmiendes ni hagas push sin autorización explícita. Con autorización, revisa `git diff` y `git status`, prepara solo rutas intencionadas (nunca `git add .`) y usa un mensaje breve en español con verbo de acción.
 
 ## REGLAS GENERALES DE ARQUITECTURA
 - No rompas el contrato de `INSTANCE_CUSTOM` en Shaders.

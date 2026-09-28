@@ -46,7 +46,8 @@ if _AQUI not in sys.path:
     sys.path.insert(0, _AQUI)
 import exportar_blender  # noqa: E402
 
-OUT_DIR = os.path.expanduser("~/Documentos/desarrollos/desbrozadora/models")
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT_DIR = os.path.join(PROJECT_DIR, "models")
 OUT_FILE = os.path.join(OUT_DIR, "desbrozadora_100x.glb")
 
 # Medidas en metros. Mas cortas que la anterior porque la de gama baja es mas

@@ -46,7 +46,7 @@ var _imagen: Image
 var _datos := PackedByteArray()
 var _fase_a := PackedFloat32Array()
 var _fase_b := PackedFloat32Array()
-var _hierba: Array[Node3D] = []
+var _hierba: Array[Hierba] = []
 ## El material de CADA campo de hierba, no solo el primero. Antes se guardaba
 ## uno solo en `_mat` y el tiempo del shader se metia ahi, con lo que el segundo
 ## tipo de maleza se quedaba con el `tiempo` en 0 para siempre: no se doblaba
@@ -62,11 +62,9 @@ var _acumulado := 0.0
 var _radio_campo := 0.0
 ## Fotogramas que quedan por estar atentos a que aparezca otro campo de hierba.
 ##
-## El viento es hijo de la hierba, y el _ready de los hijos va antes que el del
-## padre: cuando este nodo arranca, el segundo campo de maleza todavia no se ha
-## apuntado al grupo. Sin esto el viento se conectaria solo con el primero y el
-## tipo 2 se quedaria sin mapa. Solo se mira en estos fotogramas: luego ya no
-## hay nada nuevo que aparezca.
+## El viento vive en el mundo, como hermano de los campos. Se mantiene una
+## ventana corta de descubrimiento para admitir campos de hierba que entren al
+## árbol después del arranque; en la escena principal ambos ya existen antes.
 var _vigilando := 90
 ## Cuantos campos se conectaron la ultima vez, solo para no repetir el aviso.
 ## Se comparan los CAMPOS y no los materiales, que es lo que dice el aviso.
@@ -132,8 +130,8 @@ func _conectar() -> void:
 	_hierba.clear()
 	_mats.clear()
 	for n in get_tree().get_nodes_in_group("hierba"):
-		if n is Node3D:
-			_hierba.append(n as Node3D)
+		if n is Hierba:
+			_hierba.append(n as Hierba)
 	# El mapa del viento tiene que medir lo mismo que el campo mas ancho, porque
 	# la hoja calcula su UV suponiendo eso. Si no, cada hoja busca su celda en el
 	# sitio equivocado y el viento sale descuadrado.
@@ -144,7 +142,7 @@ func _conectar() -> void:
 	# que hacia que la zarza se doblara con el ultimo borde del mapa.
 	_radio_campo = 0.0
 	for h in _hierba:
-		var campo: float = float(h.get("radio"))
+		var campo: float = h.radio
 		_radio_campo = maxf(_radio_campo, campo)
 	var cuarto := _radio_campo * 2.0 / float(maxi(celdas, 1))
 	if _radio_campo > 0.0 and not is_equal_approx(cuarto, lado_celda):
@@ -153,7 +151,7 @@ func _conectar() -> void:
 		if _textura != null:
 			_textura.update(_imagen)
 	for h in _hierba:
-		var mat := _material_de(h)
+		var mat := h.material_compartido()
 		if mat == null:
 			continue
 		mat.set_shader_parameter("viento", _textura)
@@ -174,10 +172,9 @@ func _conectar() -> void:
 
 func _process(delta: float) -> void:
 	_tiempo += delta
-	# El viento es hijo de la hierba, y en Godot el _ready de los hijos se
-	# ejecuta antes que el del padre: cuando este nodo arranco, la hierba
-	# todavia no se habia apuntado al grupo. Si no hemos encontrado nada, se
-	# reintenta; a partir del segundo fotograma ya esta.
+	# Si un campo se añade dinámicamente al mundo, se vuelve a conectar durante
+	# la ventana de descubrimiento. Los campos de main.tscn normalmente están
+	# disponibles desde el primer fotograma.
 	if _hierba.is_empty():
 		_conectar()
 		return
@@ -188,7 +185,7 @@ func _process(delta: float) -> void:
 	# cada fotograma no cuesta nada.
 	var mayor := 0.0
 	for h in _hierba:
-		mayor = maxf(mayor, float(h.get("radio")))
+		mayor = maxf(mayor, h.radio)
 	if mayor > 0.0 and not is_equal_approx(mayor, _radio_campo):
 		_conectar()
 		return
@@ -210,26 +207,6 @@ func _process(delta: float) -> void:
 	# comparten el mismo recurso, y con lo que hay uno por tipo de hierba.
 	for mat in _mats:
 		mat.set_shader_parameter("tiempo", _tiempo)
-
-func _material_de(n: Node3D) -> ShaderMaterial:
-	if n is MultiMeshInstance3D:
-		var mmi := n as MultiMeshInstance3D
-		if mmi.multimesh != null and mmi.multimesh.mesh != null:
-			return mmi.material_override as ShaderMaterial
-	if n is MeshInstance3D:
-		return (n as MeshInstance3D).material_override as ShaderMaterial
-	# La hierba ya no es un unico MultiMesh: es un gestor que reparte las hojas
-	# en cuadrados, y el material esta en los hijos. Todos los cuadrados
-	# comparten el mismo recurso, con lo que con encontrar el primero vale, y no
-	# hay que recorrerlos todos.
-	for c in n.get_children():
-		if not c is Node3D:
-			continue
-		var encontrado := _material_de(c as Node3D)
-		if encontrado != null:
-			return encontrado
-	return null
-
 
 ## Fuerza de una celda concreta, de 0 a 1. Para las pruebas: la media de todo
 ## el mapa casi no se mueve, porque unas celdas empujan hacia un lado y otras

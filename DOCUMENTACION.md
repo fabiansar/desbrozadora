@@ -13,19 +13,23 @@ demás cuelga de ahi.
 ```
 main.tscn (Mundo)
 ├── Entorno        WorldEnvironment: cielo, luz de ambiente, niebla
-├── Suelo          StaticBody3D + malla 80x80 m, con el shader de tierra
+├── Terreno        StaticBody3D + terreno procedural de 240x240 m
+├── Aldea          cuadrícula modular 4x3; modelos aún en placeholders
 ├── Sol            DirectionalLight3D, la luz principal
 ├── Relleno        DirectionalLight3D, luz de relleno sin sombras
 ├── Bosque         arboles repartidos por el campo (colision capa 2)
-├── Hierba         el cesped: 471.239 hojas en 146 MultiMesh, uno por cuadrante
-├── MalezaAlta     la maleza: 31.162 hojas en 62 MultiMesh, en matas
+├── Hierba         césped agrupado, 60 hojas/m², cuadrantes de 24 m
+├── MalezaAlta     maleza en matas, 18 hojas/m², cuadrantes de 12 m
 ├── Viento         el mapa del viento, UNO para los dos campos
 └── Player         el jugador (CharacterBody3D)
-    ├── Cabeza     pivote de la cabeza, a 1,62 m
+    ├── Cabeza     pivote a 1,62 m; la lente va 0,30 m hacia delante
     │   └── Camara la camara en primera persona
+    ├── Cuerpo      modelo low-poly del operario
+    │   └── Modelo  personaje_trabajo.glb
+    ├── Brazos      brazos de primera persona, ligados a los puños
     └── Caderas     donde va colgada la maquina
         └── PivoteDesbrozadora
-            └── Desbrozadora   la herramienta colgando
+            └── Desbrozadora   Node3D, siempre colgada del arnés
 ```
 
 Lo de `Caderas` es importante y no es un detalle de colocacion: la maquina
@@ -42,20 +46,18 @@ Las capas de fisica (`scenes/jugador.tscn`, `main.tscn`):
 | 2 | `bosque` | troncos y copas de los arboles |
 | 3 | `jugador` | el jugador |
 | 4 | `hierba` | la hierba (por si algun dia hay colision) |
-| 5 | `herramienta` | la desbrozadora |
 
 **Decisiones que ya estan tomadas y no hay que volver a mirar:**
 
 - La desbrozadora cuelga de un pivote bajo `Caderas`, no de la camara ni de las
   manos. El nombre `PivoteDesbrozadora` se conserva, pero ya no cuelga de la
   camara: el nombre pica, la jerarquia manda.
-- **El cabezal esta SIEMPRE dentro del encuadre.** Va 1,27 m por debajo de la
-  camara y 1,18 m por delante, unos 47 grados por debajo del horizonte, y con el
-  angular de 100 grados en 16:9 solo entran 34 grados por debajo del eje: de
-  serie se salia de la foto. `CamaraGopro._pitch_limitado()` baja la vista lo
-  justo para que no se salga nunca, y el jugador puede mirar hasta 55 grados
-  hacia arriba. Antes de esto el cabezal se salia **a proposito**; ahora al
-  reves, porque se van a cortar zarza alta y hay que ver donde corta la hoja.
+- **El cabezal esta SIEMPRE dentro del encuadre.** Su posicion cambia con el
+  alcance y la inclinacion de la maquina, así que `CamaraGopro._pitch_limitado()`
+  mide el punto de corte real y acomoda la vista; no depende de una distancia o
+  un angulo fijo. El jugador puede mirar hasta 55 grados hacia arriba. Antes el
+  cabezal se salia **a proposito**; ahora se mantiene en pantalla para poder ver
+  donde corta la hoja.
 - El corte se busca en un **disco horizontal en X/Z** bajo el cabezal, con radio
   `radio_corte`. La altura del cabezal no manda: asi el corte depende de la
   hoja, no de la maquina. Con `radio_corte = 0.40` el paso es de 80 cm.
@@ -80,7 +82,7 @@ directo: se integra a mano para poder añadir la inercia.
 | `sensibilidad` | 0.16 | sensibilidad del raton |
 | `limite_pitch` | 85 | grados de tope **hacia abajo** |
 | `limite_pitch_arriba` | 55 | grados de tope hacia arriba. No es 85 porque arriba hay que dejarle sitio a la camara para que el cabezal quepa |
-| `pitch_inicial` | -25 | con la que arranca, mirando ya a donde se trabaja |
+| `pitch_inicial` | -40 | inclinación inicial hacia la zona de trabajo |
 | `altura_agachado` | -0.55 | cuanto baja la camara |
 | `rapidez_agachado` | 9.0 | rapidez con la que se agacha |
 | `rapidez_cuerpo` | 4.0 | rapidez a la que el cuerpo se vuelve hacia donde caminas |
@@ -112,17 +114,19 @@ girar y se suelta despues, y el paso te bota un poco.
 ### El encuadre automatico del cabezal
 
 Es lo mas importante de este archivo, y lo que se cambio para poder cortar zarza
-alta. La camara cuelga de `Cabeza` por un angulo fijo, de modo que el cabezal
-queda 47 grados por debajo del horizonte y solo entran 34 grados por debajo del
-eje. Mirando recto, y mas arriba todavia, la herramienta se salia de la foto.
+alta. La camara calcula el encuadre desde la posicion actual del punto de corte,
+que cambia con el nuevo alcance y con la inclinacion de la maquina. Mirando recto
+o hacia arriba, la herramienta debe permanecer en la foto.
 
 `_pitch_limitado()` recorta la inclinacion por arriba para que el cabezal siga
 dentro: mide el angulo real que baja desde **la posicion actual de la camara**
 hasta `herramienta.punto_de_corte()`, le resta el margen que queda
-(`margen_cabezal`, 4 grados) y acota el pitch a ese techo. El jugador puede
-mirar lo que quiera; la vista se inclina sola, la herramienta no se mueve.
+(`margen_cabezal`, 8 grados) y acota el pitch a ese techo. El jugador puede
+mirar lo que quiera; la vista se inclina sola, la herramienta no se mueve. Este
+encuadre automatico actua mientras la desbrozadora esta en la escena y bajo el
+arnés del jugador.
 
-El margen de 4 grados no es decorativo: sin el, la herramienta entra y sale del
+El margen de 8 grados no es decorativo: sin el, la herramienta entra y sale del
 borde segun el bamboleo del paso, que mueve la camara 4,5 cm arriba y abajo.
 
 Dos detalles que hay que respetar si se toca esto:
@@ -170,10 +174,15 @@ que existiera, la prueba fallaba porque el bamboleo contaminaba la medida.
 | `ladeo_giro` | 2.4° | cuanta la camara se queda colgando al girar |
 | `retardo_mirada` | 0.12 | suavizado del retardo de la mirada |
 | `retardo_ladeo` | 0.30 | suavizado del ladeo |
+| `angular` | 100° | FOV horizontal base |
 | `angular_correr` | 12° | cuanto se abre al correr |
-| `rapidez_agachado` | 9°/s | con que rapidez baja el angular al agacharse |
-| `margen_cabezal` | 4° | margen que se deja al cabezal en el encuadre |
+| `ajuste_fov` | script: 0°; `main.tscn`: +20° (rango ±20°) | ajuste adicional del FOV horizontal |
+| `margen_cabezal` | 8° | margen que se deja al cabezal en el encuadre |
 | `tope_ladeo_herramienta` | 8° | tope del ladeo que le pone la maquina |
+
+El agachado lo aplica una sola vez `Jugador._agacharse()` moviendo `Cabeza`;
+`CamaraGopro` solo suma el bamboleo. Así, correr agachado no acumula dos bajadas
+de cámara.
 
 El ladeo de la herramienta lo pone la maquina cada fotograma, y **antes era un
 `@export` de la camara**. Eso hacia que en el Inspector apareciera como algo que
@@ -193,18 +202,16 @@ se llevaria bastante mas.
 
 ## 4. `scripts/desbrozadora.gd` — la herramienta
 
-`class_name Desbrozadora`. Se apunta sola al grupo `"herramienta"` en `_ready()`,
-y busca dentro del modelo los nodos `Giro` y `Corte` por nombre, asi que
-moverlo de sitio en la escena no rompe nada.
+`class_name Desbrozadora` sobre `Node3D`. Permanece anclada al pivote de las
+caderas; se apunta sola al grupo `"herramienta"` en `_ready()` y busca dentro del
+modelo los nodos `Giro` y `Corte` por nombre, asi que moverlo de sitio en la
+escena no rompe nada.
 
-**El carrete gira sobre Z, no sobre Y.** La cuchilla va tumbada, con su eje en
-la vertical, y el Z del modelo es la vertical (la escena le da un giro de 180
-grados en Y al modelo entero, que no toca el Z). Girando sobre el Y, que es el
-eje a lo largo del tubo, la cuchilla daria vueltas **de lado a lado** y cortaria
-de canto. Y el nodo `Giro` del modelo va sin inclinacion a proposito: en `YXZ`
-cualquier inclinacion previa se sumaria a la de cada fotograma y la dejaria de
-girar plana. Hay una prueba que mira los tres ejes, porque si el eje se cambia
-la de "el carrete gira" se queda leyendo un cero fijo y no falla nunca.
+**El nuevo `models/desbrozadora.glb` gira sobre Y.** Este asset tiene una
+orientacion distinta del modelo anterior: la logica escribe `Giro.rotation.y`.
+El nodo `Giro` va sin inclinacion inicial para que la cuchilla se mantenga plana.
+La prueba mecanica mira los tres ejes, porque si se cambia el eje la comprobacion
+del giro podria quedarse leyendo un valor fijo y pasar por accidente.
 
 ### Los ficheros del modelo y el cambio de cabezal
 
@@ -219,6 +226,50 @@ cambiarla y ponerla en otra desbrozadora:
 | `models/cabezal_disco_3p.glb` | cuchilla de tres puntas |
 
 Los cuatro se generan con `tools/crear_desbrozadora_mesh.py`.
+
+La escena activa `models/desbrozadora.glb`, no `desbrozadora_pro.glb`. El modelo
+conserva la jerarquia `Desbrozadora/Giro/Corte`, mide aproximadamente **2,46 m
+de largo por 0,48 m de ancho** y su punto `Corte` queda a `y = -1,56 m` en el
+espacio del `.glb`. La prueba de Blender y la suite de Godot validan ese
+contrato.
+
+### Primera iteracion: cuerpo y anclaje
+
+`models/personaje_trabajo.glb` es el primer operario completo, generado por
+`tools/crear_personaje_mesh.py`: low-poly, 1,98 m de alto, 796 triangulos,
+origen en el suelo y escala en metros. Incluye chaqueta de alta visibilidad,
+pantalon, botas, casco y cara; el modelo completo se puede revisar en Blender.
+
+En primera persona se ocultan la cabeza y los brazos estáticos. El torso y la
+parte inferior son visibles por defecto para una perspectiva GoPro de trabajo.
+`scripts/brazos_primera_persona.gd` genera mangas y antebrazos que llegan a los
+dos `Marker3D` de agarre de `scenes/desbrozadora.tscn`; siguen los marcadores
+durante el barrido y la inclinación. Los conmutadores `mostrar_torso` y
+`mostrar_parte_inferior` permiten aislar piezas al revisar el encuadre.
+
+La lente se monta 0,30 m por delante del pivote de cabeza para no quedar dentro
+del pecho. La mirada inicial baja 40° hacia la zona de trabajo. **La lectura
+visual del torso y las piernas sigue en calibración**: la captura es un punto de
+partida para ajustar la pose y el encuadre en el juego.
+
+Esta primera pasada fija escala y agarres, pero deja para la siguiente
+iteracion la calibracion ergonomica: punto del arnes en la cadera, altura de
+manos, offset lateral y recorrido de los puños al barrer. También falta validar
+la silueta corporal en carrera, agachado y salto.
+
+La pose de trabajo inicial usa `alcance = 1,56 m` e
+`inclinacion_reposo = -22 grados`: la barra queda extendida, el motor detrás del
+operario a la derecha y `Corte` hacia delante y abajo. El modelo transforma su
+eje longitudinal a `-Z` mediante el giro interno de 180 grados en Y. **No se
+aplica un yaw fijo a `Desbrozadora`**: su `rotation.y` controla el barrido lateral.
+Los marcadores y la cadena de brazos se mantienen; la pose se ajusta con el
+alcance y la inclinacion de reposo.
+
+El objetivo visual es un estilo low-poly estilizado muy cercano a **How to Fish**:
+cuerpos simples y alargados, cabezas/cuerpos facetados, extremidades cilindricas
+o prismatica, paleta limpia, silueta exagerada y expresiva. Los personajes del
+proyecto deben parecer de la misma familia visual, no un cuerpo realista junto a
+una herramienta realista.
 
 El contrato, que es lo que hay que respetar al cambiar un cabezal:
 
@@ -239,12 +290,61 @@ giro.add_child(nuevo)          # cae en el pivote solo
 anterior.queue_free()          # y se esconde el que estaba
 ```
 
-**El giro va sobre `rotation.z`, no sobre `rotation.y`.** Godot compone en YXZ, y
-`rotation.y` mete un giro sobre el Y de la maquina, que es el eje a lo largo del
-tubo: con la cuchilla tumbada eso la daria vueltas de lado a lado. El Z de la
-modelo es la vertical, porque el giro de 180° en Y de `desbrozadora.tscn` no lo
-toca. Y el nodo `Giro` no lleva inclinacion propia a proposito: en YXZ se le
-sumaria a la del juego y dejaria de girar plano.
+### La forma de la maquina
+
+El manillar es un **tubo unico curvo**, no una barra recta con dos palos clavados
+en los extremos. Sale de la abrazadera (que esta en el origen, donde el juego
+cuelga las manos), se abre en U y sube por los dos lados hasta los punos, que
+quedan arriba y atras. El camino se recorre con `tubo_trayecto()`, que coloca un
+anillo perpendicular a la tangente en cada punto y los empolva, para que la curva
+sea continua. Los dos punos van con goma mate mas oscura que la barra, y solo en
+el derecho se montan el gatillo del acelerador (naranja) y el paro (rojo).
+
+Delante del manillar, en la barra, hay una **anilla del arnes**: un collar con
+una argolla colgando por debajo, que es por donde se sujeta el operario. Hay
+ademas una **abrazadera** corta que une el manillar con la barra, y la **barra**
+que baja de ella.
+
+El **cable del acelerador** sale de debajo del gatillo y va **pegado** a los
+tubos, no suelto por el aire: primero sigue la curva del manillar por fuera,
+gira en la esquina de la abrazadera y luego baja por delante de la barra hasta
+la caja de engranajes. Cada punto del camino esta a `radio del tubo + radio del
+cable` del eje, ni más ni menos, y el generador lo comprueba: mide la **holura**
+(distancia al eje menos el radio del tubo) de cada tramo y avisa si supera los
+5 mm. La esquina entre manillar y barra se salta, porque ahí el cable no puede
+estar pegado a los dos tubos a la vez.
+
+El punto de arranque del cable no está escrito a mano: se calcula a partir de la
+posición del gatillo, así que si el mando se mueve, el cable le sigue.
+
+Medidas del rediseño actual, con `Y_CABEZA` a `-1,56 m`:
+
+| Pieza | Valor | Por que |
+| --- | --- | --- |
+| radio de la barra | 0.025 m (50 mm) | antes 44 mm: parecia un alambre junto al motor |
+| largo de la barra | 2.06 m | aproximadamente el doble que la versión anterior |
+| corte (`Corte`) | `y = -1.56`, `z = -0.222` | bajo la cabeza y al final de la barra |
+
+La máquina completa mide **2,46 m de largo por 0,48 m de ancho**, con 776
+triángulos. La regla 4 del generador comprueba que la altura media del manillar
+**sube** al alejarse del centro; dos palos rectos clavados en una barra no la
+suben y el generador avisa.
+
+Para medir bien hay dos helpers que conviene conocer, porque las dos medidas
+salen mal si se hacen a ojo:
+
+- `_distancia_camino()` mide contra la **polilínea**, no contra los puntos sueltos.
+  El tubo se crea entre punto y punto, y sus vértices caen en medio, lejos de
+  cualquiera de los dos: midiendo solo los puntos, la holura sale el doble.
+- `_muestra_camino()` mete puntos intermedios en el camino, para poder medir por
+  franjas. Los tramos largos no tienen puntos en la banda que se mira, y la
+  media sale 0 sin querer.
+
+**Con el activo `models/desbrozadora.glb`, el disco gira sobre `rotation.y`.**
+Eso es lo que escribe `scripts/desbrozadora.gd`; en este modelo el eje Y sigue
+siendo vertical aunque `Modelo` lleve el giro de 180 grados en Y. El nodo
+`Giro` no lleva inclinacion inicial: el pitch y el barrido horizontal pertenecen
+al nodo de herramienta y se actualizan por separado.
 
 | Export | Valor | Que hace |
 | --- | --- | --- |
@@ -256,7 +356,7 @@ sumaria a la del juego y dejaria de girar plano.
 | `altura_cadera` | 0.88 m | altura del arnes |
 | `lateral_cadera` | 0.26 m | el arnes va a la **derecha**, y de ahi sale la asimetria |
 | `rapidez_caderas` | 2.6 | las caderas van detras de la maquina |
-| `alcance` | 1.15 m | del arnes al cabezal, fijo: va atado, no sostenido |
+| `alcance` | 1.56 m | barra extendida; motor detrás del operario, junto a la cadera derecha |
 
 El arnes y el barrido:
 
@@ -276,7 +376,7 @@ La vertical:
 
 | Export | Valor | Que hace |
 | --- | --- | --- |
-| `inclinacion_reposo` | -16° | morro arriba en reposo; negativo es hacia abajo |
+| `inclinacion_reposo` | -22° | morro abajo en reposo; negativo es hacia abajo |
 | `inclinacion_acelerando` | 22° | cuanto baja el morro al acelerar |
 | `mirar_suelo` | 44° | pitch al que el cabezal apoya en el suelo y deja de hundirse |
 | `mirar_alto` | 45° | pitch al que la maquina llega arriba del todo |
@@ -322,6 +422,12 @@ La resistencia: cuanto mas maleza de pie hay por delante, mas frena la maquina.
 | `anticipacion_resistencia` | 0.40 m | a que distancia por delante se mira |
 | `constante_resistencia` | 0.45 s | cuanto tarda el motor en entrar y salir del frenao |
 
+`rpm` representa las revoluciones sin carga y `rpm_efectiva()` calcula las
+revoluciones estimadas al aplicar la resistencia. **En esta versión esa RPM
+efectiva todavía no gobierna el tono del audio ni la rotación del cabezal**; el
+efecto de carga está listo para exponer y medir, pero su integración mecánica y
+sonora queda pendiente de ajuste con feedback.
+
 Tres detalles que aqui importan de verdad:
 
 - Se mira **por delante**, no debajo. La hierba de justo debajo la acaba de
@@ -361,7 +467,10 @@ con las rpm, que es lo que se oye de verdad cuando acelera.
 **Lo que el sistema de corte necesita de aqui:**
 
 - `punto_de_corte()` — el punto del cabezal, en mundo.
-- `get_cortando()` — si el motor pasa del 15 % de las rpm maximas.
+- `rpm` / `cortando` — propiedades de lectura; el estado de corte se deriva del umbral de RPM.
+- `rpm_efectiva()` — RPM estimada bajo carga de maleza.
+- `telemetria_actualizada(rpm_sin_carga, rpm_bajo_carga, resistencia)` — señal para
+  conectar una futura interfaz sin que esta dependa de nodos internos.
 - `velocidad_corte()` — velocidad del hilo. **Pendiente:** ahora solo es la
   velocidad de giro; cuando haya que modelar el arrastre habra que sumarle la
   velocidad del jugador.
@@ -375,17 +484,16 @@ El nodo crea y guarda sus propios hijos, uno por cuadrante.
 
 ### Por que cuadrantes
 
-Con un unico MultiMesh de 100 m de lado, su caja envolvente es tan grande que
-siempre se solapa con la pantalla, se mire donde se mire. El motor no puede
-descartar nada, asi que dibuja las 500.000 hojas enteras en cada fotograma
-aunque solo se vea un trozo de cesped. Con cuadrantes, cada uno lleva su caja
+Con un unico MultiMesh que cubriera el campo entero, su caja envolvente seria tan
+grande que siempre se solaparia con la pantalla. El motor no podria descartar
+nada aunque solo se viera un trozo de cesped. Con cuadrantes, cada uno lleva su caja
 ajustada a las hojas que tiene dentro, el motor descarta solo los que quedan
 fuera de la vista, y el dibujo se reduce a lo que se ve de verdad.
 
 Por encima del culling de la vista hay un **recorte por distancia**
-(`distancia_maxima`, 22 m en el cesped y 16 m en la maleza) en `_recortar()`: es la
-red de seguridad para el dia que el campo crezca. Hoy si apaga: el radio es de
-50 m, asi que lo que hay a mas de 22 m no se dibuja.
+(`distancia_maxima`) en `_recortar()`. En la configuración actual es 80 m para
+`Hierba` y 16 m para `MalezaAlta`; los campos tienen radios de 66 m y 50 m,
+respectivamente. El filtro se aplica a los centros de los cuadrantes.
 
 El estado de cada hoja (donde esta y cuanto le queda de altura) vive en arrays
 de GDScript, **NO** en el MultiMesh:
@@ -393,7 +501,7 @@ de GDScript, **NO** en el MultiMesh:
 - El MultiMesh solo existe en el servidor de graficos. En headless no guarda
   nada, asi que una prueba en linea de comandos no veria ni una hoja y el
   sistema de corte no se podria comprobar.
-- Leer 500.000 transformaciones del motor en cada fotograma seria una chapuza.
+- Leer todas las transformaciones del motor en cada fotograma seria una chapuza.
   Con los arrays se va directo.
 
 El MultiMesh solo recibe la transformacion y el color. El shader lee
@@ -402,8 +510,7 @@ de altura despues del corte. Asi cortar es escribir un numero: no se toca ningun
 geometria, y se puede ir cortando en plan largo sin que baje el ritmo.
 
 Para el corte hay ademas una rejilla: un diccionario con celdas de 2 m y la
-lista de indices de cada una, para no revisar las quinientas mil hojas por
-fotograma.
+lista de indices de cada una, para no revisar el campo entero por fotograma.
 **Esa rejilla no tiene nada que ver con los cuadrantes**: es para el corte, y los
 cuadrantes son solo para el dibujo.
 
@@ -438,9 +545,10 @@ segunda asignacion **borraba el buffer entero**: `get_instance_count()` decia
 
 Luego `_repartir_en_cuadrantes()` decide a que cuadrante va cada hoja
 (`_casilla_de()`) y `_montar_cuadrante()` crea un `MultiMeshInstance3D` por
-cuadrante con su `custom_aabb` ya ajustada. Reparto verificado: el cesped son
-**146 cuadrados de 8 m con 471.239 hojas** y la maleza **62 cuadrados de 12 m
-con 31.162**, ninguna perdida, ninguno vacio.
+cuadrante con su `custom_aabb` ajustada. El número de hojas y de cuadrantes no
+es una constante: depende de los parámetros, la semilla y las zonas ocupadas.
+La configuración efectiva está en `scenes/main.tscn` y se resume en la tabla
+siguiente.
 
 La siembra es sobre una rejilla con jitter, y el borde se va aclarando con
 `borde` para que el campo no tenga un corte recto. Con `formacion` por encima de
@@ -452,32 +560,33 @@ hojas**, y por eso se puede pasar andando sin oir el motor.
 Hay **dos instancias** en `scenes/main.tscn`, y no son el mismo campo con otros
 numeros: son dos campos, con su semilla, su material y su troceado.
 
-| Export | Por defecto | **`Hierba`** | **`MalezaAlta`** | Que hace |
+| Export | Por defecto del script | **`Hierba` (main.tscn)** | **`MalezaAlta` (main.tscn)** | Que hace |
 | --- | --- | --- | --- | --- |
 | `tipo` | 1 | 1 | **2** | 1 = cesped, 2 = maleza |
-| `altura` | 0.38 m | **0.71 m** | **1.45 m** | |
-| `variacion_altura` | 0.45 | **0.96** | 0.34 | cuanto hay de alto y de bajo |
-| `grosor` | 0.045 m | **0.145 m** | 0.11 m | |
-| `variacion_grosor` | 0.35 | 1.0 | 0.7 | |
-| `radio` | 34 m | **50 m** | **50 m** | radio del campo |
+| `altura` | 0.38 m | **0.69 m** | **1.45 m** | altura de referencia antes del borde |
+| `variacion_altura` | 0.45 | **1.0** | 0.34 | variación aleatoria de altura |
+| `grosor` | 0.045 m | **0.23 m** | 0.11 m | ancho de la hoja |
+| `variacion_grosor` | 0.35 | **1.0** | 0.7 | variación aleatoria del grosor |
+| `radio` | 34 m | **66 m** | **50 m** | radio del campo |
 | `densidad` | 30 | **60** | 18 | hojas por m2 sembradas |
-| `borde` | 0.72 | 1.0 | 0.9 | como se va aclarando el borde |
-| `formacion` | 0 | 0 | **0.78** | cuanto se agrupa en matas |
+| `borde` | 0.72 | **0.85** | 0.9 | fracción del radio donde se aclara el borde |
+| `formacion` | 0 | **0.70** | **0.78** | agrupación en matas; 0 = uniforme |
 | `dureza` | 1.0 | 1.0 | **1.8** | cuanto cuesta cortarla |
-| `tono_pie` | verde | verde | **seco** | color de la base |
-| `tono_punta` | verde claro | verde claro | **seco claro** | color de la punta |
+| `tono_pie` | verde | verde (heredado) | **(0.204, 0.157, 0.078)** | color de la base |
+| `tono_punta` | verde claro | verde (heredado) | **(0.478, 0.396, 0.188)** | color de la punta |
 | `semilla` | 90210 | 90210 | **24601** | con la misma sale siempre igual |
-| `lado_cuadrante` | 8 m | **8 m** | 12 m | lado de cada trozo de campo |
-| `distancia_maxima` | 42 m | **22 m** | 16 m | recorte por distancia |
-| `radio_corte` | 0.40 m | **0.73 m** | **0.73 m** | paso del cabezal |
+| `lado_cuadrante` | 8 m | **24 m** | 12 m | lado de cada trozo de campo |
+| `distancia_maxima` | 42 m | **80 m** | 16 m | distancia máxima al centro del cuadrante |
+| `radio_corte` | 0.40 m | **1.00 m** | **0.73 m** | radio del área de corte |
 | `dejar_tocon` | true | true | true | cortar deja tocón |
 | `altura_tocon` | 0.08 m | **0.15 m** | 0.30 m | altura del tocón |
 
-Los dos radio son 50 m a proposito, para que compartan el mismo mapa del viento
-y el mismo recorte. La maleza esta mas rala (18 por m2) pero sale en **matas**:
-con `formacion = 0.78` solo se siembra el 34 % del terreno, de modo que hay
-claros de verdad por los que se pasa sin cortar nada. Sin eso, un segundo tipo
-que se reparte por igual no se distingue de un cesped mas alto.
+El mapa de viento compartido toma el radio mayor, 66 m, y cubre 132 m de lado.
+Los dos campos salen en matas: `formacion = 0.70` para el césped y `0.78` para
+la maleza. La fórmula del generador estima, respectivamente, alrededor del 40,5 %
+y 33,7 % de superficie sembrada; los claros y los bordes excluidos hacen que el
+recuento final varíe con la semilla y la aldea. La maleza mantiene además una
+dureza de 1,8.
 
 `dureza` va aparte de la densidad a proposito. La densidad es "cuantas hojas hay
 debajo"; la dureza es "cuanto cuesta cada una". Con las dos juntas se puede
@@ -492,25 +601,25 @@ hojas de pie que hay por delante por `coste_maleza()` de cada campo. Por eso
 lo que tiene debajo.
 
 > **Ojo con estas columnas: son valores distintos y estan en sitios distintos.**
-> La de "por defecto" es el `@export` de `scripts/hierba.gd`, y las otras dos son
-> lo que sobrescriben las instancias de `scenes/main.tscn`. Lo que se ve al
-> jugar son las de los campos. El campo real son **502.401 hojas** entre los dos,
-> no las 108.960 que salen con los valores por defecto.
+> La primera columna es el `@export` de `scripts/hierba.gd`; las otras dos son
+> los valores efectivos de `scenes/main.tscn`. En la última ejecución se
+> sembraron **255.360** hojas de `Hierba` y **28.606** de `MalezaAlta`.
+> El recuento cambia al modificar densidad, formación, radio, semilla o zonas
+> ocupadas; se consulta en ejecución con `total()` por cada campo.
 >
 > Al cambiar estos numeros, dos cosas se quedan viejas solas: los comentarios que
 > dan recuento de hojas, y las pruebas que comparen con un literal. Por eso la
 > prueba del ancho de corte mide contra `hierba.radio_corte` en vez de contra
 > un 0,40 escrito a mano, y `medir_densidad.gd` lee la densidad de la escena al
-> arrancar en vez de tenerla en su lista. Las cifras de este documento se sacan
-> con el juego, no de los valores por defecto.
+> arrancar en vez de tenerla en su lista. Esta tabla refleja los exports de la
+> escena actual, no una medición de hojas ni de rendimiento.
 
 
 `dejar_tocon` esta en `true` a proposito: con `false` la hierba cortada queda a
 0 cm, tumbada en el suelo, y **no se ve nada desde la camara**, asi que no hay
-ni rastro de por donde has pasado. Con tocón el corte se ve de sobra, como una
-mancha mas corta y mas clara. Ahora el cesped deja 15 cm y la maleza 30 cm, que es
-lo que se ve de verdad: en la maleza la zona cortada es casi tan alta como el
-tocón del cesped, y por eso los dos campos se distinguen tambien por el rastro.
+ni rastro de por donde has pasado. Con tocón el corte se ve como una mancha más
+corta y clara. La configuración actual deja 15 cm en el césped y 30 cm en la
+maleza.
 
 ### API para el corte y las pruebas
 
@@ -518,6 +627,7 @@ tocón del cesped, y por eso los dos campos se distinguen tambien por el rastro.
 cortar(centro: Vector3, r: float) -> int   # corta y devuelve cuantas
 total() -> int                             # hojas sembradas
 total_de_pie() -> int                      # cuantas quedan de pie
+regenerar() -> void                        # resiembra y reconstruye la rejilla
 de_pie(centro, r) -> int                   # cuantas hay de pie en un circulo
 altura_hoja(i) -> float                    # altura visual actual
 posicion_hoja(i) -> Vector3
@@ -532,7 +642,7 @@ refresca_uv_de_viento() -> void            # rehace las uv si cambio el radio
 uv_rehechas() -> int                       # cuantas hojas rehizo el ultimo refresco
 
 # lo de los cuadrantes
-num_cuadrantes() -> int                    # 146 en el cesped, 62 en la maleza
+num_cuadrantes() -> int                    # depende de radio, tamaño y siembra
 hojas_de_cuadrante(n) -> int               # hojas de ese cuadrante
 caja_de_cuadrante(n) -> AABB               # su caja ajustada
 cuadrantes_visibles() -> int               # cuantos quedan tras el recorte
@@ -660,10 +770,10 @@ entre ningun campo nuevo despues.
 
 ## 8. `shaders/suelo.gdshader` y el suelo
 
-El suelo es una `StaticBody3D` con una malla de 80x80 m y este shader. Con un
-color plano parecia un plastico verde, asi que se mezclan tres tonos con ruido
-a tres escalas: manchas grandes (idea de terreno), media (tierra clara contra
-humeda) y fina (grano).
+El suelo visible pertenece a `Terreno`, un `StaticBody3D` que genera una malla de
+240 × 240 m, partida en 400 fragmentos de 12 m. La forma y la colisión usan la
+misma rejilla de alturas. El shader mezcla tonos de tierra con ruido a varias
+escalas; la forma geométrica la define `scripts/terreno.gd`, no el shader.
 
 > Godot 4.7 **no tiene `noise()` ni `hash()`** en el lenguaje de sombreado. Se
 > comprobo. El ruido de valor va montado a pelo con `hash21()` y `ruido()`.
@@ -676,13 +786,109 @@ repitan con el borde de la malla y no se vea el empalme al alejarse.
 | `tierra_seca` | (0.345, 0.259, 0.169) |
 | `tierra_humeda` | (0.145, 0.098, 0.062) |
 | `verdin` | (0.208, 0.271, 0.129) |
-| `cantidad_verdin` | 0.3 |
+| `cantidad_verdin` | 0.34 |
 | `grano` | 0.45 |
 | `escala_manchas` | 0.28 |
 
+### Configuración efectiva del terreno (`scripts/terreno.gd`)
+
+La escena principal no sobrescribe estos exports, por lo que son también los
+valores activos:
+
+| Export | Valor | Uso |
+| --- | --- | --- |
+| `semilla` | 41021 | semilla del ruido determinista |
+| `lado` | 240 m | extensión del terreno, centrado en el origen |
+| `lado_cuadrante` | 12 m | 20 × 20 = 400 fragmentos |
+| `paso_malla` | 1 m | resolución de la malla y la colisión |
+| `pendiente` | 6° | pendiente general hacia el norte |
+| `desde_terraza` | 3 m | altura base a partir de la que aparecen terrazas |
+| `alto_terraza` | 1,7 m | desnivel entre niveles de terraza |
+| `talud_terraza` | 0,20 | proporción del nivel ocupada por el talud |
+| `fondo_surco` | 0,9 m | profundidad nominal de los surcos |
+| `ancho_surco` / `paso_surco` | 2,6 m / 5,5 m | ancho y separación de los surcos |
+| `altura_origen` | 0 m | cota del terreno en el origen |
+| `altura_nube` | 60 m | límite inicial al calcular las cotas del terreno |
+
+La altura combina pendiente, ondulación, terrazas y surcos; por eso el desnivel
+total no es igual a la pendiente simple. La malla actual tiene 67.600 vértices y
+135.200 triángulos. Las normales se calculan a partir de diferencias entre
+alturas vecinas.
+
 ---
 
-## 9. `scripts/bosque.gd` — el bosque
+## 9. `scripts/aldea.gd` — catalogo modular de Blender
+
+La aldea no genera mallas por codigo. `Aldea` calcula una cuadrícula de parcelas,
+ajusta cada instancia a `Terreno.cota_en()` y carga estos archivos si existen.
+Si falta alguno, deja un `Node3D` placeholder con la ruta en metadata
+`asset_path`. **Estado actual:** la carpeta `assets/models/aldea/` solo contiene
+`.gitkeep`; no hay modelos disponibles y todas las ubicaciones del catálogo son
+placeholders. La lógica coloca una casa, muros, un árbol y un arbusto por parcela,
+además de la carretera; todavía no coloca hórreos.
+
+Configuración efectiva en `main.tscn` / exports de `aldea.gd`:
+
+| Parámetro | Valor |
+| --- | --- |
+| `columnas` × `filas` | 4 × 3 (12 parcelas) |
+| `largo_parcela` × `ancho_parcela` | 15 × 12 m |
+| `origen` / `giro` | (0, 0) / 0 rad |
+| `calle_fila` / `ancho_camino` | 1 / 4 m |
+| `semilla` | 20260927 |
+
+API del layout para los sistemas futuros de encargos y parcelas:
+
+```gdscript
+numero_parcelas() -> int
+parcela_por_id(id: int) -> Parcela
+dentro(p: Vector2) -> bool       # pertenece a un recinto
+ocupada(p: Vector2) -> bool      # casa/carretera: no sembrar aquí
+```
+
+`Parcela` conserva `id`, fila, columna, centro, `centro_casa`, giro y dimensiones
+en un tipo explícito; el identificador se mantiene estable dentro de la cuadrícula.
+
+| Grupo | Rutas esperadas en el catálogo |
+| --- | --- |
+| Casas | `casa_1.glb`, `casa_2.glb`, `casa_3.glb` |
+| Muros | `muro_recto.glb`, `muro_esquina.glb` |
+| Vegetacion | `arbol_1.glb`, `arbol_2.glb`, `arbusto_1.glb`, `arbusto_2.glb` |
+| Carretera | `carretera_recta.glb`, `carretera_cruce.glb` |
+
+Todos van en `res://assets/models/aldea/`. Las coordenadas de los modelos usan
+metros: **1 unidad de Godot = 1 metro**. Exporta cada origen en el centro de la
+base, con la base en `Y = 0`; la aldea escribe la altura `Y` con el heightmap del
+terreno. El eje longitudinal del modelo debe quedar en el eje local `+X`; si
+trabajas mirando hacia `-Z` en Blender, gira la malla dentro del archivo antes
+de exportar.
+
+Medidas recomendadas:
+
+| Modelo | Medida de referencia |
+| --- | --- |
+| Casa | hasta `6 x 5 x 5 m`, base en `Y = 0` |
+| Muro recto | `1 x 0,8 x 1 m`; el juego escala el eje longitudinal a cada lado |
+| Muro esquina | `1 x 0,8 x 1 m` |
+| Arbol | base en `Y = 0`, entre `3` y `8 m` de alto |
+| Arbusto | base en `Y = 0`, entre `0,6` y `2 m` de alto |
+| Carretera recta | aproximadamente `15 x 4 m`, eje largo local `X` |
+| Carretera cruce | aproximadamente `4 x 4 m` |
+
+Los árboles y arbustos reciben una variación reproducible de yaw de `+-0,25`
+radianes cuando sus escenas estén disponibles. `Aldea/PuntoInicioFurgoneta` es un
+`Marker3D` colocado al comienzo del tramo principal; su posición pública es
+`punto_inicio_furgoneta`. Es un punto de integración: la furgoneta aún no está
+instanciada en `main.tscn`.
+
+La hierba sigue apareciendo en la zona libre de cada parcela. Solo se excluyen
+las cajas ocupadas por casas y carretera mediante `Aldea.ocupada()`; `Bosque`
+sigue usando `Aldea.dentro()` para no plantar arboles del bosque exterior dentro
+de las parcelas.
+
+---
+
+## 10. `scripts/bosque.gd` — el bosque
 
 Reparte arboles por el campo con semilla fija, sobre una rejilla con jitter para
 que no salgan en lineas. Cada arbol es un `StaticBody3D` con tronco y dos copas,
@@ -691,29 +897,36 @@ igual). Va en la capa 2.
 
 ---
 
-## 10. `tools/` — pruebas y medicion
+## 11. `tools/` — pruebas y medicion
 
 | Archivo | Que hace |
 | --- | --- |
-| `test_juego.gd` | la suite. **183 comprobaciones** en headless |
+| `test_juego.gd` | la suite. **200 comprobaciones** en headless |
+| `test_movimiento_integrado.gd` | combinaciones de paneo, WASD, carrera, agachado, salto y acelerador |
 | `mirar_hierba.gd` | tres fotos con render real y cuanto ocupa cada una |
 | `medir_densidad.gd` | frame time con distintas densidades y radios |
 | `medir_foto.gd` | **la comprobacion visual**: mide pixeles de la foto a render real |
 | `diag_hierba.gd` | AABB, reparto por cuadrante y datos de instancia |
 | `foto.gd` | una foto suelta |
 | `ver_encuadre.gd` | que mallas entran en la foto y a que grados del centro |
-| `crear_desbrozadora.py` | genera el modelo de la desbrozadora |
-| `crear_motor.py` | genera el modelo del motor |
+| `crear_desbrozadora.py` | alias compatible de `crear_desbrozadora_mesh.py` |
+| `crear_motor.py` | genera `audio/motor.wav` |
 | `crear_desbrozadora_mesh.py` | genera la desbrozadora y **los tres cabezales sueltos**, y los mide antes de exportar |
+| `crear_desbrozadora_100x.py` | generador de un modelo alternativo de prueba, no usado en `main.tscn` |
+| `crear_furgoneta_mesh.py` | genera la furgoneta de la futura fase de conducción |
+| `crear_personaje_mesh.py` | genera el operario low-poly en `models/personaje_trabajo.glb` |
+| `probar_cambio.py` | comprueba el alineamiento de un cabezal intercambiable |
+| `foto_personaje.gd` | captura la pose de trabajo en primera persona para iterar cuerpo y anclaje |
 | `exportar_blender.py` | exportador a `.glb` con las correcciones que Godot necesita |
 | `abrir_modelo.py` | abre un `.glb` en Blender con ventana, para verlo |
 | `ver_modelo.py` | mira un `.glb` por dentro |
 
-Los `.py` son generadores: se ejecutan una vez para producir el `.glb` y
-luego no hacen falta en el juego. Los `.uid` los genera Godot solo, no se tocan.
+Los `.py` son herramientas de generación y validación; no se ejecutan durante el
+juego. Los `.uid` los genera Godot solo, no se tocan.
 
-Todos van con **rutas absolutas** al lanzarlos desde el flatpak, porque Blender
-arranca en su propio directorio y no encuentra el proyecto con rutas relativas:
+Los generadores obtienen las rutas de salida desde la ubicación de su propio
+archivo. Para el Flatpak se pasa la ruta del script/modelo desde `$PWD`, porque
+Blender puede arrancar en su propio directorio:
 
 ```
 flatpak run --filesystem=$HOME/Documentos org.blender.Blender --background \
@@ -750,11 +963,11 @@ flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --path . --script tools/medir_foto.gd --rendering-driver vulkan
 ```
 
-`medir_foto.gd` hace la foto, espera 40 fotogramas reales, tira otra con la
-hierba oculta y compara las dos. En la ultima vez: **93,9 %** de los pixeles
-cambian al tapar la hierba, y **76,3 %** de los pixeles de la foto con hierba
-son verdes. Ese 76,3 % es el que importa: si el shader se rompiese, el campo
-saldria de otro color y el numero se hundiria.
+`medir_foto.gd` hace la foto, espera 40 fotogramas reales, tira otra con
+`Hierba` oculta y compara las dos. Con la configuración actual y el encuadre
+inicial de −40° cambió el **52,4 %** de los píxeles al ocultar ese campo; el
+**54,7 %** de la captura tenía píxeles verdes. El resultado depende del encuadre,
+así que debe repetirse si cambian la cámara o los campos.
 
 > **No se lanza la suite completa con Vulkan para cerrar el aviso.** En una
 > maquina sin GPU (render por software) va a unos 1 fps y las pruebas tardan
@@ -784,33 +997,23 @@ pueden comparar.
 
 ## 11. Rendimiento medido
 
-En una AMD Radeon RX 6600 con Forward+, Vulkan 1.4. Medido con
-`tools/medir_densidad.gd`, que ademas **cambia el jugador a invisible** para que
-el numero sea el de la hierba y no el de verse a uno mismo andando.
+Medición actual con una AMD Radeon RX 6600, Forward+, Vulkan 1.4 y
+`tools/medir_densidad.gd`. El jugador se oculta durante la captura, pero el resto
+de la escena permanece activo: terreno, bosque y `MalezaAlta`. Los recuentos y
+triángulos de la tabla son solo los de `Hierba`.
 
-| Densidad | Radio | Hojas | Triangulos | Mediana | Peor |
-| --- | --- | --- | --- | --- | --- |
-| **53/m2 (el de entonces)** | 34 m | **192.454** | 1.154.724 | 8.3 ms | 8.3 ms |
-| 30/m2 | 20 m | 37.696 | 226.176 | 8.3 ms | 8.4 ms |
-| 60/m2 | 20 m | 75.380 | 452.280 | 8.3 ms | 8.4 ms |
-| 100/m2 | 20 m | 125.664 | 753.984 | 8.3 ms | 8.6 ms |
-| 160/m2 | 20 m | 201.067 | 1.206.402 | 8.3 ms | 8.5 ms |
-| 160/m2 | 14 m | 98.535 | 591.210 | 8.3 ms | 8.4 ms |
+| Densidad | Radio | Hojas | Triángulos | Mediana | Peor |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| **60/m² (configuración actual)** | **66 m** | **255.360** | **1.532.160** | 8,3 ms | 8,3 ms |
+| 30/m² | 20 m | 8.136 | 48.816 | 8,3 ms | 8,4 ms |
+| 60/m² | 20 m | 16.301 | 97.806 | 8,3 ms | 8,4 ms |
+| 100/m² | 20 m | 27.118 | 162.708 | 8,3 ms | 8,6 ms |
+| 160/m² | 20 m | 43.305 | 259.830 | 8,3 ms | 8,3 ms |
+| 100/m² | 14 m | 14.190 | 85.140 | 8,3 ms | 8,6 ms |
+| 160/m² | 14 m | 22.673 | 136.038 | 8,3 ms | 8,4 ms |
 
-La mediana esta clavada en 8,3 ms en todas las filas porque es el tope de vsync a
-120 fps: **no se esta midiendo el coste de la hierba, sino que se aguanta**. El
-dato util es la columna "Peor", que es donde se nota cuando algo se pasa de la
-raya, y como ninguna se pasa, el campo va sobrado.
-
-La conclusion: el campo real de entonces, con 192.454 hojas y 1,15 millones de
-triangulos, iba a 120 fps sin despeinarse. **Los cuadrantes lo que hacen es
-permitir subir la densidad**, que antes de trocear no se podia: con un solo
-MultiMesh de 68 m el motor dibujaba las hojas enteras siempre, y a esa densidad
-el portatil se arrastraba.
-
-> **Estas medidas son anteriores a la fase 2 y ya no describen el juego.** El
-> campo ahora tiene **502.401 hojas** (471.239 de cesped y 31.162 de maleza) en
-> 50 m de radio, no 192.454 en 34 m: mas del doble de hojas en un radio mayor. La
-> tabla de arriba no se ha vuelto a medir, y **no se puede decir que el campo
-> siga yendo a 120 fps**. Hay que volver a pasar `tools/medir_densidad.gd` con la
-> GPU de verdad antes de fiarse de nada de aqui.
+La mediana de 8,3 ms está limitada por VSync a 120 fps, así que no aísla el coste
+de la hierba. La columna de peor fotograma tampoco incluye un pase sin VSync ni
+separa el coste del terreno y la maleza. Sirve como referencia de la escena
+completa; para perfilar un cuello de botella hace falta medir esas partes por
+separado.

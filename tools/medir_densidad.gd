@@ -10,7 +10,7 @@ var esperas := 0
 var tiempos: Array = []
 # Lo que trae la escena, que es lo que se juega de verdad. Se guarda aparte
 # porque las medidas de abajo cambian la densidad y el radio sobre la marcha.
-var densidad_juego := 53.0
+var densidad_juego := 30.0
 var radio_juego := 34.0
 
 
@@ -43,7 +43,7 @@ func _process(delta: float) -> bool:
 			var d: Array = _medidas()[config]
 			h.densidad = d[0]
 			h.radio = d[1]
-			h._sembrar()
+			h.regenerar()
 			esperas = 0
 			fase = 1
 		1:

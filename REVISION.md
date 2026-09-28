@@ -3,9 +3,14 @@
 Analisis del estado del proyecto tal y como esta ahora, con lo que esta bien,
 lo que esta raro y lo que falta. Para decidir el siguiente paso.
 
-Ultima revision: con la **fase 2 hecha** (maleza alta en matas, resistencia por
-densidad y morro que sube al mirar arriba). Suite en **183 correctas / 0 fallos**
-en headless, y la imagen comprobada aparte con `tools/medir_foto.gd`.
+Ultima revision: base jugable de desbroce y entorno procedural integrada; la
+integración visual de la aldea sigue pendiente. La última suite ejecutada antes
+de los cambios de FOV e interacción dio **202 correctas / 0 fallos**, con un aviso esperado por la
+imagen. Con la configuración y el encuadre actuales, la medición Vulkan registra **52,4 %** de
+píxeles cambiados al ocultar el césped y **54,7 %** verdes.
+
+La interacción experimental para coger/soltar la desbrozadora con `E` y `Q` se
+retiró; la herramienta vuelve a permanecer anclada al arnés.
 
 Lo que se puede jugar hoy esta en [LEEME.md](LEEME.md), el detalle por archivo en
 [DOCUMENTACION.md](DOCUMENTACION.md) y la hoja de ruta en
@@ -24,8 +29,9 @@ Lo que se puede jugar hoy esta en [LEEME.md](LEEME.md), el detalle por archivo e
 - La desbrozadora cuelga de las caderas, acelera con curva, suena el motor con
   el tono y el volumen correctos, y el cabezal baja al acelerar.
 - Hay bosque con colision, y suelo de tierra procedural que se ve bien.
-- **La hierba se ve, el viento la dobla por zonas, y se corta donde pasas.**
-  Verificado con render real, no solo con tests.
+- **La hierba, el viento y el corte están implementados.** La escena actual se
+  comprobó con Vulkan; la vegetación cambia el 52,4 % de los píxeles de la captura
+  al ocultar `Hierba`.
 - El campo va **por cuadrantes**, con culling por caja y por distancia, asi que
   la densidad se puede subir sin que el motor dibuje las hojas enteras.
 - **Hay dos tipos de hierba.** `MalezaAlta`, alta y seca, sale en matas con
@@ -33,6 +39,31 @@ Lo que se puede jugar hoy esta en [LEEME.md](LEEME.md), el detalle por archivo e
   maquina. Un claro va mas rapido que un zarzal, y se nota.
 - **Mirar arriba sube la maquina**, y el cabezal llega a la parte alta de la
   maleza sin salirse del encuadre. Antes no pasaba de 0,35 m.
+- **La aldea usa un catalogo modular.** `scripts/aldea.gd` solo calcula parcelas
+  y coloca instancias; `assets/models/aldea/` aún no contiene modelos, por lo que
+  las ubicaciones actuales son placeholders.
+- **El terreno tiene desnivel real.** `Terreno` construye una superficie de
+  240 × 240 m con pendiente, ondulación, terrazas y surcos; hierba, bosque y aldea
+  consultan la misma función de altura.
+- **Mirar arriba funciona con el motor parado.** El acelerador controla la
+  bajada de trabajo y el corte, pero no bloquea la elevacion vertical por la
+  mirada.
+- **El modelo activo de la herramienta es `desbrozadora.glb`.** Su cabezal gira
+  sobre Y y la jerarquia `Giro/Corte` esta verificada. La prioridad visual es
+  afinar el anclaje ergonomico sobre el primer cuerpo low-poly integrado.
+- **Primera iteración del operario integrada.** `personaje_trabajo.glb` mide
+  1,98 m y tiene 796 triángulos; torso y parte inferior ya están visibles por
+  defecto y los brazos dinámicos siguen los agarres. La pose GoPro requiere
+  todavía feedback visual y ajuste de proporciones.
+- **Barra extendida para la ergonomía:** 2,06 m de tubo y 2,46 m de largo total;
+  `alcance = 1,56 m` e `inclinacion_reposo = -22°`. El motor queda detrás del
+  operario, junto a la cadera derecha; `rotation.y` sigue reservado al barrido.
+- **FOV horizontal ajustable:** base de 100°, con `ajuste_fov` entre −20° y +20°;
+  `main.tscn` lo ajusta actualmente a +20°. Esta última corrección queda para
+  probar manualmente.
+- **Recorrido integrado de movimiento añadido:** 48 comprobaciones combinan
+  paneos, barridos, WASD, correr, agacharse, saltar y acelerar, incluida la
+  mirada alta con el motor encendido; última pasada limpia, 0 fallos.
 
 ## 2. Los bugs que se han resuelto, y que conviene no repetir
 
@@ -271,11 +302,17 @@ Ahora es solo la velocidad de giro del carrete. Cuando el jugador vaya rapido,
 el corte tendra que sumar la velocidad del jugador para que el cabezal barra mas
 ancho, y ahi habra que rehacerla. Esta anotado en el propio script.
 
-### 4.3 El estado de la desbrozadora se lee con `get_` y con `var` a la vez
+Además, `rpm_efectiva()` calcula la caída de RPM bajo carga, pero el sonido y el
+giro visual del carrete todavía siguen las RPM sin carga. La telemetría ya publica
+ambas medidas para la futura interfaz; queda decidir cómo la maleza debe afectar
+audible y mecánicamente al motor, con feedback de juego.
 
-Hay `get_rpm()` / `get_cortando()` y ademas `var rpm` / `var cortando`
-publicos. Son la misma cosa por dos caminos. No es un bug, pero invita a
-cambiar uno y no el otro.
+### 4.3 El estado de la desbrozadora tenía API duplicada  _(resuelto)_
+
+Se eliminaron `get_rpm()` y `get_cortando()`. `rpm` y `cortando` son ahora
+propiedades de lectura, con `cortando` derivado del umbral de RPM; el estado
+interno se mantiene privado. La señal `telemetria_actualizada` publica RPM libre,
+RPM efectiva y resistencia para desacoplar una futura UI.
 
 ### 4.4 `ladeo_herramienta` estaba cableado en los dos sentidos  _(resuelto)_
 
@@ -292,21 +329,16 @@ absurdo. Ahora la ganancia es de 0,07 y hay un tope de 8 grados.
 
 ### 4.5 Los valores de la hierba estan en dos sitios, y ademas son dos campos
 
-Los `@export` de `scripts/hierba.gd` (0,38 m de alto, 30/m2) **no** son los que
-se juegan: los sobrescriben las dos instancias de `scenes/main.tscn`. Es lo
-correcto para explorar, pero hace que los valores por defecto y los reales
-divergan, y que cualquier cifra escrita en un documento se pueda quedar vieja.
+Los `@export` de `scripts/hierba.gd` son valores por defecto; los que se juegan
+son los de las dos instancias de `scenes/main.tscn`. Ahora `Hierba` está a
+0,69 m de altura de referencia, 60 hojas/m² y radio 66 m; `MalezaAlta`, a 1,45 m,
+18 hojas/m² y radio 50 m. Ambas usan formación en matas, radios de corte
+diferentes y tamaños de cuadrante diferentes. La tabla exacta está en
+`DOCUMENTACION.md`; hay que mantenerla al cambiar `main.tscn`.
 
-Con la fase 2 esto ha empeorado un poco mas: ya no es un campo con sus valores,
-son **dos campos con valores distintos cada uno** (cesped de 71 cm y 60/m2,
-maleza de 145 cm y 18/m2 en matas). Cualquier cifra que este escrita en singular
-ya esta mal antes de quedar vieja.
-
-Esta documentado en `DOCUMENTACION.md` con las tres columnas (por defecto, cesped
-y maleza), `medir_densidad.gd` lee los de la escena al arrancar en vez de tenerlos
-en su lista, y las pruebas evitan literales. Sigue siendo la fuente de errores
-mas probable del proyecto, y **es lo primero que hay que actualizar cuando se
-toque un valor de la hierba**: si no, los tres documentos mienten a la vez.
+El número total de hojas no se documenta como constante porque también depende
+de la semilla y de las exclusiones por aldea. `medir_densidad.gd` lee parámetros
+de la escena al arrancar y las pruebas evitan comparar con cantidades fijas.
 
 ### 4.6 `capturas/` se genera y no se versiona
 
@@ -319,15 +351,23 @@ guardaron a mano para comparar. Las que generan las herramientas
 ensuciarse, la solucion es un `capturas/*.png` en el `.gitignore` con las
 importantes sacadas antes a mano.
 
+### 4.7 Límites de módulos antes de añadir sistemas grandes
+
+- `desbrozadora.gd` conserva juntas la simulación del motor, sonido, carga de
+  maleza, barrido, inclinación y colocación. La señal de telemetría ya separa la
+  futura UI; antes de sumar combustible/desgaste conviene extraer un componente
+  de motor con contrato propio.
+- `hierba.gd` mantiene una sola fuente CPU para sembrado, corte y cuadrantes. La
+  rejilla de corte y el renderer son buenos límites para separar antes de añadir
+  crecimiento, recortes recogibles o nuevos tipos de vegetación.
+- `aldea.gd` ya usa registros tipados de parcela y consultas por ID; el catálogo
+  visual sigue vacío. Los encargos deberían depender de IDs/estado de parcela,
+  no de nodos o nombres de modelos.
+
 ## 5. Lo que no esta hecho
 
-- ~~**Tipo 2 de hierba.**~~ **Hecho en la fase 2**: `MalezaAlta` en
-  `main.tscn`, con `formacion`, `dureza` y colores propios. La estructura era la
-  misma que se ve a continuacion, y se dejo como estaba al empezar:
-
-  > El campo `tipo` ya existe en `scripts/hierba.gd` y vale
-  1, pero no hay segundo tipo. Cuando se haga, la estructura ya esta: mismo
-  nodo, mismos cuadrantes, otro `material_override` y otra semilla.
+- ~~**Tipo 2 de hierba.**~~ **Hecho:** `MalezaAlta` está en `main.tscn`, con
+  formación, dureza, colores y configuración propios.
 - **Recoger la hierba cortada.** Ahora se aplana y se queda. Acumular los
   recortes seria el siguiente paso natural, y el shader ya calcula `v_corte`,
   asi que el color de lo cortado se podria reaprovechar.
@@ -336,6 +376,13 @@ importantes sacadas antes a mano.
 - **Sonido de corte.** Ahora solo suena el motor.
 - **Colision con la hierba.** La capa 4 esta reservada pero vacia.
 - **Ciclo de dia.** La luz es fija.
+- **Modelos de la aldea.** El layout de parcelas está implementado, pero los
+  modelos de casas, muros, caminos, árboles y arbustos aún no están en el catálogo;
+  por ahora se instancian placeholders.
+- **Conducción y furgoneta jugable.** Hay un punto de inicio en la aldea y un
+  modelo local excluido del repositorio, pero todavía no hay vehículo en la escena.
+- **Telemetría del motor en pantalla.** Hay una medida de RPM efectiva y de
+  resistencia, pero aún no existe una interfaz que las presente.
 
 ## 6. Estado de los shaders
 
@@ -350,53 +397,41 @@ no dibuje nada.
 
 ## 7. Medidas utiles para decidir
 
-Configuracion real del juego, sacada de `main.tscn` (**no** de los valores por
-defecto del script, que son otros):
+Configuración efectiva, leída de `main.tscn` (los defaults de
+`scripts/hierba.gd` son distintos):
 
-- **Cesped:** 471.239 hojas en 146 cuadrados de 8 m. 60 hojas/m2, 71 cm de alto,
-  0,145 m de grosor, en 50 m de radio, recorte a 22 m.
-- **Maleza:** 31.162 hojas en 62 cuadrados de 12 m. 18 hojas/m2 sembradas, pero
-  en el 34 % del terreno, con dureza 1,8 y recorte a 16 m.
-- Las medidas de rendimiento de abajo son **anteriores a la fase 2**, cuando el
-  campo era de 192.454 hojas en 34 m. Ahora hay mas del doble de hojas y el
-  radio es mayor, asi que **hay que volver a medirlas** con
-  `tools/medir_densidad.gd` antes de fiarse de ellas.
-- Ultima medicion que hay (campo viejo): mediana de **8,3 ms** (tope de vsync a
-  120 fps) y **8,3 ms** en el peor fotograma. Campo de pie: **35,3 %** del frame.
-  Cortado: **3,8 %**. Sin hierba: 0 %.
+| Campo | Altura | Densidad | Formación | Radio | Cuadrante | Recorte | Corte |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `Hierba` | 0,69 m | 60/m² | 0,70 | 66 m | 24 m | 80 m | 1,00 m |
+| `MalezaAlta` | 1,45 m | 18/m² | 0,78 | 50 m | 12 m | 16 m | 0,73 m |
 
-> **Ojo con el metrico "ocupa el X %":** sale a veces 18,9 % y a veces 75,2 %
-> con la misma semilla, porque la captura coge el fotograma a medio renderizar.
-> El metrico fiable es el de **verde**, que se repite igual en todas las
-> pasadas.
+La maleza tiene dureza 1,8; ambas instancias usan el terreno y la aldea. En la
+última siembra se contaron **255.360** hojas de césped y **28.606** de maleza.
+La configuración del terreno es 240 × 240 m, pendiente general de 6°, 400
+fragmentos de 12 m y malla de 1 m. La aldea es una cuadrícula de 4 × 3 parcelas
+de 15 × 12 m.
 
-Subiendo densidad y bajando radio, para tener hojas parecidas y ver donde se
-rompe: 100/m2 en 20 m son 125.664 hojas y sigue a 8,3 ms; 160/m2 en 20 m son
-201.067 y tambien. **Aun hay margen para subir la densidad.**
+La medición Vulkan actual registró **8,3 ms de mediana** para el campo base, en
+el límite de VSync a 120 fps; por eso no aísla el coste de la hierba. La peor
+muestra fue de 8,3 ms para ese campo y hasta 8,6 ms en las configuraciones de
+comparación. La medición visual registró 52,4 % de píxeles cambiados al ocultar
+el césped y 54,7 % verdes con el encuadre inicial de −40°.
 
 ## 8. Propuesta de siguiente paso
 
-Lo de la fase 2 esta hecho, asi que esto es lo que queda de la hoja de ruta, en
-el orden en que haria falta.
+Estado del camino inmediato:
 
-1. **Volver a medir el rendimiento.** Las cifras de la seccion 7 son del campo
-   de antes de la fase 2, con 192.000 hojas en 34 m. Ahora hay 502.000 hojas en
-   50 m. Con la GPU por software de esta maquina no se puede measuring bien, pero
-   con la de verdad si, y hay que saber cuanto cuesta ahora antes de añadir mas.
-2. **Recoger la hierba cortada.** Ahora se aplana y se queda, y se queda para
-   siempre. El shader ya calcula el corte, asi que podria amontonarse.
-3. **Sonido de corte.** Ahora solo suena el motor, y con la resistencia ya
-   funcionando el motor baja de vueltas: el sonido deberia notarlo.
-4. **Terreno con desnivel de verdad.** Es lo que haria que el terreno oponga
-   resistencia de verdad y no solo las matas. Con el terreno llano que hay, la
-   densidad es lo unico que puede oponer algo.
-5. **Discos, desgaste y combustible.** De la fase 2, pero a proposito postponed:
-   sin disco al que afilar, el desgaste no tiene a que desgastar.
-
-Y una cosa que no es juego pero ya ha costado tiempo:
-
-6. **`capturas/` se ensucia.** Las herramientas generan PNG en la carpeta del
-   proyecto y se quedan. Falta decidir si se ignoran (punto 4.6).
+1. **Ajustar la vista GoPro con feedback visual.** El cuerpo está visible, pero
+   falta calibrar la escala aparente del torso y la lectura separada de las piernas.
+2. **Completar la aldea visual.** Crear los modelos que faltan en
+   `assets/models/aldea/` y revisarlos en el juego.
+3. **Revisar maleza y carga del motor.** La interfaz futura debe mostrar telemetría
+   desacoplada (`telemetria_actualizada`), incluida la RPM bajo carga.
+4. **Integrar la furgoneta y conducción básica.** Hay punto de inicio y modelo,
+   pero vehículo, controles y navegación siguen pendientes.
+5. **Continuar el bucle de trabajo:** recoger hierba cortada, añadir sonido de
+   corte y conectar la pendiente del terreno con la resistencia de la máquina.
+6. **Después:** discos intercambiables, combustible, desgaste/afilado y encargos.
 
 Ojo con una cosa al tocar la hierba: la suite **con ventana** necesita el juego
 cerrado, y sin ventana (headless) no se ve nada de lo visual. Con la GPU por
