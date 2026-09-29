@@ -86,6 +86,22 @@ extends Vegetacion
 @export_range(0.005, 0.3, 0.005) var grosor := 0.045
 ## Cuanto varian los grosores.
 @export_range(0.0, 1.0, 0.01) var variacion_grosor := 0.35
+@export_group("Forma de la hoja")
+## Cuanto se estrecha la hoja al subir. Con 0,88 es una brizna: arriba es un pelo.
+## Con 0,30 se queda ancha casi hasta la punta, que es lo que hace que una planta
+## se lea como hoja y no como hierba.
+##
+## Este numero, con los colores y el grosor, es **toda** la diferencia entre un
+## cesped y una zarza. No hay ni un branching en el codigo: las tres plantas son
+## la misma hoja con estos numeros distintos, y por eso se pueden comparar entre
+## si sin ningun caso especial.
+@export_range(0.0, 0.95, 0.01) var hoja_estrecha := 0.88
+## Cuanto se curva la hoja hacia delante. El cesped se dobla un poco; una hoja
+## dura se dobra casi nada y se queda tiesa.
+@export_range(0.0, 0.4, 0.005) var hoja_curva := 0.09
+## Giro de la hoja al subir, en grados. Da el twist que evita que el campo se vea
+## como un huerto de cartones iguales.
+@export_range(0.0, 45.0, 0.5) var hoja_tuerce := 12.0
 ## Radio del campo, en metros. Fuera no hay hierba, y las hojas del final se
 ## achican para que el campo se acabe sin que se vea un círculo en el suelo.
 @export_range(5.0, 90.0, 1.0) var radio := 34.0
@@ -150,8 +166,21 @@ var _ids := PackedInt32Array()
 var _material: ShaderMaterial
 var _malla: ArrayMesh
 
+## Trabajo por sector: las hojas de pie de cada sector, ordenadas de dentro hacia
+## fuera, y lo que a cada uno le sobra de la cuota (para que a la larga sectors
+## con pocas hojas no se queden cortos). Se reutilizan: son listas que se vacian
+## y se rellenan en cada corte, y no hay que crear nada por fotograma.
+var _sector_hojas: Array = []
+var _sector_por_cortar: PackedFloat32Array = PackedFloat32Array()
+## Cuantas hojas lleva cortadas cada sector en este fotograma, para poder seguir
+## por donde iba y saber cuantas le quedan.
+var _cortadas_en: PackedInt32Array = PackedInt32Array()
 var _rejilla := {}
 var _paso := 2.0
+## Parte decimal del presupuesto de corte que no ha cabido en el fotograma
+## anterior. Sin esto, un ritmo de 1,5 hojas por fotograma cortaria una hoja
+## cada dos fotogramas y la mitad del tiempo no pasaria nada.
+var _presupuesto_fraccion := 0.0
 var _lado := 0
 var _sembradas := 0
 ## Ultima posicion desde la que se refresco el recorte por distancia. Solo se
@@ -166,7 +195,9 @@ func _ready() -> void:
 	_crear_material()
 	_sembrar()
 	_crear_rejilla()
-	var nombre := "cesped" if tipo == 1 else "maleza tipo %d" % tipo
+	# El nombre de la planta en los avisos. Separan los tres: decir "maleza tipo 3"
+	# de la zarza es exactamente lo que hace que el tier 3 parezca que va aparte.
+	var nombre: String = ["cesped", "maleza alta", "zarza"][clampi(tipo - 1, 0, 2)]
 	print("%s: %d hojas de %.0f cm en %.0f m de radio (%.1f por m2)"
 		% [nombre.capitalize(), _sembradas, altura * 100.0, radio, densidad])
 	print("  en %d cuadrantes de %.0f m, culling por caja y por distancia"
@@ -237,6 +268,11 @@ func _mancha(x: float, z: float) -> float:
 ## Una hoja: tres tramos de dos puntos y la punta. Ocho vertices y seis
 ## triangulos, que es lo que se ve sin mirar de cerca y sale muy barato. El
 ## total de triangulos depende de las hojas que se siembren y sus cuadrantes.
+##
+## La forma sale de tres numeros del preset (`hoja_estrecha`, `hoja_curva`,
+## `hoja_tuerce`) y no de codigo, que es lo que permite que las tres plantas
+## compartan la misma hoja y se diferencien solo en como se estrecha, como se
+## dobla y como se retuerce.
 func _hoja() -> ArrayMesh:
 	var t := SurfaceTool.new()
 	t.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -245,9 +281,9 @@ func _hoja() -> ArrayMesh:
 		var u := float(i) / float(tramos)
 		# Se estrecha al subir, un poco de curva hacia delante y algo de
 		# torsion, para que no sea un carton plano.
-		var ancho := (1.0 - u * 0.88) * 0.5
-		var curva := u * u * 0.09
-		var giro := deg_to_rad(12.0) * u
+		var ancho := (1.0 - u * hoja_estrecha) * 0.5
+		var curva := u * u * hoja_curva
+		var giro := deg_to_rad(hoja_tuerce) * u
 		var dx := cos(giro) * ancho
 		var dz := sin(giro) * ancho
 		t.set_normal(Vector3(0.0, 0.0, 1.0))
@@ -475,6 +511,21 @@ func _dist2(a: Vector3, b: Vector3) -> float:
 ## en un campo es lo unico que se puede medir de un vistazo, porque
 ## `altura_visual()` devuelve SIEMPRE la altura del tocon, que es la misma tanto
 ## si el campo esta entero como si esta recien cortado.
+## La hoja mas alta que hay de pie ahora mismo, en metros.
+##
+## Para las pruebas: la zarza tiene que caber en el alcance del morro, y eso se
+## comprueba contra la hoja de verdad, con su variacion, y no contra el numero
+## del preset. Con `variacion_altura` al alza, la hoja mas alta es mas alta que
+## la que dice el preset, y es la que hay que poder cortar.
+func hoja_en_pie_mas_alta() -> float:
+	var alta := 0.0
+	for i in _corte.size():
+		if _corte[i] > 0.0:
+			continue
+		alta = maxf(alta, _alto[i])
+	return alta
+
+
 func hojas_en_pie() -> int:
 	var total := 0
 	for i in _corte.size():
@@ -493,8 +544,8 @@ func tipo_vegetacion() -> int:
 ## El corte del contrato comun. La desbrozadora tiene su propia logica de
 ## barrido y pregunta por dentro, asi que esta funcion es la puerta de entrada
 ## para las herramientas que solo saben cortar "lo que haya aqui": la hoz.
-func cortar_por_banda(centro: Vector3, radio: float) -> int:
-	return cortar(centro, radio)
+func cortar_por_banda(centro: Vector3, radio: float, presupuesto: float = -1.0) -> int:
+	return cortar(centro, radio, presupuesto)
 
 
 ## Corta la hierba alrededor de un punto y devuelve cuantas hojas ha tumbado.
@@ -503,27 +554,212 @@ func cortar_por_banda(centro: Vector3, radio: float) -> int:
 ## exigirse que la cabeza estuviera cerca del cesped para cortar, pero con el
 ## angulo que tiene el cabezal en la vista eso haria que cortar dependiera de
 ## cuanto mirases hacia abajo, y con la mirada normal no cortaria nada.
-func cortar(centro: Vector3, r: float) -> int:
+## Reparte en `_sector_hojas` las hojas de pie que caen dentro del disco, y las
+## ordena de dentro hacia fuera. Devuelve si hay alguna.
+##
+## Esto es lo que hace que el corte se vea organico, y salio de aqui porque
+## `cortar()` era ya ilegible. Repartido en orden aleatorio, un sector entero se
+## limpiaba mientras el de al lado conservaba todas sus hojas, y el claro salia
+## hecho de manchurrones. Repartido por sectores, cada uno pierde lo mismo en el
+## mismo tiempo, el frente avanza como un frente, y el claro se abre limpio.
+## Reparte en `_sector_hojas` las hojas de pie que caen dentro del disco, y dentro
+## de cada sector las ordena de dentro hacia fuera. Devuelve si hay alguna.
+##
+## Esto es lo que hace que el corte se vea organico, y salio de aqui porque
+## `cortar()` se habia vuelto ilegible. Repartido en orden aleatorio, un sector
+## entero se limpiaba mientras el de al lado conservaba todas sus hojas, y el
+## claro salia hecho de manchurrones. Repartido por sectores, cada uno pierde lo
+## mismo en el mismo tiempo, el frente avanza como un frente, y el claro se abre
+## limpio.
+func _repartir_en_sectores(centro: Vector3, c: Vector2i, r: float,
+		alcance: int) -> bool:
+	if _sector_hojas.size() != SECTORES:
+		_sector_hojas.resize(SECTORES)
+		_sector_por_cortar.resize(SECTORES)
+		_cortadas_en.resize(SECTORES)
+		for k in SECTORES:
+			_sector_hojas[k] = []
+	var hay_algo := false
+	for k in SECTORES:
+		_sector_hojas[k].clear()
+		_cortadas_en[k] = 0
+		# OJO: `_sector_por_cortar` NO se limpia aqui a proposito. Es la parte
+		# decimal que le ha sobrado a este sector, y tiene que sobrevivir de un
+		# fotograma a otro, que es justo para lo que existe: con 2,5 hojas por
+		# fotograma y 8 sectores salen a 0,31 por sector, y si se limpia cada
+		# fotograma la parte entera se queda siempre en cero y **no se corta
+		# absolutamente nada**.
+	var lado := alcance * 2 + 1
+	for n in range(lado):
+		var dz := n - alcance
+		for m in range(lado):
+			var dx := m - alcance
+			var lista: PackedInt32Array = _rejilla.get(
+					Vector2i(c.x + dx, c.y + dz), PackedInt32Array())
+			for i in lista:
+				if _corte[i] > 0.0:
+					continue
+				# El borde del disco no es un borde. Cada hoja tiene su propio
+				# umbral, fijo, que sale de DONDE ESTA y no del azar: unas quedan
+				# dentro antes que otras y el recorte sale con los dientes, como
+				# el cesped recien cortado. Y como el umbral es fijo, una hoja no
+				# entra y sale entre fotogramas: el claro no parpadea.
+				var alcance_hoja := r * (BORDE_MINIMO + BORDE_RANGO * _desvio_de(i))
+				var d2 := _dist2(_pos[i], centro)
+				if d2 > alcance_hoja * alcance_hoja:
+					continue
+				# A que sector va, por el angulo alrededor del centro: 45 grados.
+				var angulo := atan2(_pos[i].z - centro.z, _pos[i].x - centro.x)
+				var sector := int((angulo + PI) / TAU * float(SECTORES))
+				_sector_hojas[clampi(sector, 0, SECTORES - 1)].append(
+						Vector2(sqrt(d2), float(i)))
+				hay_algo = true
+	if not hay_algo:
+		return false
+	for k in SECTORES:
+		# De dentro hacia fuera, que es lo que hace que el frente sea un frente
+		# y no una corona de agujas: lo primero que se cae es lo de en medio.
+		_sector_hojas[k].sort_custom(func(a: Vector2, b: Vector2) -> bool:
+			return a.x < b.x)
+	return true
+
+
+func cortar(centro_mundo: Vector3, r: float, presupuesto: float = -1.0) -> int:
+	# **OJO: `centro` entra en coordenadas del MUNDO.** Las hojas, la rejilla y las
+	# casillas viven en el sistema LOCAL de la planta, y antes se comparaban sin
+	# convertir. Solo se notaba con las zarzas, que son las unicas que NO estan en el
+	# origen del mundo: la primera esta a (0, 0, -7), con lo que el corte caia
+	# siete metros mas alla de donde estaba el cabezal, y los restos salian ahi.
+	# Con el cesped y la maleza, que estan en (0, 0, 0), local y mundo coinciden y
+	# el fallo llevaba meses escondido.
+	var centro := to_local(centro_mundo)
 	var c := _clave(centro)
 	var alcance := int(ceil(r / _paso)) + 1
 	var r2 := r * r
 	var destino := altura_visual()
 	var tumbadas := 0
-	for dz in range(-alcance, alcance + 1):
-		for dx in range(-alcance, alcance + 1):
-			var lista: PackedInt32Array = _rejilla.get(Vector2i(c.x + dx, c.y + dz),
-				PackedInt32Array())
-			for i in lista:
-				if _corte[i] > 0.0:
+	# Sin presupuesto se come la banda entera, que es lo que hacen la hoz y las
+	# pruebas. Con presupuesto, que es lo que hacen los cabezales, solo se quitan
+	# las hojas que caben en el tiempo que ha pasado.
+	#
+	# OJO, hay DOS acumuladores de parte decimal y no es una duplicacion:
+	#
+	#   - Este, `_presupuesto_fraccion`, es el **freno grueso**. Con el nylon
+	#     contra la zarza el presupuesto baja a 0,08 hojas por fotograma, o sea
+	#     menos de una: sin este freno pasarian doce fotogramas enteros sin cortar
+	#     nada y luego un tiron. Aqui solo decide si este fotograma se corta algo.
+	#
+	#   - Los de `_sector_por_cortar`, mas abajo, son el **reparto fino**: el uno
+	#     octavo para cada sector, y cual de los ocho entra primero.
+	#
+	# Quitar este es facil y es un fallo: nadie ve un salto de doce fotogramas en
+	# una prueba corta y aparece en el juego, con la hoz lenta, parandose a esperar.
+	var limite := -1
+	if presupuesto >= 0.0:
+		var disponible := presupuesto + _presupuesto_fraccion
+		limite = int(disponible)
+		_presupuesto_fraccion = disponible - float(limite)
+		if limite <= 0:
+			return 0
+	if not _repartir_en_sectores(centro, c, r, alcance):
+		return 0
+
+	# La cuota de cada uno. Sin presupuesto se come el disco entero, que es lo que
+	# hacen la hoz y las pruebas; con presupuesto, el uno octavo para cada uno.
+	#
+	# La parte decimal se guarda por sector y no global: si se guardara global, un
+	# fotograma de 1,2 hojas daria un sector entero y los otros siete nada, que es
+	# justo lo que se quiere evitar. Guardandola por sector, la media sale a uno
+	# exacto por unidad de tiempo.
+	return _repartir_cuotas(limite, presupuesto, destino)
+
+
+## Corta las primeras `cuantas` hojas de un sector, de dentro hacia fuera, y
+## devuelve cuantas ha cortado de verdad. Lleva la cuenta por sector en
+## `_cortadas_en`, que es lo que permite que un sector le ceda su cuota sobrante
+## a otro sin tener que volver a mirar las hojas.
+func _cortar_del_sector(k: int, cuantas: int, destino: float) -> int:
+	var hechas := 0
+	var lista: Array = _sector_hojas[k]
+	while _cortadas_en[k] < lista.size() and hechas < cuantas:
+		var i := int(lista[_cortadas_en[k]].y)
+		_cortadas_en[k] += 1
+		_corte[i] = 1.0
+		var nodo := _cuadrantes[_ids[_cuadrante_de[i]]]
+		nodo.multimesh.set_instance_custom_data(_dentro_de[i],
+			_color_de(i, destino))
+		hechas += 1
+	return hechas
+
+
+
+## Reparte el presupuesto entre los sectores y corta. Sin presupuesto se come
+## el disco entero, que es lo que hacen la hoz y las pruebas.
+##
+## La parte decimal se guarda **por sector** y no global: si se guardara global, un
+## fotograma de 1,2 hojas daria un sector entero y los otros siete nada, que es justo
+## lo que se quiere evitar. Guardandola por sector, la media sale a uno exacto por
+## unidad de tiempo.
+func _repartir_cuotas(limite: int, presupuesto: float, destino: float) -> int:
+	if limite < 0:
+		# Sin presupuesto: se come el disco entero, que es lo que hacen la hoz y
+		# las pruebas.
+		var todas := 0
+		for k in SECTORES:
+			todas += _cortar_del_sector(k, _sector_hojas[k].size(), destino)
+		return todas
+	# Con presupuesto: el uno octavo para cada uno, empezando por un sector distinto
+	# cada fotograma, para que ninguno se lleve siempre la parte entera.
+	var primero: int = randi() % SECTORES
+	var cortadas := 0
+	for paso in SECTORES:
+		var k: int = (primero + paso) % SECTORES
+		var disponibles: int = _sector_hojas[k].size()
+		if disponibles <= 0:
+			continue
+		var disponible := presupuesto / float(SECTORES) + _sector_por_cortar[k]
+		var cuota: int = mini(int(disponible), disponibles)
+		_sector_por_cortar[k] = disponible - float(cuota)
+		cortadas += _cortar_del_sector(k, cuota, destino)
+		# Si a este sector no le quedaban hojas, su parte sobrante la cogen los
+		# sectores que aun tienen, o la maquina iria mas lenta en los claros y en
+		# los bordes del campo, que es donde mas se nota.
+		if cuota < disponibles:
+			var sobra := disponible - float(cuota)
+			for otro in SECTORES:
+				var libre: int = _sector_hojas[otro].size() - _cortadas_en[otro]
+				if libre <= 0:
 					continue
-				if _dist2(_pos[i], centro) > r2:
-					continue
-				_corte[i] = 1.0
-				var nodo := _cuadrantes[_ids[_cuadrante_de[i]]]
-				nodo.multimesh.set_instance_custom_data(_dentro_de[i],
-					_color_de(i, destino))
-				tumbadas += 1
-	return tumbadas
+				var cogidas: int = mini(int(sobra), libre)
+				cortadas += _cortar_del_sector(otro, cogidas, destino)
+				sobra -= float(cogidas)
+				if sobra < 1.0:
+					break
+	return cortadas
+
+
+## El desvio de cada hoja, de 0 a 1, fijo para siempre.
+##
+## Sale de un seno de su posicion, que es la manera corta de tener ruido que no
+## necesita tabla ni semilla: la misma hoja sale siempre con el mismo numero, y
+## dos hojas que estan al lado salen distintas. Con `randf()` el borde del claro
+## cambiaba en cada fotograma y la hierba parpadeaba.
+## El borde del disco va entre el 78 % y el 122 % del radio, segun la hoja. Por
+## eso una comprobacion de "no queda nada de pie" solo puede mirar el centro, y
+## solo hasta el minimo.
+const BORDE_MINIMO := 0.78
+const BORDE_RANGO := 0.44
+## En cuantos sectores se parte el disco al repartir el corte.
+##
+## OCHO. Pocos, y anchos: el objetivo es que el frente de corte se vea continuo,
+## y con treinta y dos sectores el reparto sale fino y se nota el rayado. Con ocho
+## sectores de 45 grados, un cuarto de disco por sector, el frente es limpio.
+const SECTORES := 8
+
+
+func _desvio_de(i: int) -> float:
+	var v := sin(_pos[i].x * 91.733 + _pos[i].z * 47.219) * 43758.5453
+	return v - floorf(v)
 
 
 ## Cuanto le queda a una hoja cortada: nada, o un tocon si se ha pedido.
@@ -532,6 +768,22 @@ func altura_visual() -> float:
 
 
 ## Cuanto le queda de altura a la hoja i: 1 de pie, 0 o el tocon si esta cortada.
+## Cuanto material se ha cortado en total, sumando la fraccion de cada hoja.
+##
+## Antes el corte era una bandera (0 o 1) y esto no tenia sentido: o estaba
+## cortada o no. Ahora una hoja se queda a medias y el total es la magnitud que de
+## verdad se esta midiendo. La usan las pruebas para saber cuando una pasada ha
+## terminado, que contando hojas enteras se para antes de tiempo.
+func material_cortado() -> float:
+	var total := 0.0
+	for v in _corte:
+		total += v
+	return total
+
+
+## Cuanto le queda de alto a la hoja i, como fraccion de su altura entera: o la
+## entera (1,0) o el tocon. De escalon, a proposito; se probo continuo y
+## hacia el corte mucho mas lento.
 func altura_hoja(i: int) -> float:
 	if _corte[i] <= 0.0:
 		return 1.0
@@ -646,7 +898,11 @@ func gordo_de(i: int) -> float:
 
 
 ## Cuantas hojas siguen de pie dentro de un radio.
-func de_pie(centro: Vector3, r: float) -> int:
+## Cuantas hojas hay de pie en un disco del mundo, en coordenadas del mundo. Ver
+## la nota de `cortar`: por eso el motor, que mide en el mundo, media a la zarza
+## siete metros mas alla de donde estaba.
+func de_pie(centro_mundo: Vector3, r: float) -> int:
+	var centro := to_local(centro_mundo)
 	var c := _clave(centro)
 	var alcance := int(ceil(r / _paso)) + 1
 	var r2 := r * r
@@ -668,10 +924,12 @@ func de_pie(centro: Vector3, r: float) -> int:
 ## Se cuentan solo las de pie, porque lo que se nota es lo que queda delante del
 ## cabezal, no lo que se plantó; y se divide por el area, de modo que el numero
 ## sale en hojas por m2 y se puede comparar entre campos de tamano distinto.
-func densidad_bajo(centro: Vector3, r: float) -> float:
+## Hojas por metro cuadrado en un punto del mundo. Lo mismo que `de_pie`, con el
+## punto en coordenadas del mundo: ver la nota de `cortar`.
+func densidad_bajo(centro_mundo: Vector3, r: float) -> float:
 	if r <= 0.0 or _sembradas == 0:
 		return 0.0
-	return float(de_pie(centro, r)) / maxf(PI * r * r, 0.0001)
+	return float(de_pie(centro_mundo, r)) / maxf(PI * r * r, 0.0001)
 
 
 ## Cuantas hojas hay de pie en el campo entero. Solo para las pruebas.
@@ -788,7 +1046,11 @@ func _process(_delta: float) -> void:
 	if p.distance_squared_to(_mirada) < 1.0:
 		return
 	_mirada = p
-	_recortar(p)
+	# El recorte compara los centros de los cuadrados, que son locales, con la
+	# camara, que es del mundo. Con la planta en el origen no se nota; con las
+	# zarvas displaced se descartan los cuadrados equivocados y media mata deja de
+	# dibujarse mientras trabajas en ella.
+	_recortar(to_local(p))
 
 
 ## Corta por donde pase la herramienta mientras este cortando.
@@ -798,16 +1060,34 @@ func _process(_delta: float) -> void:
 ## al cambiar de herramienta en el inventario el campo se quedaba cortando con
 ## la que estaba en la mano antes, que ya no corta. Es una busqueda en un grupo
 ## con un elemento, no un recorrido del arbol: sale gratis.
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	var herramienta := get_tree().get_first_node_in_group("herramienta")
 	if herramienta == null or not herramienta.has_method("cabezal_puede_cortar"):
 		return
 	if herramienta.cortando and herramienta.cabezal_puede_cortar(tipo):
 		var punto: Vector3 = herramienta.punto_de_corte()
 		var radio: float = herramienta.radio_corte_actual()
-		var hojas_cortadas := cortar(punto, radio)
-		herramienta.registrar_corte(tipo, hojas_cortadas, dureza)
-		_soltar_restos(punto, hojas_cortadas)
+		# Cuanto cabe en este fotograma. Sin metodo de tasa (una herramienta de
+		# prueba, o la hoz) es sin limite, como antes.
+		var presupuesto := -1.0
+		if herramienta.has_method("tasa_corte_para"):
+			presupuesto = herramienta.tasa_corte_para(tipo, tasa_corte_base()) \
+				* delta
+		herramienta.registrar_corte(tipo, cortar_y_soltar(punto, radio, presupuesto))
+
+
+## Corta y suelta restos, que es lo que hace una herramienta de verdad.
+##
+## Existe como una sola funcion y no como dos porque **cortar sin soltar no se ve
+## nada**: una prueba que llama a `cortar()` y luego comprueba que hay restos en
+## el suelo falla, y no porque los restos no salgan, sino porque se le ha
+## olvidado la segunda mitad. Y ese fallo es facil de "arreglar" en la prueba
+## llamando a la funcion privada, con lo que la prueba deja de probar el juego y
+## pasa a probar su propia copia.
+func cortar_y_soltar(centro: Vector3, radio: float, presupuesto: float = -1.0) -> int:
+	var cortadas := cortar(centro, radio, presupuesto)
+	_soltar_restos(centro, cortadas)
+	return cortadas
 
 
 ## Al cortar no queda la planta en su sitio: aparecen restos sueltos que salen
@@ -823,5 +1103,15 @@ func _soltar_restos(origen: Vector3, hojas: int) -> void:
 		return
 	var direccion := Vector3(randf_range(-0.3, 0.3), 0.0,
 		randf_range(-0.3, 0.3))
+	# El tamano del trozo va con el de la planta: una brizna de 4,5 mm deja un
+	# trozo pequeño y un cano de 26 cm deja un trozo grande. Con un tamano fijo
+	# el amontonado de la maleza parecía el de un cesped corto, que es justo lo
+	# que hay que evitar cuando las tres plantas son la misma hoja con otros
+	# numeros.
+	# Con 2,6 los trozos de la zarza salian de 36 cm: no eran hojas, eran losas.
+	# El tope va en 1,5, con lo que el trozo mayor mide 15 cm, que es una hoja de
+	# mata troceada y no un tablón. Y el minimo sube, para que el cesped no deje
+	# motas de un centimetro.
+	var escala := clampf(grosor / 0.12, 0.7, 1.5)
 	Restos.obtener(get_tree()).soltar(origen, cuantos, direccion,
-		tono_punta.lerp(tono_pie, randf() * 0.5), 0.8)
+		tono_punta.lerp(tono_pie, randf() * 0.5), escala)
