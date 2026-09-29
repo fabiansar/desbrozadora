@@ -4,6 +4,53 @@ Lo que se ha tocado y por que. Para el detalle de como esta cada cosa por dentro
 [DOCUMENTACION.md](DOCUMENTACION.md); para el estado y los problemas que quedan,
 [REVISION.md](REVISION.md).
 
+## Ya hay un ejecutable: se empaqueta el juego — 2026-09-29
+
+Hasta hoy `v0.1.0` era una etiqueta: el proyecto se abria con el editor y no
+habia forma de darle a nadie un programa. Esto lo cierra.
+
+- **`export_presets.cfg`**, con Linux y Windows x86_64, **versionado en el
+  repositorio**. Estaba en el `.gitignore` desde la plantilla de Godot, pero es
+  configuracion del proyecto, no un binario: sin el, cada clon nuevo necesita
+  montarlo a mano en el editor antes de poder exportar.
+  - Solo escritorio, y escrito en el propio `.gitignore` por que: **en Android
+    e iOS ese fichero lleva dentro las claves de firma y sus contrasenas**, y
+    habria que sacarlo del repositorio antes de exportar.
+  - Los dos van con el paquete **embebido** en el ejecutable, para que no sea el
+    clasico "lo he descargado y no me arranca" por falta del `.pck` de al lado.
+- **El tamano engaña, y hay que saber por que.** El binario de Linux ocupa
+  **70 MB**, y de eso **290 KB son el juego**: el resto es la plantilla del
+  motor con Vulkan, que ya pesa 71 MB antes de abrir nada. Windows son 105 MB
+  por lo mismo.
+- **Los filtros de exclusion no son cosmeticos.** Sin ellos el paquete lleva:
+  - **23 MB de `capturas/`**: Godot importa los 30 PNG como texturas de 762 KB
+    cada uno, asi que las capturas de las pruebas de medicion de la maleza
+    acababan **dentro del ejecutable**.
+  - Los 18 scripts de prueba de `tools/` y los 12 de Python.
+  - **Los 269 KB de `models/furgoneta.glb`**, que no usa ninguna escena. Este es
+    el que mas da la cara: eran el **69 % del contenido del juego**. Y lo
+    quitaba el `.gitignore`, que no sirve para exportar, porque **el exportador
+    lee el disco y no git**: un clon limpio y esta carpeta daban dos ejecutables
+    distintos con el mismo codigo.
+- **`config/version="0.1.0"` y `scripts/version_pantalla.gd`**, que la enseña al
+  arrancar. El numero sale de la configuracion, nunca de una constante en el
+  codigo, y `tools/test_version_pantalla.gd` lo comprueba **cambiando el ajuste
+  en caliente**: si alguien lo escribiera a mano en el cartel, la prueba lo
+  cazaria. La prueba **no** comprueba que la version sea `0.1.0`, porque
+  fallaria en cuanto se subiera y acabariamos viendo un fallo rojo cada vez que
+  versionaras, con lo que se aprende a no mirar los fallos.
+  - El reloj del cartel es un contador en `_avanzar(delta)`, no un `Tween` ni un
+    `await`, por el problema de siempre: lo que espera se queda parado en el
+    primer fotograma y en headless no se ve.
+  - **El fallo que casi se va:** al escribir el numero en `project.godot` los
+    comentarios se pusieron con `##`, que es sintaxis de GDScript. Ahi van con
+    `;`, y con almohadillas el parser se come el valor: la version se quedaba
+    **vacia sin dar ningun error** y el cartel decia "(sin version)". Lo cazaron
+    las pruebas, no el juego.
+- **Falta probarlo jugando.** El binario responde y no le falta ninguna
+  libreria del sistema, pero nadie lo ha ejecutado fuera del editor. Eso es lo
+  siguiente.
+
 ## Revision completa: dos bugs que ninguna prueba cazaba, y limpieza — 2026-09-29
 
 - **La maquina no empujaba los restos.** En `_process` habia un

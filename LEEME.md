@@ -308,6 +308,33 @@ cd ~/Documentos/desarrollos/desbrozadora
 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot --path .
 ```
 
+## Como se ejecuta SIN el editor
+
+Hay un ejecutable, y ya no hace falta abrir Godot para jugar. Se genera desde
+`export_presets.cfg`, que **esta en el repositorio** a proposito:
+
+```bash
+cd ~/Documentos/desarrollos/desbrozadora
+flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+  --headless --path . --export-release "Linux"   build/desbrozadora.x86_64
+flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+  --headless --path . --export-release "Windows" build/desbrozadora.exe
+```
+
+Despues se juega `./build/desbrozadora.x86_64`, y en Windows
+`build\desbrozadora.exe`. Los dos son **un solo fichero**: el paquete va dentro
+del ejecutable, para que no sea el clasico "lo he descargado y no me arranca"
+porque faltaba el `.pck` de al lado.
+
+**El tamano no dice lo que parece.** El binario de Linux ocupa unos 70 MB, y de
+eso **290 KB son el juego**: lo demas es la plantilla del motor con Vulkan, que
+ya pesa 71 MB antes de abrir el proyecto. Windows son 105 MB por lo mismo.
+
+**Que se meta el ejecutable es un filtro, no un milagro.** Sin los filtros de
+`export_presets.cfg` el paquete lleva dentro 23 MB de `capturas/` (Godot importa
+los PNG como texturas) y los 269 KB de una furgoneta que no usa ninguna escena.
+La Exclusion esta escrita ahi con el porque de cada cosa.
+
 ## Como se prueban las cosas
 
 Hay una suite de pruebas automaticas que va en headless y no necesita tarjeta

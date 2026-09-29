@@ -2,8 +2,19 @@
 # proyecto y son 5 MB de cachés y importaciones. No tiene sentido vigilarla.
 .godot/
 
-# Igual que en el exportador: binarios ya montados. El codigo fuente, si.
-export_presets.cfg
+# `export_presets.cfg` **si se versiona**, y desde 2026-09-29. Estaba aqui
+# porque venia en la plantilla de Godot, pero es configuracion del proyecto, no
+# un binario: es lo que dice como se empaqueta el juego y sin el no se puede
+# exportar. Sin el, cada clon nuevo necesita montarlo a mano en el editor antes
+# de poder dar un ejecutable.
+#
+# OJO, Y ESTO ES LA CONDICION: esto solo es seguro mientras sean plataformas de
+# escritorio. En Android e iOS **el preset lleva dentro las claves de firma y
+# sus contrasenas** (keystore, team ID, provisioning profile). Si algun dia se
+# anaden esas plataformas, hay que sacar el fichero de ahi ANTES de exportar,
+# no despues de exportar y antes de subir.
+#
+# Los binarios ya montados, esos si, se ignoran. El codigo fuente, tambien.
 /build/
 /export/
 *.pck

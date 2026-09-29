@@ -206,8 +206,11 @@ de nada si la maquina no nota que hay algo delante ni si llega a cortarlo.
 - [ ] Antes de sumar combustible/desgaste, separar el componente de motor del
       controlador físico de la desbrozadora; `telemetria_actualizada` define el
       contrato para la interfaz futura.
-- [ ] Añadir una lectura de RPM en la interfaz, conectada a telemetría de la
-      desbrozadora y no acoplada directamente a su nodo visual.
+- [x] Añadir una lectura de RPM en la interfaz, conectada a telemetría de la
+      desbrozadora y no acoplada directamente a su nodo visual. **Ya estaba
+      hecha** y la hoja de ruta no lo recogia: `scripts/interfaz_herramienta.gd`
+      tiene la barra de revoluciones, y consume `telemetria_actualizada` como
+      toca. Anotado aqui para que no vuelva a prometer lo que ya existe.
 - [ ] Antes de añadir crecimiento o recoger recortes, separar los datos de siembra
       y corte del componente que dibuja los cuadrantes de hierba.
 - [ ] Afinar la perspectiva GoPro para que torso y piernas se lean de forma

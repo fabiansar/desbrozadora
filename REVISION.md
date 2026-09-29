@@ -809,9 +809,12 @@ Estado del camino inmediato:
    midiendo la duración real de los desplazamientos.
 3. **Colocar manualmente la aldea y sus assets.** El layout procedural se retiró;
    el flujo futuro será construir escenas y ubicarlas desde el editor.
-4. **Darle una version que se pueda instalar.** Falta `export_presets.cfg` y una
-   linea con el numero en `project.godot`, para que el ejecutable diga que es.
-   Hasta entonces `v0.1.0` es una etiqueta, no un programa que alguien se baje.
+4. ~~**Darle una version que se pueda instalar.**~~ **Hecho.** Ya estan
+   `export_presets.cfg` (Linux y Windows x86_64), la linea `config/version` y
+   `scripts/version_pantalla.gd`, que la enseña al arrancar. El ejecutable de
+   Linux ocupa 70 MB, de los cuales **290 KB son el juego**: el resto es la
+   plantilla del motor con Vulkan. Aun **no se ha probado jugando**; falta esa
+   comprobacion.
 5. **Integrar la furgoneta y conducción básica.** Vehículo, controles y navegación
    siguen pendientes.
 6. **Continuar el bucle de trabajo:** que la zarza vuelva a brotar (la regresion

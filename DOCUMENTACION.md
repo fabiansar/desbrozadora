@@ -758,6 +758,32 @@ El `CanvasLayer` con las revoluciones, la carga, la gasolina y el filo. Emite
 `telemetria_actualizada` y **no toca la desbrozadora**: es de solo lectura, y por
 eso la logica de simulacion puede ir en un `RefCounted` sin la UI enterada.
 
+### `scripts/version_pantalla.gd` — el cartel de arranque
+
+Otro `CanvasLayer`, en la capa 100 para ir por encima del panel. Enseña el
+nombre y la version los primeros 2,5 segundos y se quita.
+
+Va **suelto del panel de la herramienta** a proposito. Ese cuelga de la
+desbrozadora y viaja con ella; la version es del programa, no de la maquina que
+llevas en la mano.
+
+Dos cosas que se aprende aqui si se toca:
+
+- **El numero sale de `ProjectSettings`, nunca de una constante.** Si el cartel
+  tuviera el numero escrito dentro, subir la version obligaria a tocar dos sitios
+  y se olvidaria el segundo. `tools/test_version_pantalla.gd` lo comprueba
+  cambiando el ajuste en caliente y viendo que el cartel cambia con el.
+- **El reloj es un contador en `_avanzar(delta)`, no un `Tween` ni un
+  `await`.** El proyecto ya se comio ese problema: una cosa que espera se
+  queda parada en el primer fotograma y en headless no se ve. Separar el reloj
+  del `_process` es ademas lo que permite probarlo sin esperar 2,5 segundos.
+
+**`project.godot` lleva la version con `config/version`, bajo `[application]`,**
+que en codigo es `application/config/version`. Ojo al escribirlo a mano: los
+comentarios de ese fichero son con punto y coma, y con almohadillas el parser
+se las come como parte del valor, la version se queda vacia **sin avisar** y el
+cartel sale diciendo "(sin version)". Pasa, y por eso esta escrito aqui.
+
 ## 6. `shaders/hierba.gdshader` — como se dibuja
 
 `render_mode cull_disabled, diffuse_lambert, specular_disabled,
