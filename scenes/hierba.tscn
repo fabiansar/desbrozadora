@@ -1,6 +1,0 @@
-[gd_scene format=3 uid="uid://brbuf8v1qvi42"]
-
-[ext_resource type="Script" uid="uid://2b1lml08eyb4" path="res://scripts/hierba.gd" id="1_hierba"]
-
-[node name="Hierba" type="Node3D" unique_id=162214835]
-script = ExtResource("1_hierba")

@@ -1,0 +1,25 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/vegetacion/hierba.tscn" id="1_base"]
+
+; TIER 1. Lo que pisa el jugador al arrancar.
+;
+; Campo grande, brizna estrecha que se estrecha mucho al subir, verde. Es el
+; unico donde el juego te regala: con el nylon (eficacia 5) se limpia por
+; delante de los pies, y por eso es el trabajo barato.
+
+[node name="Cesped" instance=ExtResource("1_base")]
+formacion = 0.7
+altura = 0.49
+variacion_altura = 1.0
+grosor = 0.1
+variacion_grosor = 1.0
+radio = 90.0
+densidad = 60.0
+borde = 0.85
+lado_cuadrante = 24.0
+distancia_maxima = 80.0
+altura_tocon = 0.15
+hoja_estrecha = 0.88
+hoja_curva = 0.09
+hoja_tuerce = 12.0

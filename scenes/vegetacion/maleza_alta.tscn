@@ -1,0 +1,34 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/vegetacion/hierba.tscn" id="1_base"]
+
+; TIER 2. Maleza seca de un metron.
+;
+; NOTA sobre `formacion`: estaba en 0,24 cuando se subio la maleza a 0,76 m, y
+; ocupaba el 93 % del mapa: un mar seco donde no se veia por donde andaba nadie.
+; A 0,70 sale en matas con claros, que es lo que hace que un claro se trabaje mas
+; rapido que un zarzal y que la resistencia del motor se note de verdad.
+;
+; La hoja se ensancha un poco (0,60) y se dobla menos que el cesped. Con eso se
+; lee como hoja y no como brizna, sin ser todavia la planta gruesa.
+
+[node name="MalezaAlta" instance=ExtResource("1_base")]
+tipo = 2
+formacion = 0.7
+dureza = 3.3
+tono_pie = Color(0.204, 0.157, 0.078, 1)
+tono_punta = Color(0.478, 0.396, 0.188, 1)
+altura = 0.76
+variacion_altura = 0.09
+grosor = 0.26
+variacion_grosor = 0.38
+radio = 90.0
+densidad = 60.0
+borde = 0.85
+semilla = 24601
+lado_cuadrante = 12.0
+distancia_maxima = 16.0
+altura_tocon = 0.06
+hoja_estrecha = 0.6
+hoja_curva = 0.06
+hoja_tuerce = 9.0

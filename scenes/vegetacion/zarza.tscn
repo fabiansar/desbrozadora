@@ -1,0 +1,92 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/vegetacion/hierba.tscn" id="1_base"]
+
+; TIER 3. La zarza.
+;
+; Antes esto era `zarza.tscn` con `scripts/zarza.gd`: 888 lineas con un sistema de
+; celdas propio, coronas, raices que hay que arrancar por la base, enredo entre
+; matas e inundacion al perder el apoyo. Todo eso se ha ido. Ahora es esta hoja
+; con otros numeros, y el trabajo es el mismo que en las otras dos plantas: abrirla
+; con el cabezal que toque.
+;
+; Lo que se ve: verde muy oscuro, hoja ANCHA que se estrecha poco (0,30, o sea
+; que arriba sigue siendo hoja), y tiesa (curva 0,02, giro 4 grados, frente a los
+; 0,09 y 12 del cesped). Con eso se lee como planta leñosa sin ser ni una malla
+; ni un arbusto aparte.
+;
+; Lo que cuesta: `dureza` 4,0 es lo mas alto del juego (el cesped es 1,0 y la
+; maleza 3,3), y con el nylon encima, que tiene resistencia 5 contra el tier 3, el
+; motor se va al tope. Ese es el trabajo caro, y por eso las zarzas son las
+; manchas donde se decide que cabezal se trae.
+;
+; ALTURA: 1,6 m, y no mas. Medido: con el motor echado el morro llega a 1,34 m
+; mirando 55 grados arriba, asi que una zarza de 2,4 m **no se puede cortar**:
+; la maquina no alcanza ni el primer palmo. Y ademas, al bajar la mirada, el morro
+; se hunde y la parte alta se esquiva. Un matorral que hay que ir a buscar por
+; encima con el cabezal no es un matorral, es un arbol.
+;
+; Con 1,6 m la cosa se abre en tres pasadas: copa a la altura de la cabeza, cuerpo
+; a media altura y base a ras. Ese es el trabajo, y es alcanzable.
+;
+; Es una mancha local, no un campo: `radio` 9 m. Cada zarza de la partida es una
+; instancia de esta escena en un punto distinto, con su altura y su semilla.
+
+[node name="Zarza" instance=ExtResource("1_base")]
+tipo = 3
+; OJO con el sentido de `formacion`, que esta al reves de lo que parece: es la
+; parte de terreno que se DEJA BARE, no la que se planta. Con 0 se siembra todo y
+; con 1 solo donde la mancha pasa de 0,85. Va en 0,70, **igual que la maleza**:
+; el arbusto tiene que verse tan cerrado como ella, porque si no se nota el
+; difference entre pasar por la maleza y pasar por la zarza, y el trabajo no
+; parece el mismo.
+formacion = 0.7
+dureza = 3.6
+tono_pie = Color(0.086, 0.118, 0.063, 1)
+tono_punta = Color(0.157, 0.235, 0.106, 1)
+altura = 1.5
+variacion_altura = 0.22
+; La variacion va baja a proposito. La hoja mas alta de una mata es la del preset
+; por (1 + variacion / 2), y esa es la que hay que poder cortar: con 0,35 una
+; zarza de 1,8 m tenia caños de 2,11 m y el morro (que llega a 1,97) no los
+; tocaba. Un matorral es mas parejo que un cesped.
+; Pocos y GRUESOS. Esto no es cosmetico: `densidad_bajo` suma la altura de lo que
+; hay debajo, asi que 60 caños de 2,4 m pesan once veces mas que 60 briznas de
+; 76 cm, y con el divisor que hay la carga se iba a 1,00 (topsada) con CUALQUIER
+; cabezal. Traducido: en la zarza da igual el cabezal que pongas, que es justo
+; donde mas deberia importar. Con 20 al metro y un dedo de grosor el arbusto es
+; mas denso de verdad, pesa parecido a la maleza y el Communicate entre
+; cabezales se vuelve a ver.
+; `densidad` y `formacion` son LOS MISMOS que la maleza alta, y eso no es
+; casualidad: la zarza tiene que cortarse igual que las otras dos. Con 20 al metro
+; y el 90 % del terreno plantado, una pasada quitaba 63 hojas en vez de las 189 que
+; quita la maleza en el mismo sitio, y dentro del arbutsu daba la sensacion de que
+; habia que dar la vuelta entera para notarlo. El arbusto se ve mas ralo de lo
+; que debe, no porque se corte poco, sino porque tenia menos hoja.
+densidad = 60.0
+grosor = 0.40
+variacion_grosor = 0.3
+radio = 9.0
+borde = 0.85
+semilla = 33031
+lado_cuadrante = 12.0
+; 20 m, no 14. Con la mata de 9 de radio y el recorte a 14, desde el centro del
+; arbusto la mitad se quedaba sin dibujar, y eso se ve como que "esa parte no se
+; corta". El recorte es para no dibujar lo que esta lejos; con 20 la mata entera
+; esta siempre a la vista mientras trabajas en ella.
+distancia_maxima = 20.0
+; TOCON. Esto es lo que hacia que la zarza pareciera que no se cortaba.
+;
+; El corte ocurre, y se nota en los datos, pero con `dejar_tocon = false` la hoja
+; cortada se dibuja **a cero de alto**: desaparece. Dentro de un arbusto denso no
+; dejas ni rastro, porque no hay tocón que destaque. El cesped deja un palmo de
+; 15 cm y la maleza uno de 6, y los dos se ven a metro y medio; la zarza no
+; deixaba nada y parecia que la maquina no cortaba.
+;
+; Ademas el canal rojo de la malla es la altura **en metros**, no una fraccion, y
+; el shader lo lee como fraccion. Con 0,0 daba 0 exacto; con 0,12 el arbusto
+; pierde una franja de 12 cm que se ve desde fuera. Por eso: 12 cm.
+altura_tocon = 0.12
+hoja_estrecha = 0.3
+hoja_curva = 0.02
+hoja_tuerce = 4.0
