@@ -6,6 +6,11 @@
 script = ExtResource("1_cabezal")
 id = &"serie"
 nombre = "Cuchilla de serie"
-tipos_compatibles = Array[int]([1, 2, 3])
+nivel = 2
 radio_corte = 1.0
-multiplicador_desgaste = 1.0
+eficacia_hierba = 3
+eficacia_maleza = 3
+eficacia_zarza = 3
+resistencia_hierba = 1
+resistencia_maleza = 2
+resistencia_zarza = 3

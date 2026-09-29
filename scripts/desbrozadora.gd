@@ -57,8 +57,15 @@ signal telemetria_actualizada(rpm_sin_carga: float, rpm_bajo_carga: float,
 ## Cabezal inicial y repuestos disponibles en este prototipo. La tienda futura
 ## decidira cuales ha comprado cada partida.
 @export var cabezales_disponibles: Array[CabezalDesbrozadora] = CABEZALES_INICIALES
-## Perdida de vida util por hoja cortada y punto de dureza.
-@export_range(0.0000001, 0.00001, 0.0000001) var desgaste_por_hoja := 0.000001
+## Perdida de vida util por hoja cortada, antes de multiplicarla por la
+## resistencia de ese cabezal contra esa planta.
+##
+## Con 0,00005, y contando con la tasa de corte de cada planta, el filo dura
+## entre cinco y diez minutos de trabajo seguido. Antes estaba en 0,000001 y el
+## desgaste era de 0,0000 por segundo: no se veia ni en una hora. Que se note en
+## el intervalo es lo que hace que elegir cabezal sea una decision y no un
+## adorno: la barra del FILO se mueve mientras trabajas.
+@export_range(0.0000001, 0.0005, 0.0000001) var desgaste_por_hoja := 0.00005
 ## Sonido del motor.
 @export var motor_sonido: AudioStreamPlayer3D
 ## Sonido corto de corte. Si esta vacio, el motor es el unico que suena.
@@ -211,7 +218,7 @@ var _corte_sonido_reloj := 0.0
 ## entre un claro y un zarzal. Con el cesped a 60 por m2 esto da 0,55 en el
 ## cesped y se va a 1 sobre la maleza alta; si se pusiera a 45 el cesped entero
 ## estaria siempre al tope y el frenao no diria nada.
-@export_range(5.0, 300.0, 1.0) var densidad_corte := 110.0
+@export_range(5.0, 300.0, 1.0) var densidad_corte := 75.0
 ## Cuanto frena el motor la maleza mas densa, de 0 a 1. Con 0,22 el tope son
 ## unas 2.000 rpm de menos de 9.000: se oyen, pero la maquina no se para.
 @export_range(0.0, 1.0, 0.01) var frenao_motor := 0.22
@@ -276,15 +283,19 @@ var combustible_maximo_litros: float:
 	get:
 		return _motor.capacidad_combustible_litros if _motor != null else 0.0
 
+## Lo que sale en el interfaz. Delegan en la estacion; el interfaz no tiene por
+## que saber que existe la clase.
 var nombre_cabezal: String:
 	get:
-		return _cabezal_actual.nombre if _cabezal_actual != null else "Sin cabezal"
+		return _estacion.nombre()
 
 var desgaste_cabezal: float:
 	get:
-		return _desgaste_actual
+		return _estacion.desgaste()
 
 var _girado := 0.0
+## Cuanto tiempo lleva acumulado el empuje de los restos. Ver `_apartar_restos`.
+var _acumulo := 0.0
 var _giro_carrete_acumulado := 0.0
 ## El barrido de la maquina, en radianes, ya con inercia. Este es el estado:
 ## el objetivo es lo que se le pide, esto es lo que hace de verdad.
@@ -295,6 +306,9 @@ var _velocidad_barrido := 0.0
 ## El barrido de las caderas, que va detras del de la maquina.
 var _barrido_caderas := 0.0
 var _inclinacion_actual := 0.0
+## Cuanto pesa el operario sobre la maquina, de 0 a 1. Lo pone el acelerador, no
+## las vueltas del motor. Ver `_acelerador`.
+var _apoyado := 0.0
 var _caida := 0.0
 var _trabajando := 0.0
 ## Del punto de las manos al cabezal, y lo que de ahi sale para el tope del
@@ -322,12 +336,11 @@ var _bruta := 0.0
 var _campos: Array[Vegetacion] = []
 var _campos_buscados := false
 var _motor = MotorModelo.new()
-var _cabezal_actual: CabezalDesbrozadora
-var _cabezal_indice := 0
+## Que cabezal va y cuanto le queda. Las reglas estan en `EstacionCabezal`, que
+## no toca ningun nodo; aqui solo se monta el modelo que ella elige.
+var _estacion := EstacionCabezal.new()
 var _cabezal_original: Node3D
 var _cabezal_montado: Node3D
-var _desgaste_actual := 1.0
-var _desgaste_por_id := {}
 
 
 func _ready() -> void:
@@ -335,8 +348,10 @@ func _ready() -> void:
 		capacidad_combustible_litros, combustible_inicial_litros,
 		consumo_base_l_h, consumo_extra_carga_l_h)
 	_cabezal_original = _buscar(modelo, "Cabezal_Corta") as Node3D
-	if not cabezales_disponibles.is_empty():
-		_montar_cabezal(0)
+	# `configurar()` ya monta el primero. Aqui solo se cuelga su modelo, que es lo
+	# que es de dibujo.
+	_estacion.configurar(cabezales_disponibles)
+	_montar_el_modelo()
 	# La hierba la busca por este grupo para poder cortarla. Se apunta aqui y
 	# no en la escena para que siga funcionando aunque se mueva de sitio.
 	add_to_group("herramienta")
@@ -382,9 +397,31 @@ func _process(delta: float) -> void:
 	_suavizar_resistencia(delta)
 	_mover_barrido(delta)
 	_colocar(delta)
+	_apartar_restos()
 	telemetria_actualizada.emit(rpm, rpm_efectiva(), rpm_maximas, _resistencia,
 		combustible_litros, combustible_maximo_litros, nombre_cabezal,
 		desgaste_cabezal)
+
+
+## **Aparta los restos que hay por donde pasa el cabezal.**
+##
+## Es el companion de que los restos tengan cuerpo: un `CharacterBody3D`, que es
+## lo que es el jugador, no empuja a los cuerpos rigidos en Godot 4. Se atraviesa
+## todo sin que se note. Asi que el empuje se hace aqui, a mano, y solo cuando se
+## esta cortando de verdad, que es cuando tiene sentido: pasar por encima de un
+## monticulo sin trabajar no lo mueve.
+##
+## Se hace con un acumulador y no cada fotograma porque el empuje es por trozo, no
+## por tiempo, y empujar 50 veces por segundo las haria volar.
+func _apartar_restos() -> void:
+	if not cortando or not is_inside_tree():
+		return
+	_acumulo += get_process_delta_time()
+	if _acumulo < 0.12:
+		return
+	_acumulo = 0.0
+	Restos.obtener(get_tree()).empujar(punto_de_corte(),
+		radio_corte_actual() + 0.3, _adelante(), 1.0)
 
 
 ## Se mide la maqueta una vez y se guarda el resultado.
@@ -431,6 +468,18 @@ func _acelerador(delta: float) -> void:
 	# El peso del cuerpo sobre la maqueta. Antes la maqueta se movia sola, sin
 	# relacion con el motor; esto es lo que la hace trabajar.
 	_trabajando = clampf(_motor.rpm_efectivas / maxf(rpm_maximas, 1.0), 0.0, 1.0)
+	# **El peso del cuerpo se mide con el ACELERADOR, no con las vueltas.** Y no es
+	# un matiz, es un fallo que se notaba: con las vueltas, entrar en un
+	# matorral denso hacia bajar el motor por el peso de la carga, con lo que
+	# `_trabajando` caia, la maqueta se erguida sola y **el morro se quedaba a 24
+	# centimetros del suelo con la planta justo delante**. Medido. Es decir: cuanto
+	# mas trabajo habia, mas alta se levantaba la punta, al reves.
+	#
+	# Lo que echa el peso del cuerpo sobre la maquina eres TU, pulsando el
+	# acelerador. Que el motor luego baje de vueltas es otra cosa: es el motor
+	# suffriendo, no el operario aliviandose.
+	_apoyado = move_toward(_apoyado,
+		1.0 if Input.is_action_pressed("acelerador") else 0.0, delta * 5.0)
 	if giro != null:
 		var incremento: float = TAU * vueltas_maximas \
 			* (_motor.rpm_efectivas / maxf(rpm_maximas, 1.0)) * delta
@@ -441,20 +490,10 @@ func _acelerador(delta: float) -> void:
 		# El nodo Giro va sin inclinacion para que la rotacion quede plana.
 		giro.rotation.y = _girado
 	_sonido()
-	_apisonar()
 	_cortar_sonido()
 	# El recuento de lo cortado es de un solo fotograma: lo que se corto antes ya
 	# se ha contabilizado y no debe seguir haciendo sonar el cabezal.
 	_corte_ultimo = 0
-
-
-## Pasa por encima de los montones de material y los aplana. Es lo que permite
-## apartar el escombro de donde quieres trabajar en vez de rodearlo siempre.
-func _apisonar() -> void:
-	if not _trabajando:
-		return
-	var montes := Montes.obtener(get_tree())
-	montes.pisar(punto_de_corte(), radio_corte_actual())
 
 
 ## Sonido de corte. Suena corto y grave, y mas fuerte cuanto mas se ha cortado de
@@ -584,7 +623,7 @@ func _avanzar_hacia_el_objetivo(objetivo: float, delta: float) -> void:
 	_barrido += _velocidad_barrido * delta
 
 
-# --- La resistencia de la maleza -------------------------------------------
+# --- El cabezal, el desgaste y lo que la maquina le cuenta al mundo ----
 
 ## Cuanto se frena el barrido ahora mismo, de 0 a 1 de lo que se frenaria del
 ## todo. Sin maleza es 0 y el barrido va igual de rapido que siempre.
@@ -609,64 +648,91 @@ func repostar(litros: float) -> float:
 ## motor parado; en la fase de taller esta llamada quedara detras de una accion
 ## de mantenimiento.
 func cambiar_cabezal_siguiente() -> bool:
+	# El "motor parado" es de la maquina y no del cabezal: por eso la comprobacion
+	# se queda aqui y la estacion solo avanza de indice.
 	if rpm > 50.0 or cabezales_disponibles.size() < 2:
 		return false
-	_montar_cabezal((_cabezal_indice + 1) % cabezales_disponibles.size())
-	return true
+	# El "motor parado" es de la maquina y no del cabezal: por eso la comprobacion
+	# se queda aqui. El **vuelta al primero** va en la estacion, que es quien sabe
+	# cuantos hay. Se pasa por `siguiente()` y no `indice() + 1` a proposito: con el
+	# indice sin modulo, `montar()` se negaba en el ultimo y el ciclo se
+	# detenian ahi. Se perdio medio dia en una prueba que decia "el ciclo vuelve".
+	return _estacion.siguiente() and _montar_el_modelo()
 
 
-func cabezal_puede_cortar(tipo_vegetacion: int) -> bool:
-	return _cabezal_actual != null \
-		and _cabezal_actual.tipos_compatibles.has(tipo_vegetacion)
+## La estacion, para las herramientas y las pruebas. Exponerla evita que las
+## herramientas escriban campos privados de la desbrozadora, que es lo que hacia
+## `medir_cabezales.gd` antes.
+func estacion() -> EstacionCabezal:
+	return _estacion
+
+
+func cabezal_puede_cortar(_tipo_vegetacion: int) -> bool:
+	return _estacion.hay_cabezal()
 
 
 ## Radio de pasada actual, reducido a medida que el filo se desgasta.
 func radio_corte_actual() -> float:
-	if _cabezal_actual == null:
-		return radio_corte
-	var eficiencia := lerpf(0.55, 1.0, _desgaste_actual)
-	return _cabezal_actual.radio_corte * eficiencia
+	return _estacion.radio_corte_actual(radio_corte)
 
 
-## Registra desgaste solo por hojas realmente cortadas. La dureza y el tipo de
-## cabezal determinan cuanto filo se pierde en cada hoja.
-func registrar_corte(tipo_vegetacion: int, cantidad: int, dureza_vegetacion: float) -> void:
-	if cantidad <= 0 or not cabezal_puede_cortar(tipo_vegetacion):
-		return
-	var factor := _cabezal_actual.multiplicador_desgaste
-	var perdida := float(cantidad) * desgaste_por_hoja \
-		* maxf(dureza_vegetacion, 0.0) * factor
-	_desgaste_actual = maxf(0.0, _desgaste_actual - perdida)
-	_desgaste_por_id[_cabezal_actual.id] = _desgaste_actual
-	# Se guarda lo que se ha cortado en el ultimo fotograma: lo usa el sonido para
-	# dar un golpe mas fuerte cuanto mas ha mordido el cabezal.
-	_corte_ultimo = maxi(cantidad, _corte_ultimo)
+## Cuanto frena el cabezal la vegetacion de ese tipo, de 0 a 1. Lo usa
+## la medida de carga del motor: la planta manda con su coste, pero el cabezal
+## decide cuanto de ese coste se nota.
+func frenado_para(tipo_vegetacion: int) -> float:
+	return _estacion.frenado_para(tipo_vegetacion)
 
 
+## Cuantas hojas o celdas por segundo quita el cabezal actual de esa vegetacion.
+## La base la pone la planta y el cabezal la multiplica por su eficacia, que es
+## donde se nota la diferencia entre un nylon y un disco de tres puntas.
+func tasa_corte_para(tipo_vegetacion: int, tasa_base: float) -> float:
+	return _estacion.tasa_corte_para(tipo_vegetacion, tasa_base)
+
+
+## Registra desgaste solo por hojas realmente cortadas. Lo que gasta el filo es la
+## resistencia de este cabezal contra esa planta, no la dureza de la planta: el
+## nylon contra la maleza se come el hilo, y un disco de tres puntas pasa por
+## encima casi sin enterarse.
+func registrar_corte(tipo_vegetacion: int, cantidad: int) -> void:
+	# El desgaste lo lleva la estacion; aqui solo se apunta lo que se ha cortado
+	# para el sonido.
+	_corte_ultimo = maxi(_estacion.registrar_corte(tipo_vegetacion, cantidad,
+		desgaste_por_hoja), _corte_ultimo)
+
+
+## Monta el cabezal: primero la estacion, que decide cual es y su desgaste, y
+## despues el modelo, que es lo unico que es cosa de dibujo.
 func _montar_cabezal(indice: int) -> void:
-	if indice < 0 or indice >= cabezales_disponibles.size():
+	if not _estacion.montar(indice):
 		return
-	if _cabezal_actual != null:
-		_desgaste_por_id[_cabezal_actual.id] = _desgaste_actual
+	_montar_el_modelo()
+
+
+## Cuelga el modelo del cabezal que dice la estacion y aparta el anterior.
+##
+## Esto es **lo unico que es de dibujo**: la estacion ya ha decidido cual es. Aqui
+## solo se instancia el `.glb`, se cuelga de `Giro` y se deja ver el original si el
+## repuesto no trae modelo.
+func _montar_el_modelo() -> bool:
 	if is_instance_valid(_cabezal_montado):
 		_cabezal_montado.queue_free()
-	_cabezal_indice = indice
-	_cabezal_actual = cabezales_disponibles[_cabezal_indice]
-	if _cabezal_actual == null:
-		return
-	_desgaste_actual = float(_desgaste_por_id.get(_cabezal_actual.id, 1.0))
+	var cabezal := _estacion.actual()
+	if cabezal == null:
+		return false
 	if is_instance_valid(_cabezal_original):
-		_cabezal_original.visible = _cabezal_actual.modelo == null
+		_cabezal_original.visible = cabezal.modelo == null
 	_cabezal_montado = null
-	if _cabezal_actual.modelo == null or giro == null:
-		return
-	var instancia := _cabezal_actual.modelo.instantiate() as Node3D
+	if cabezal.modelo == null or giro == null:
+		return true
+	var instancia := cabezal.modelo.instantiate() as Node3D
 	if instancia == null:
-		push_warning("El modelo del cabezal '%s' no tiene raiz Node3D" % _cabezal_actual.nombre)
-		return
+		push_warning("El modelo del cabezal '%s' no tiene raiz Node3D" % cabezal.nombre)
+		return false
 	giro.add_child(instancia)
 	instancia.transform = Transform3D.IDENTITY
 	_cabezal_montado = instancia
+	return true
 
 
 ## Que frenao se nota ahora mismo, de 0 a 1. 0 es un claro y 1 es maleza
@@ -729,8 +795,10 @@ func _mide_resistencia(delta: float) -> void:
 	for c in _campos:
 		var radio_actual := radio_corte_actual()
 		var d := distancia_anticipacion()
+		var tipo := c.tipo_vegetacion()
 		coste += c.densidad_bajo(
-			punto + _adelante() * d, radio_actual) * c.coste_maleza()
+			punto + _adelante() * d, radio_actual) * c.coste_maleza() \
+			* frenado_para(tipo)
 	_densidad_debajo = coste
 	_bruta = clampf(coste / maxf(densidad_corte, 1.0), 0.0, 1.0)
 
@@ -751,11 +819,6 @@ func _suavizar_resistencia(delta: float) -> void:
 		delta / maxf(constante_resistencia, 0.01))
 
 
-## Como de cerca esta el barrido de su tope en el sentido dado, de 0 a 1.
-func _cercania_al_tope(sentido: float) -> float:
-	if sentido == 0.0:
-		return 0.0
-	return clampf(absf(_barrido) / maxf(_limite_hacia(sentido), 0.001), 0.0, 1.0)
 
 
 ## El tope duro. Si la inercia se ha pasado, se para aqui y se anula la
@@ -792,11 +855,11 @@ func _colocar(delta: float) -> void:
 	var hasta_alto := clampf(-_pitch_real() / deg_to_rad(maxf(mirar_alto, 1.0)),
 		0.0, 1.0)
 	var objetivo_incl := deg_to_rad(inclinacion_reposo
-		- _trabajando * inclinacion_acelerando * hasta_suelo
+		- _apoyado * inclinacion_acelerando * hasta_suelo
 		+ inclinacion_alta * hasta_alto)
 	_inclinacion_actual = move_toward(_inclinacion_actual, objetivo_incl,
 		deg_to_rad(rapidez_inclinacion) * delta)
-	_caida = move_toward(_caida, _trabajando * caida_max * hasta_suelo,
+	_caida = move_toward(_caida, _apoyado * caida_max * hasta_suelo,
 		caida_max * delta * 2.0)
 
 	# El APOYO en el suelo. Se busca el angulo al que el cabezal queda a la
@@ -834,14 +897,6 @@ func radio_cabezal() -> float:
 	return _radio
 
 
-## Hacia que lado cae el cabezal respecto a la horizontal, en radianes. Con
-## esto y con radio_cabezal() la altura del cabezal sale en linea:
-##
-##     altura = altura_manos + radio * cos(morro - angulo)
-##
-## que es la misma cuenta que usa angulo_del_suelo(), puesta al reves.
-func angulo_cabeza() -> float:
-	return _angulo_cabeza
 
 
 ## A que altura llega el cabezal con el morro en el angulo que se le pase, en
@@ -1030,6 +1085,13 @@ func altura_del_suelo(punto: Vector3) -> float:
 	var espacio := get_world_3d().direct_space_state
 	var origen := Vector3(punto.x, punto.y + 1.0, punto.z)
 	var q := PhysicsRayQueryParameters3D.create(origen, origen + Vector3.DOWN * 4.0)
+	# **La mascara importa y por el mismo motivo que la capa de los restos.** Un
+	# `create()` sin mascara atraviesa todas las capas, asi que el rayo tambien
+	# daba en los trozos de escombro, y el morro se paraba ENCIMA de un trozo en
+	# vez de en el suelo: medido, a 15 centimetros en vez de a ras, y con el
+	# suelo cubierto de restos mas alto todavia. Esto pregunta por la superficie
+	# del terreno, asi que mira la capa 1 y las suyas, y la 8 se queda fuera.
+	q.collision_mask = 1 | 2 | 4
 	if _jugador != null:
 		q.exclude = [_jugador.get_rid()]
 	var golpe: Dictionary = espacio.intersect_ray(q)
