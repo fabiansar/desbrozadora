@@ -19,7 +19,7 @@ main.tscn (Mundo)
 ├── Bosque         arboles de prueba sobre el plano (colision capa 2)
 ├── Hierba         césped agrupado, 60 hojas/m², cuadrantes de 24 m
 ├── MalezaAlta     maleza en matas, 60 hojas/m², cuadrantes de 12 m
-├── Zarzas         cinco matas de zarza con raíz, sobre el mismo suelo
+├── Zarzas         cinco matas de zarza, mismo script y mismas 60 hojas/m²
 ├── Viento         el mapa del viento, UNO para los dos campos
 └── Player         el jugador (CharacterBody3D)
     ├── Cabeza     pivote a 1,62 m; la lente va 0,30 m hacia delante
@@ -641,32 +641,49 @@ maleza.
 ### API para el corte y las pruebas
 
 ```gdscript
-cortar(centro: Vector3, r: float) -> int   # corta y devuelve cuantas
+# --- el corte ---
+cortar(centro_mundo, r, presupuesto := -1.0) -> int   # devuelve cuantas quita
+cortar_por_banda(centro, radio, presupuesto := -1.0) -> int
+cortar_y_soltar(centro, radio, presupuesto := -1.0) -> int
+#   Los tres reciben el CENTRO EN MUNDO y lo convierten a local. `posicion_hoja()`
+#   sigue devolviendo local, y quien la llame convierte con `to_global()`.
+#   Mezclar los dos sistemas lo hacia fallar en silencio: las zarzas estan fuera
+#   del origen del mundo, y el corte se les iba 7 metros.
+#   `presupuesto` a -1 significa "quitate la banda entera" (lo que hacen la hoz y
+#   las pruebas). Con presupuesto salen las hojas que caben en el tiempo pasado.
+
+# --- las preguntas que hacen las pruebas ---
+hojas_en_pie() -> int                      # cuantas quedan de pie
+total_de_pie() -> int                      # alias, se conserva
+de_pie(centro_mundo, r) -> int             # cuantas hay de pie en un circulo
+densidad_bajo(centro_mundo, r) -> float    # hojas DE PIE por m2 alrededor
+hoja_en_pie_mas_alta() -> float            # la mas alta que queda
 total() -> int                             # hojas sembradas
-total_de_pie() -> int                      # cuantas quedan de pie
-regenerar() -> void                        # resiembra y reconstruye la rejilla
-de_pie(centro, r) -> int                   # cuantas hay de pie en un circulo
 altura_hoja(i) -> float                    # altura visual actual
-posicion_hoja(i) -> Vector3
+altura_visual() -> float                   # altura de una hoja cortada
+posicion_hoja(i) -> Vector3                # en LOCAL
 uv_de_hoja(i) -> Vector2                   # su sitio en el mapa del viento
 alto_de(i) / gordo_de(i) -> float
-altura_visual() -> float                   # altura de una hoja cortada
 datos_de_hoja(i) -> Color                  # los 4 canales tal cual van a la GPU
 tono_de(i) -> float                        # el tono, que nunca cambia
-densidad_bajo(centro, r) -> float          # hojas DE PIE por m2 alrededor
 coste_maleza() -> float                    # dureza
+tipo_vegetacion() -> int                   # 1 cesped, 2 maleza, 3 zarza
+regenerar() -> void                        # resiembra y reconstruye la rejilla
 refresca_uv_de_viento() -> void            # rehace las uv si cambio el radio
 uv_rehechas() -> int                       # cuantas hojas rehizo el ultimo refresco
+forzar_recorte(desde: Vector3)             # el recorte, pero a mano
 
-# lo de los cuadrantes
+# --- los cuadrantes ---
 num_cuadrantes() -> int                    # depende de radio, tamaño y siembra
+casillas_totales() -> int
+lado_de_casillas() -> int
 hojas_de_cuadrante(n) -> int               # hojas de ese cuadrante
 caja_de_cuadrante(n) -> AABB               # su caja ajustada
 cuadrantes_visibles() -> int               # cuantos quedan tras el recorte
-material_compartido() -> ShaderMaterial     # el material, para compartirlo
-malla() -> ArrayMesh                       # la malla de una hoja
 caja_del_campo() -> AABB                   # union de todas las cajas
-forzar_recorte(desde: Vector3)             # el recorte, pero a mano
+material_compartido() -> ShaderMaterial    # el material, para compartirlo
+material_cortado() -> float
+malla() -> ArrayMesh                       # la malla de una hoja
 ```
 
 > `cuadrantes_visibles()` y `hojas_de_cuadrante()` devuelven lo que hay **despues**
@@ -676,8 +693,70 @@ forzar_recorte(desde: Vector3)             # el recorte, pero a mano
 > `caja_del_campo()` hay que volver a pedirla si el campo cambia, y devuelve la
 > union de las cajas de todos los cuadrantes. `mirar_hierba.gd` y `foto.gd` la
 > usan en vez de calcular el AABB a mano, que es lo que se hacia antes.
+>
+> `total_de_pie()` y `hojas_en_pie()` devuelven lo mismo. Se dejo el nombre viejo
+> porque estaba en las pruebas de antes y cambiarlo no hacia falta.
 
 ---
+
+## 5 bis. Los tres ficheros de la desbrozadora que no son la desbrozadora
+
+`scripts/desbrozadora.gd` tiene 1.159 lineas y se ocupa de casi todo. Estos tres
+estan dentro de su responsibility y estan separados, y conviene saber por que.
+
+### `scripts/motor_desbrozadora.gd` — el motor
+
+Un `RefCounted` sin nodo, que mantiene **dos** juegos de revoluciones:
+
+- `rpm_sin_carga`: las que pide el acelerador.
+- `rpm_efectivas`: las que quedan bajo carga. Bajan, y esa caida es lo que hace
+  que la maquina "suene" cargada.
+
+El combustible se consume segun la demanda y sube con la carga. Esta separado
+porque **no es un motor de verdad**: es una curva, y su unico consumidor es la
+telemetria de la interfaz y el sonido. Si algum dia se quiere un motor con
+embrague, este es el sitio, y no hay que tocar `_physics_process` de la
+desbrozadora.
+
+### `scripts/estacion_cabezal.gd` — que cabezal va y cuanto le queda
+
+Un `RefCounted` que **no toca un solo nodo**: decide que cabezal esta montado,
+cuanto filo le queda, y como responde a cada planta. La desbrozadora solo cuelga
+el modelo que esta clase elige.
+
+Sale de `desbrozadora.gd`, que habia llegado a 1.165 lineas, con las reglas de
+datos mezcladas con el codigo que instancia el `.glb` y lo cuelga de `Giro`. El
+mismo patron que `motor_desbrozadora.gd`, que tambien es un `RefCounted` con las
+reglas del motor y del que la desbrozadora no tiene ni una linea de simulacion.
+
+El premio es `tools/test_estacion_cabezal.gd`: **las reglas del cabezal se
+comprueban sin montar la maquina**. Antes habia que instanciar `main.tscn`, esperar
+a que el arbol creciera y tirar el cabezal de verdad.
+
+Ojo con una cosa que se debe: `configurar()` **monta el primero**. Lo hace a
+proposito, porque cuando solo guardaba la lista habia que acordarse despues de
+llamar a `montar(0)`, y quien se olvidaba se quedaba con una estacion sin cabezal
+**y sin ningun error**. La prueba nueva lo cazó en la segunda ejecucion.
+
+### `scripts/cabezal_desbrozadora.gd` — los datos del cabezal
+
+Un `Resource`, uno por cabezal, en `resources/cabezales/*.tres`. Lleva **dos
+numeros que van en direcciones opuestas** y que es facil confundir:
+
+- **eficacia** (1 a 5): lo rapido que corta.
+- **resistencia** (0 a 5): lo que la vegetacion le hace a el.
+
+Que se separen es deliberado: un cabezal de punta de diamante que corta poco y
+dura mucho tiene que ser posible, y si fuera un solo numero seria imposible.
+
+El desgaste **activo no esta aqui**, esta en la desbrozadora, para que dos
+herramientas puedan compartir la misma definicion sin compartir su estado.
+
+### `scripts/interfaz_herramienta.gd` — el panel
+
+El `CanvasLayer` con las revoluciones, la carga, la gasolina y el filo. Emite
+`telemetria_actualizada` y **no toca la desbrozadora**: es de solo lectura, y por
+eso la logica de simulacion puede ir en un `RefCounted` sin la UI enterada.
 
 ## 6. `shaders/hierba.gdshader` — como se dibuja
 
@@ -812,6 +891,20 @@ Esta configuración está en `scenes/main.tscn`; la forma es plana a propósito.
 
 ---
 
+## 8 bis. `shaders/piedra.gdshader` — hecho, sin usar
+
+**No lo usa nadie todavia**, y conviene saberlo para no borrarlo por error ni
+redescubrirlo dentro de seis meses. Son 117 lineas de granito de Galicia: el tono
+de cada sillar por separado, las juntas mas oscuras, y el musgo que sale por abajo.
+
+El patron de sillares va en el **espacio del mundo** y no en la UV, y elige el
+plano con la normal: un triplanar de manual. Se podria mezclar los tres planos,
+pero en un muro la mezcla se nota como una mancha en las esquinas, y eligiendo
+uno solo el muro sale todo de la misma piedra.
+
+Esta hecho para la aldea, que es la fase 3 del diseno y todavia no existe. Cuando
+se monte una pared, este shader esta listo.
+
 ## 9. Terreno definitivo y aldea manuales (pendientes)
 
 No hay nodos ni scripts de terreno procedural o de aldea en la escena actual. El
@@ -822,12 +915,16 @@ el editor en otra fase.
 
 ---
 
-## 10. `scripts/bosque.gd` — el bosque
+## 10. `scripts/bosque.gd` y las escenas del bosque
 
 Reparte arboles por el campo con semilla fija, sobre una rejilla con jitter para
 que no salgan en lineas. Cada arbol es un `StaticBody3D` con tronco y dos copas,
 todo con colision solo en el tronco (la copa no, que es mas barato y se nota
 igual). Va en la capa 2.
+
+Son dos ficheros y conviene no confundirlos: `scenes/bosque.tscn` es el **grupo**
+que reparte, y `scenes/arbol.tscn` es **un arbol**, que se instancia las veces que
+haga falta. `main.tscn` solo cuelga del grupo.
 
 ---
 
@@ -874,8 +971,8 @@ Cuatro decisiones que no son obvias y que costaron un bug cada una:
   de que la seleccion se cambiara *despues*; cambiandola antes se guardaba la
   nueva en vez de la vieja, y las dos quedaban montadas a la vez. Hay prueba de
   esto: `solo hay una herramienta montada, no dos`.
-- **El grupo `herramienta` solo lo tiene la equipada.** Cesped, maleza, zarza y
-  montones lo buscan cada fotograma con `get_first_node_in_group`, y no guardan
+- **El grupo `herramienta` solo lo tiene la equipada.** `Montes` lo buscaba cada
+  fotograma con `get_first_node_in_group` y no guardaba
   la referencia: con la referencia guardada seguian cortando con la que ya no
   llevabas.
 - **Los `CanvasLayer` hay que apagarlos a mano.** No heredan la visibilidad del
@@ -923,89 +1020,80 @@ queda por encima de la maleza y no corta nada de lo que esta en pie.
 
 ---
 
-## 12. La zarza como maraña
+## 12. Los tres niveles de vegetacion y los restos
 
-### `scripts/zarza.gd` — raíz, enganches e inundación
+### Ya no hay dos vegetaciones, hay una
 
-Antes hubo dos modelos y los dos dejaban la mecanica coja: un grafo de ramas con
-anclajes (resolvia la fisica pero no daba juego) y un mapa de alturas (se cortaba
-por capas, pero no tenia manera de saber **que sostiene a que**).
+Hubo dos modelos y los dos dejaban la mecanica coja: una hoja (`hierba.gd`) y una
+maraña (`zarza.gd`, 888 lineas con celdas, coronas, raices, enredo e inundacion).
+La maraña era otro juego dentro del juego, y sobre todo era **imposible de
+comparar**: no se podia pedirle a un cabezal lo mismo a las dos y ver que
+diferencia habia, porque cada una tenia su cuenta atras.
 
-Ahora cada celda guarda tres cosas: cuanta vegetacion le queda, si hay **corona**
-(raiz, el anclaje al suelo) y a que vecinos se agarra (mascara de cuatro bits, en
-el orden de `DIRECCIONES`). Cuando el cabezal corta su franja, una **inundacion
-desde las coronas vivas** marca que celda se sostiene con cual, y todo lo que no
-queda marcado cae a montones.
+Ahora hay **un solo `hierba.gd`** y la zarza es un preset:
+`scenes/vegetacion/zarza.tscn` hereda de `hierba.tscn` y solo cambia numeros y
+apariencia. Se borro `scripts/zarza.gd`, tres escenas y siete pruebas.
 
-De ahi salen las reglas sin escribir ninguna excepcion:
+Los tres presets:
 
-| Corte | Que pasa | Por que |
-| --- | --- | --- |
-| a la base de una mata | cae todo lo que solo se sostenia con ella | la raiz ya no esta |
-| en medio de una cana | cae el fragmento que se perdia; **el resto sigue en pie si tiene otro enganche con corona** | hay otro camino a una raiz |
-| donde ya no hay nada | nada | no hay celda |
-| por la copa | abre paso, no tumba | la raiz sigue |
+| preset | tipo | altura | densidad | dureza |
+|---|---|---:|---:|---:|
+| `cesped.tscn` | 1 | 49 cm | 60/m2 | — |
+| `maleza_alta.tscn` | 2 | 76 cm | 60/m2 | 3,3 |
+| `zarza.tscn` | 3 | 150 cm | 60/m2 | 3,6 |
 
-Los enganches se calan con el campo de distancia a la corona mas cercana: cada
-celda se agarra a los vecinos que la **acercan** a una corona, que es como se
-sostiene de verdad (la cana nace de la raiz, se curva y se apoya en lo que hay de
-camino a la raiz siguiente). Con `enredio` alto se engancha ademas a las que no la
-sostienen: es una cana que pasa por encima de otra sin tocarla, y son esas lineas
-cruzadas las que hacen que la copa de un zarzal denso aguante y haya que dar
-varias pasadas.
+**La zarza comparte la densidad con la maleza a proposito.** Su dificultad tiene
+que venir de la dureza y de la resistencia del cabezal, no de estar mas rala: si
+fuese mas rala, el tier mas duro seria el mas rapido de barbechar, que es al
+reves de lo que dice la tabla de cabezales.
 
-Cuatro cosas de la implementacion que hay que tener presentes:
+### El corte se reparte en ocho sectores
 
-- **El cabezal secciona todo lo que asoma por encima de su altura**, y ya no hay
-  banda de corte. Antes una pasada a ras de suelo no cortaba nada en celdas
-  altas, porque la banda hacia que el cabezal no llegara abajo.
-- **`densidad` aclara la hoja, no el tallo.** Donde hay loma hay cana haya
-  follaje o no. Antes `densidad` abria huecos estructurales y cada hueco partia la
-  maraña: se perdia un tercio de la zarza sin haberla tocado. El hueco de
-  follaje se hace con una altura de 0,22.
-- **La estructura (`_cana`) va aparte de la altura.** Un hueco de follaje deja la
-  cana en pie; una cana cortada ya no sostiene a nadie aunque le quede un palmo
-  de tallo. Por eso una corona cuenta como viva si le queda **una sola** celda de
-  cana.
-- **La inundacion es una pila sobre un array plano**, sin objetos por celda ni
-  recursividad: son unas dos mil celdas y se llama en cada corte, con la fisica
-  corriendo.
+Con presupuesto, el cabezal morda una celda al azar. Repartido al azar, un sector
+entero se limpiaba mientras el de al lado conservaba todas sus hojas, y el claro
+salia hecho de manchurrones. Repartido en **ocho sectores de 45 grados**, cada
+uno con la octava parte del presupuesto y su resto decimal propio, y dentro de
+cada sector de **dentro hacia fuera**, el frente avanza como un frente.
 
-### `scripts/montes.gd` y `scripts/restos.gd`
+Medido sobre 60 fotogramas, partiendo de `[26, 24, 26, 21, 23, 25, 25, 23]`, se
+pierden `[18, 18, 18, 18, 18, 18, 18, 18]`. El reparto no puede ser de hojas por
+sector, porque las plantas no estan plantadas en circulos perfectos: es de hojas
+**perdidas** por sector, que es lo que se ve. Lo tunea `Hierba.SECTORES`.
 
-`Montes` es el escombro que se queda en el suelo: una rejilla de celdas de 0,5 m
-con la altura del material, dibujada con un MultiMesh de cajas sin colision (el
-jugador no deberia tropezar). `Restos` son los trozos sueltos, como particulas de
-GPU con tiempo de vida, no como objetos: un resto que ha tocado el suelo y se
-queda dibujado para siempre fue el bug que motivo pasarlos a particulas.
+Hay **dos** acumuladores de resto decimal y no es una duplicacion:
+`_presupuesto_fraccion` es el freno grueso (con el nylon contra la zarza el
+presupuesto es de 0,08 hojas por fotograma, menos de una, y sin el pasarian doce
+fotogramas sin cortar nada), y `_sector_por_cortar` es el reparto fino.
 
-`Montes.aportar_varios()` existe por una razon concreta: una caida de verdad son
-cientos de celdas a la vez, y con un `aportar()` por celda se redibujaba la pila
-entera cientos de veces en el mismo fotograma.
+El borde del disco tampoco es un circulo: cada hoja tiene su umbral de distancia
+propio, fijo, que sale de **donde esta** y no del azar. Que sea fijo es lo
+importante; con azar, una hoja entraba y salia y el claro parpadeaba.
 
-### El `instance_count` de los MultiMesh
+### `scripts/restos.gd` — lo unico que queda en el suelo
 
-**La trampa que mas veces ha mordido a este proyecto**, y esta en dos sitios a la
-vez (zarza y montones), mas como aviso para el que venga:
+Un pool de 60 `RigidBody3D` con la malla de una hoja **curva**, de 10 x 4 x 3 cm y
+0,35 kg. Salen despedidos, caen, se quedan, y la maquina los aparta.
 
-```gdscript
-# MAL: subir el contador dentro del bucle
-for i in n:
-    mm.instance_count = i + 1
-    mm.set_instance_transform(i, ...)
+**Orientalos los tres ejes, no tumbados.** Es el detalle que mas se nota: con los
+trozos horizontales, cincuenta planchas superpuestas son una pila de losas, que es
+justo lo que reporto el usuario la primera vez. Ademas hay cuatro siluetas, el
+tamano va de 0,55 a 1,35 por trozo y uno de cada cinco se desatura hacia pajizo.
 
-# BIEN: el total, una vez, antes del bucle
-mm.instance_count = n
-for i in n:
-    mm.set_instance_transform(i, ...)
-```
+**Los que estan apagados no se calculan.** Aparcados son un cuerpo congelado; el
+coste esta en los que caen y ruedan, y hay pocos. Cuando el pool se llena se
+recicla **el mas antiguo**.
 
-Cada vez que se cambia `instance_count`, Godot **rehace el buffer del MultiMesh y
-borra** las transformadas y los datos que hubiera escrito. Subirlo de uno en uno
-mientras se rellena deja la escena con una sola instancia en pie, la ultima, y las
-demas en el origen: **no hay ningun error, el contador es el correcto, y en
-pantalla no se ve nada**. En la zarza eso hacia que 3.072 hojas sembradas
-dejaran verse una sola. Se mide con `tools/medir_zarza.gd`: de 2 pixeles a 52.320.
+#### Lo que se borro: `Montes`
+
+Habia un segundo sistema, `Montes`, que guardaba el material acumulado en una
+rejilla de celdas de 50 cm y lo dibujaba con un `MultiMesh` de cajas. Al usuario le
+aparecieron como "pilas de rectangulos" de casi medio metro, y no hacia falta mas
+que mirar el codigo para ver el motivo: era el **unico `BoxMesh` del proyecto**.
+
+**Esta borrado.** El suelo solo guarda los trozos de `Restos`. Se pierde una cosa:
+el amontonado ya no crece, asi que una pasada larga ya no levanta un monton de
+55 cm que haya que rodear. A cambio, el suelo es siempre el mismo sitio, sin dos
+sistemas diciendo cosas distintas, que era el problema de verdad.
 
 ### `scripts/vegetacion.gd` — el contrato comun
 
@@ -1016,81 +1104,62 @@ es cada campo: `tipo_vegetacion()` (1 cesped, 2 maleza, 3 zarza),
 vegetacion que no se sabe cortar no tiene que inventar un sistema, tiene que
 decir que no.
 
-### `scenes/pruebas_zarza.tscn` — donde se ve la mecanica
+### Donde se ve la mecanica
 
-Seis matas que aislan cada regla: una sola mata, tres matas, una muy enredada, una
-alta y dos pegadas. Con `marcar_anclajes` se dibujan las coronas (caja roja) y los
-enganches (raya amarilla), y `scripts/overlay_prueba_zarza.gd` pone arriba a la
-derecha cuantas raices quedan y si la mata esta tumbada o no.
+No hay escena de pruebas de la zarza. **No hace falta**: la zarza es la misma
+hoja que el cesped, y las pruebas van contra la escena real (`main.tscn`) con la
+maquina de verdad, que es donde se puede medir si el morro llega o no.
 
-**Esa escena estaba rota**: pedia un `overlay_prueba_zarza.gd` que no existia, y
-nadie se dio cuenta porque no se abria.
+La que habia, `scenes/pruebas_zarza.tscn`, aislaba seis reglas de la maraña
+(matas sueltas, enredadas, altas y pegadas) con `marcar_anclajes` y unos contadores
+en pantalla. Todo eso se borro junto con el sistema, porque describia reglas que ya
+no existen. Ademas **estaba rota**: pedia un `overlay_prueba_zarza.gd` que no
+existia, y nadie se dio cuenta porque no se abria. Esa es la clase deScene que
+sobrevive a su motivo y un dia，销售 cara.
 
 ---
 
 ## 13. `tools/` — pruebas y medicion
 
+### Las que se ejecutan sin abrir nada
+
+Todas con `--headless` y `--script`. Las siete de `test_` son las que tienen que
+estar en verde; las de `medir_` y `ver_` **no comprueban nada**,|informan, 
+informan, y por eso no se ejecutan en la bateria.
+
 | Archivo | Que hace |
 | --- | --- |
-| `test_juego.gd` | pruebas headless de movimiento, desbrozadora, vegetación y suelo plano |
-| `test_movimiento_integrado.gd` | combinaciones de paneo, WASD, carrera, agachado, salto y acelerador |
-| `mirar_hierba.gd` | tres fotos con render real y cuanto ocupa cada una |
-| `medir_densidad.gd` | frame time con distintas densidades y radios |
-| `medir_foto.gd` | **la comprobacion visual**: mide pixeles de la foto a render real |
-| `test_inventario.gd` | la secuencia entera del inventario: soltar, rueda, recoger y el orden invertido |
-| `test_zarza_conexion.gd` | la mecanica de la zarza: raiz, enganches y que cae lo que pierde el apoyo |
-| `test_zarza_capas.gd` | el corte por capas sobre `capas_zarza.tscn` y los montones |
-| `test_zarza_capas_recorrido.gd` | las tres zonas recorridas con el jugador y la herramienta reales |
-| `medir_zarza.gd` | **si la zarza se dibuja de verdad**: apaga el nodo y cuenta los pixeles que cambian |
-| `foto_inventario.gd` | cinco fotos de la rueda, la hoz, las manos vacias y el "E recoger" |
-| `foto_pruebas_zarza.gd` | la zarza antes, con pasada alta y con pasada a la raiz |
-| `foto_zarza.gd` | una foto de la escena de capas desde una camara alta |
-| `diag_hierba.gd` | AABB, reparto por cuadrante y datos de instancia |
+| `test_juego.gd` | la suite principal: movimiento, desbrozadora, vegetacion y suelo plano |
+| `test_movimiento_integrado.gd` | paneo, WASD, carrera, agachado, salto, acelerador y el tier 3 |
+| `test_vegetacion_tier3.gd` | el tier 3 con la maquina de verdad: alcance del morro, corte y escombro |
+| `test_cabezales.gd` | que se note el reparto entre los cuatro cabezales sobre el tier 3 |
+| `test_corte_organico.gd` | los ocho sectores pierden lo mismo, el presupuesto se respeta y el borde tiene dientes |
+| `test_origen_restos.gd` | enumera que hay en el suelo tras cortar cada planta, y avisa si aparece algo raro |
+| `test_inventario.gd` | soltar, rueda, recoger y el orden invertido |
+
+### Las que hay que mirar con ventana
+
+| Archivo | Que hace |
+| --- | --- |
+| `ver_restos.gd` | **los restos a 40 cm**, que es la unica distancia donde se pueden juzgar |
 | `foto.gd` | una foto suelta |
+| `foto_inventario.gd` | la rueda, la hoz, las manos vacias y el "E recoger" |
+| `foto_personaje.gd` | el personaje |
 | `ver_encuadre.gd` | que mallas entran en la foto y a que grados del centro |
-| `crear_desbrozadora.py` | alias compatible de `crear_desbrozadora_mesh.py` |
-| `crear_motor.py` | genera `audio/motor.wav` |
-| `crear_desbrozadora_mesh.py` | genera la desbrozadora y **los tres cabezales sueltos**, y los mide antes de exportar |
-| `crear_desbrozadora_100x.py` | generador de un modelo alternativo de prueba, no usado en `main.tscn` |
-| `crear_hoz_mesh.py` | genera la **hoz** en `models/hoz.glb`, y comprueba medidas y ejes |
-| `crear_furgoneta_mesh.py` | genera la furgoneta de la futura fase de conducción |
-| `crear_personaje_mesh.py` | genera el operario low-poly en `models/personaje_trabajo.glb` |
-| `probar_cambio.py` | comprueba el alineamiento de un cabezal intercambiable |
-| `foto_personaje.gd` | captura la pose de trabajo en primera persona para iterar cuerpo y anclaje |
-| `exportar_blender.py` | exportador a `.glb` con las correcciones que Godot necesita |
-| `abrir_modelo.py` | abre un `.glb` en Blender con ventana, para verlo |
-| `ver_modelo.py` | mira un `.glb` por dentro |
+| `mirar_hierba.gd` | tres fotos con render real y cuanto ocupa cada una |
+| `medir_foto.gd` | mide pixeles de la foto a render real |
+| `medir_densidad.gd` | frame time con distintas densidades y radios |
+| `medir_cabezales.gd` | medida de los cabezales sobre el tier 3 |
+| `diag_hierba.gd` | AABB, reparto por cuadrante y datos de instancia |
 
-Los `.py` son herramientas de generación y validación; no se ejecutan durante el
-juego. Los `.uid` los genera Godot solo, no se tocan.
+**Ninguna prueba mide el aspecto**, ni el del corte ni el de los restos. Es
+deliberado: el aspecto se juzga a ojo y a cuatro o cinco metros un trozo de 10 cm
+son unos pixeles. Para eso esta `ver_restos.gd`.
 
-Los generadores obtienen las rutas de salida desde la ubicación de su propio
-archivo. Para el Flatpak se pasa la ruta del script/modelo desde `$PWD`, porque
-Blender puede arrancar en su propio directorio:
+### Los scripts de Blender
 
-```
-flatpak run --filesystem=$HOME/Documentos org.blender.Blender --background \
-    --python "$PWD/tools/crear_desbrozadora_mesh.py"
-```
-
-**La limitacion importante de las pruebas:** el renderer headless de Godot usa un
-dispositivo de mentira que **descarta los transforms y los datos de instancia
-del MultiMesh**. Por eso `diag_hierba.gd` en headless da AABB de cero y
-transforms identidad, y por eso hay que usar `--rendering-driver vulkan` para
-cualquier cosa visual. La suite comprueba la logica (los arrays), no el render.
-
-> Con chunking esto ya no es un problema de diagnostico: cada cuadrante lleva su
-> `custom_aabb`, y eso **si** se puede comprobar en headless, porque lo calcula
-> GDScript. Lo que sigue sin poder comprobarse en headless es si la hoja sale
-> dibujada, que es otra cosa.
-
-Y hay un segundo limite, mas traicionero: **`get_instance_custom_data()` devuelve
-ceros en headless**, porque el buffer del MultiMesh vive en el servidor de
-graficos y en headless no hay. Asi que el contrato del shader **no se puede
-comprobar leyendo el MultiMesh**. Lo que hacen las pruebas es componerlo en CPU
-con `datos_de_hoja()`, que usa la misma funcion que se manda a la tarjeta: si
-cambia la funcion, las dos se rompen a la vez y la prueba no pasa por casualidad.
-Para lo que solo existe en la GPU, la comprobacion va en `medir_foto.gd`.
+`crear_desbrozadora.py`, `crear_motor.py`, `crear_desbrozadora_mesh.py`,
+`crear_desbrozadora_100x.py`, `crear_hoz_mesh.py`, `crear_furgoneta_mesh.py`.
 
 ### Como se cierra el aviso de imagen
 

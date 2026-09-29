@@ -4,6 +4,242 @@ Lo que se ha tocado y por que. Para el detalle de como esta cada cosa por dentro
 [DOCUMENTACION.md](DOCUMENTACION.md); para el estado y los problemas que quedan,
 [REVISION.md](REVISION.md).
 
+## Revision completa: dos bugs que ninguna prueba cazaba, y limpieza — 2026-09-29
+
+- **La maquina no empujaba los restos.** En `_process` habia un
+  `pass  # DIAG: _apartar_restos() desactivada` olvidado, mientras toda la
+  documentacion decia que apartabas el escombro al pasar. **Ninguna prueba lo
+  veia** porque las tres llamaban a `restos.empujar()` a mano, saltandose el
+  bucle de fotogramas. Es la clase de fallo que no aparece nunca: la API
+  funciona, la prueba pasa y el juego no lo hace.
+  - Reactivado, y anadida una prueba que **pasa por el bucle de verdad** y
+    comprueba el contador de empujones. Medido: **231 empujones** sin que nadie
+    llame a `empujar()`.
+  - Al reactivarlo apareció un segundo fallo que llevaba **escondido desde que
+    estaba desactivado**: `empujar` suma velocidad a proposito (un cuerpo
+    aparcado se come el impulso), pero la maquina llama unas ocho veces por
+    segundo, y sin tope son 7,2 m/s: el escombro salia a **doce metros**.
+    Ahora `Restos.VELOCIDAD_APARTAR_MAX` (2 m/s) lo limita.
+- **Tres intentos fallidos al medir el escombro, y por que.** La media de
+  posiciones del pool **no sirve para nada**: da 48 -> 1211 cm (la maquina se
+  aleja catorce metros), luego 1274 -> 135 cm (el cabezal va hacia el escombro) y
+  luego 45 -> 686 cm (al cortar, el pool se recicla y las piezas reaparecen a
+  siete metros). Lo que no miente es el **contador de empujones**. Y una
+  comprobacion sobre un conjunto de piezas vacio pasa sin comprobar nada: hacia
+  falta decirlo porque es como se cuela un test que no prueba nada.
+- **Sacan las reglas del cabezal a `scripts/estacion_cabezal.gd`.** Un
+  `RefCounted` que **no toca un solo nodo**: que cabezal va, cuanto filo le
+  queda y como responde a cada planta. La desbrozadora solo cuelga el modelo que
+  esa clase elige. Mismo patron que `motor_desbrozadora.gd`, que ya existia y
+  funciona.
+  - **Premio: `tools/test_estacion_cabezal.gd`**, que prueba las reglas del
+    cabezal **sin montar la maquina**. Antes habia que instanciar `main.tscn`,
+    esperar a que el arbol creciera y tirar el cabezal real.
+  - **El ciclo de cabezales se habia roto al sacarlo**: se llamaba a
+    `montar(indice() + 1)` sin modulo, `montar` se negaba en el ultimo y el ciclo
+    se detenia ahi. Solo lo cazaban las pruebas de la maquina entera.
+  - **`configurar()` monta el primero, a proposito.** Cuando solo guardaba la
+    lista, quien se olvidaba de llamar a `montar(0)` se quedaba con una estacion
+    **sin cabezal y sin ningun error**. Lo cazó la prueba nueva.
+  - **Y un parametro llamado `disponibles` hacia fallar el script entero**, con 33
+    fallos en la suite principal que no tenian nada que ver con el cabezal. El
+    error de GDScript senalaba el cuerpo de la funcion y el problema era la firma.
+  - `medir_cabezales.gd` ya no escribe un campo privado de la desbrozadora desde
+    una herramienta, que es lo que hacia antes.
+- **`cortar()` de 141 a 48 lineas.** Hacia cinco cosas: el freno grueso, el
+  reparto en sectores, el reparto de cuotas y el bucle. Ahora son
+  `_repartir_en_sectores()` y `_repartir_cuotas()`. **Sin cambio de
+  comportamiento**: sigue dando 144 hojas y `[18, 18, 18, 18, 18, 18, 18, 18]`.
+- **Un banner duplicado en `desbrozadora.gd`:** las dos mitades del fichero
+  se llamaban "La resistencia de la maleza", y la segunda no tiene nada que ver.
+  La segunda ahora se llama "El cabezal, el desgaste y lo que la maquina le
+  cuenta al mundo".
+- **Cuatro `.uid` huerfanos** de los scripts de zarza borrados.
+- **Seis ficheros sin documentar**, ya documentados: `motor_desbrozadora.gd`,
+  `cabezal_desbrozadora.gd`, `interfaz_herramienta.gd`, `bosque.tscn` frente a
+  `arbol.tscn`, y `shaders/piedra.gdshader`.
+- **`shaders/piedra.gdshader` no lo usa nadie, y se queda.** Son 117 lineas de
+  granito gallego terminado, hechas para la aldea, que es una fase que todavia no
+  existe. Borrar trabajo terminado no es limpieza, es tirar comida. Ahora se
+  documenta como "hecho, sin usar" para que no se borre por error ni se
+  redescubra dentro de seis meses.
+
+## Se borra el sistema de montones; el suelo solo guarda restos — 2026-09-29
+
+- **Las "pilas de rectangulos" del campo no eran los restos.** Habia **dos
+  sistemas** dejando material en el suelo y se confundian porque se pisaban el
+  sitio: `Restos`, los motitos, y `Montes`, que guardaba el material acumulado en
+  una rejilla de celdas de 50 cm y lo dibujaba con un `MultiMesh` de cajas. Era el
+  **unico `BoxMesh` del proyecto entero** y median 46 cm. De ahi las cajas.
+- **`Montes` esta borrado entero** (decision del usuario): `scripts/montes.gd`,
+  `_apisonar()` en la desbrozadora, el `aportar()` que llamaba `Restos.soltar()` y
+  las consultas de dos pruebas. En el suelo solo quedan los trozos de `Restos`.
+  - **Lo que se pierde**, y queda anotado a proposito: el amontonado ya no crece
+    sin limite, asi que una pasada larga ya no levanta un monton de 55 cm que haya
+    que rodear. Desaparece la regla de juego de "no basta con dar dos pasadas por
+    el mismo sitio". Es una decision, no una mejora tecnica.
+  - Antes de borrarlo se intento arreglar la malla y **estaba bien y no era la
+    solucion**: la pregunta no era si las cajas parecieran montones, sino si el
+    suelo tenia que tener dos sistemas.
+- **En su lugar, lo que hacia falta:** `test_vegetacion_tier3.gd` comprueba que el
+  escombro **caiga junto al corte**, que es lo que hacia util el monton: la pasada
+  siguiente tiene que pisar donde acaba de cortar y no dejar un reguero a tres
+  metros.
+- **Diagnostico retirado por falso, y conviene no repetirlo.** La primera
+  conclusion fue "48 cubos de un metro amontonados en el origen del mundo", y
+  venia de leer el `MultiMesh` de vuelta. En headless **no se puede**: en cuatro
+  maneras distintas de escribir, `get_instance_transform` devuelve la identidad
+  siempre, porque sin servidor de render el `MultiMesh` no guarda los datos. Es el
+  mismo caso que `get_instance_custom_data`, que ya estaba anotado.
+- **Prueba nueva, `tools/test_origen_restos.gd`:** enumera que hay en el suelo tras
+  cortar cada una de las tres plantas y **avisa si aparece algo que no sea un
+  resto**, que es como se caza un sistema fantasma. Dio un dato que no se ve
+  jugando: hay que **cortar avanzando**, porque quieto el material se queda donde
+  cae y no se acumula. En 10 metros: 12 celdas con el cesped, 21 con la maleza, 42
+  con la zarza.
+- **Ocho funciones muertas fuera**, a las que no se llamaba desde ningun sitio
+  y que arrastraban comentarios que ya no describian nada: `get_cabeza()`,
+  `angulo_cabeza()`, `_cercania_al_tope()`, `ids_de_los_huecos()`,
+  `get_giro_total()`, `cuantos_cerca()`, `velocidad_de()` y `fuerza_media()`.
+  Una de ellas, `get_giro_total()`, decia "lo usa la camara para el retardo de la
+  mirada" y la camara no lo llamaba: un comentario que miente es peor que uno que
+  falta.
+- **Un test fallaba una de cada dos, y no habia nada roto.** `test_vegetacion_tier3`
+  comprobaba que el escombro se apartara un 20 % en distancia **media**, y al
+  dispersar la salida de los restos la media de partida paso de 0,33 a 0,62 m segun
+  que trozos se reciclan. Medido seis veces: el escombro se aparta **once
+  centimetros en las seis**, exactamente igual; solo bailaba la linea base. Ahora
+  pide 6 cm en absoluto, que es lo que el ratio viejo codificaba. Es el mismo
+  fallo que ya se habia corregido en `test_movimiento_integrado.gd` y aqui se
+  habia olvidado. Un test intermitente es peor que uno que falla siempre, porque
+  entrena a ignorarlo.
+- **Documentacion al dia.** `DOCUMENTACION.md` era lo peor: la seccion 12 entera
+  (mas de cien lineas) describia la maraña con raiz e inundacion, que se borro
+  hace semanas, y la tabla de `tools/` listaba ocho ficheros inexistentes y no
+  mencionaba ninguno de los nuevos. Tambien, la API de `hierba.gd` listaba
+  funciones que no existen y no listaba las nuevas. En `LEEME.md` havia una
+  instruccion para ejecutar `foto_pruebas_zarza.gd`, borrado hace semanas, y
+  `DISENO.md` daba por hecha una regla de juego que ya no aplica.
+
+## El corte se abre en sectores y los restos dejan de ser bloques — 2026-09-29
+
+- **El claro salia hecho de manchurrones.** El cabezal morda una celda al azar y
+  un sector entero se limpiaba mientras el de al lado conservaba todas sus hojas.
+  Ahora el disco se reparte en **ocho sectores de 45 grados**, cada uno con la
+  octava parte del presupuesto y su resto decimal propio, y dentro de cada sector
+  se corta de dentro hacia fuera. Medido sobre 60 fotogramas, de una partida
+  inicial de `[26, 24, 26, 21, 23, 25, 25, 23]`, se pierden
+  `[18, 18, 18, 18, 18, 18, 18, 18]`: dieciocho en los ocho.
+  - Se descarto el reparto barato de "la hoja mas cercana", que se ve mucho mejor
+    pero en una mata pasa por encima, o faila a la base y se viene la corona entera
+    de golpe: con el nylon la zarza se vaciaba en un fotograma, mas rapido que con
+    un disco de tres puntas. **Ninguna prueba lo caza**, porque las pruebas miden
+    el total y no el reparto.
+  - Se descarto tambien la orla a media altura, que era mas organica todavia pero
+    ponia el corte **14 veces mas lento**. Queda anotado el margen, 0,012 hojas.
+- **El borde del disco tiene dientes.** Cada hoja tiene su propio umbral de
+  distancia, fijo, que sale de **donde esta** y no del azar. Que sea fijo es lo
+  importante: si saliera del azar en cada fotograma, una hoja entraba y salia y el
+  claro parpadeaba al avanzar.
+- **Los restos parecian bloques apilados, y lo eran.** Cinquenta trozos tumbados
+  horizontales, en el mismo plano, con una sola silueta y de 36 cm con la zarza:
+  una pila de losas. Ahora:
+  - **Orientacion libre en los tres ejes**, que era el problema de verdad. Con los
+    trozos horizontales, cincuenta planchas superpuestas son una pila de ladrillos.
+  - **Malla curva** de cinco tramos, con arco y retorcido, para que el trozo se
+    quede apoyado en dos puntos con el hueco por debajo.
+  - **Cuatro siluetas distintas**, tamano de 0,55 a 1,35 por trozo, y uno de cada
+    cinco desaturado hacia pajizo.
+  - Trozos un 30 % mas pequenos y con el tope de escala de la planta bajado de
+    2,6 a 1,5; el pool sube de 50 a 110 porque las piezas son mas pequeñas y el
+    coste esta en las que estan despertando, no en las aparcadas.
+- **El repartido por sectores expose un fallo propio:** el resto decimal se
+  reiniciaba cada fotograma, y con 2,5 hojas por fotograma entre 8 sectores la
+  parte entera se quedaba en cero y **no se cortaba nada**. Lo cazan dos pruebas
+  nuevas, `test_corte_organico.gd` y `test_vegetacion_tier3.gd`.
+- **Documentacion al dia:** `LEEME.md` (ocho sectores, restos, tabla de las tres
+  plantas corregida, que ponia 20 por m2 en la zarza cuando va a 60) y
+  `REVISION.md` (por que se descartaron los otros dos repartos, y por que hay dos
+  acumuladores de resto decimal y no es una duplicacion).
+
+## La zarza es el tier 3 y el escombro pesa — 2026-09-29
+
+- **La zarza deja de ser un sistema propio.** Borrados `zarza.gd` (888 lineas con
+  celdas, coronas, raices, enredo e inundacion), tres escenas y siete pruebas.
+  Ahora es un preset de `scenes/vegetacion/zarza.tscn` que hereda de `hierba.tscn`
+  con otros numeros: misma hoja, color y forma distintos, y **la misma densidad
+  que la maleza**, 60 por metro cuadrado. Su dificultad tiene que venir de la
+  dureza, no de estar mas rala. La tabla de las tres plantas esta en `LEEME.md`.
+- **El escombro ahora tiene cuerpo y pesa.** Pool de `RigidBody3D` con forma de
+  hoja (no cajas), 0,35 kg cada uno, que caen al
+  suelo **al lado** del corte, se quedan y **se apartan con la maquina**. Alimentan
+  los montones desde cualquier planta, no solo de la zarza. Cinco bugs que solo
+  aparecieron al mirar: la mascara a cero los hacia caer al vacio; la friccion del
+  suelo se comia el empuje; un cuerpo dormido no recibe impulsos; `Montes.obtener`
+  creaba **dos gestores distintos** en dos llamadas seguidas (el nodo se anade en
+  diferido) y el material se perdia en el primero; y el propio "aparcar lo que se
+  ha parado" deshacia el empuje en el mismo fotograma.
+- **Lo que no se nota en el codigo pero se notaba jugando:** el peso del cuerpo
+  sobre la maquina se media con las **vueltas del motor**, asi que con la carga
+  alta el motor bajaba y la maquina se erguida sola: cuanto mas trabajo habia, mas
+  alto se quedaba el morro. Ahora lo pone el acelerador.
+- **La mecanica de raiz desaparece**, y hay que decirlo: el corte es un disco en el
+  suelo y una hoja cortada no se vuelve a cortar, asi que una pasada y punto. La
+  dificultad del tier 3 esta en el coste (motor, hilo, gasolina), no en el numero
+  de pasadas.
+- **`tools/test_vegetacion_tier3.gd`** (nueva, 20 comprobaciones) mide el alcance
+  del morro **con la maquina de verdad** y lo compara con la hoja mas alta real de
+  cada mata. Nacio porque el usuario probo el juego y reporto que las zarzas
+  eran gigantes y no se cortaban, y eso no lo cubria ninguna prueba. Los tres
+  fallos que reporto (matorral desmesurado, morro que se levanta, escombro que no
+  parece escombro) estan ahora medidos.
+
+## Los cabezales pasan a tener estrategia de tier — 2026-09-29
+
+- **Cada cabezal tiene eficacia y resistencia contra cada planta**, las dos en
+  1 a 5. La eficacia es un presupuesto de corte por fotograma, y la resistencia
+  se lleva el filo **y** frena el motor. La tabla completa esta en
+  [LEEME.md](LEEME.md) y en [REVISION.md](REVISION.md).
+- **Subir de nivel no es mejor en todo, y esa es la gracia.** El nylon es el mas
+  rapido con la hierba y el peor con todo lo demas: contra la zarza la abre, pero
+  a mordiscos, comiendose el hilo y ahogando el motor. El disco de tres puntas
+  es el mejor con maleza y zarza y el **peor con la hierba**. Elegir cabezal es
+  elegir trabajo, y el juego se pone interesante en el momento en que el
+  cabezal "mejor" no es el que te sirve para lo que tienes delante.
+- **Se acaba la lista de "esto no lo puedes cortar"** en los cabezales. El nylon
+  no puede con la maleza era mentira: la abre de pena. Ahora todos cortan de
+  todo y lo que decide son los numeros.
+- **El corte es un presupuesto, no un rayo instantaneo.** Por eso el mismo
+  Disco tarda 50 fotogramas en abrir la misma pasada de zarza que el de tres
+  puntas abre en 14, y por eso un cabezal malo sale mas caro: el motor esta mas
+  rato ahogado y la gasolina se nota.
+- **Las escalas se ajustaron después de que el usuario lo probara y dijera que
+  no se notaba ni el frenado ni el desgaste y que todo cortaba mucho.** Tenia
+  razon: los tres numeros estaban en una escala que no se ve. La base de corte
+  del cesped baja de 200 a 50 hojas/s, y el motivo es el que hace que todo lo
+  demas tenga sentido: **andando a 2 m/s se pisan unas 150 hojas por segundo**,
+  asi que con 200 la base iba sobrada y los cuatro cabezales se sentian
+  iguales. El desgaste por hoja sube 50 veces (era 0,0000 por segundo) y la
+  carga del motor se sube con `densidad_corte` de 110 a 75.
+- **El corte con presupuesto ahora va de arriba abajo.** Antes mordia una celda
+  al azar y, si le tocaba la base de una mata, la corona entera caia de golpe:
+  medido, el nylon vaciaba la zarza en un fotograma, mas rapido que un disco de
+  tres puntas que muerde cuatro veces mas. Un cabezal lento tirando el zarzal
+  antes que uno rapido era un agujero del modelo. Ahora se shavea la copa, luego
+  el tallo y la raiz se llega al final, que es ademas la mecanica que el juego ya
+  explicaba.
+- **`tools/medir_cabezales.gd`** (nuevo, no es un test) mide carga, vueltas,
+  desgaste por segundo y gasolina de cada cabezal en cesped, maleza y zarza. Es
+  la herramienta que responde con numeros a "no se nota", en vez de suponer. Y
+  tiene una trampa documentada: para medir el desgaste hay que **andar**, porque
+  quieto el cabezal se come el disco en el primer segundo y no hay nada mas que
+  cortar, y el desgaste sale a cero.
+- **`tools/test_cabezales.gd`** (nueva, 28 comprobaciones) deja escrito por que
+  la tabla es coherente como juego y no como lista de numeros: que cada peldaño
+  aguanta mas que el anterior, que el mejor con la maleza es el peor con la
+  hierba, y que la parte decimal del presupuesto se guarda (1,00 celdas por
+  fotograma tardan 50 en vaciar la pasada, 1,67 tardan 31).
+
 ## La maleza vuelve a ser maleza, y la raiz de la zarza es alcanzable — 2026-09-29
 
 - **La maleza esta en matas de verdad.** `formacion` subio de 0,24 a 0,70 en
@@ -112,6 +348,9 @@ Lo que se ha tocado y por que. Para el detalle de como esta cada cosa por dentro
 | `tools/test_inventario.gd` | OK |
 | `tools/test_zarza_conexion.gd` | OK |
 | `tools/test_zarza_raiz.gd` | OK |
+| `tools/test_cabezales.gd` | OK (28/28) |
+| `tools/test_vegetacion_tier3.gd` | OK (20/20) |
+| `tools/medir_cabezales.gd` | medidor, no es test |
 | `tools/test_zarza_capas.gd` | OK |
 | `tools/test_zarza_capas_recorrido.gd` | OK |
 

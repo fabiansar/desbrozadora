@@ -255,6 +255,3 @@ func get_correr() -> bool:
 	return _correr
 
 
-## Cuanto ha girado en total. Lo usa la camara para el retardo de la mirada.
-func get_giro_total() -> float:
-	return _yaw

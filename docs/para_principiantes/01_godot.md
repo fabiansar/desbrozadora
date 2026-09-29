@@ -48,8 +48,8 @@ propiedades. La pestaña **Script** abre el código asociado. El panel inferior
 | La hoja, el motor y los depósitos | `scripts/motor_desbrozadora.gd` y `scripts/cabezal_desbrozadora.gd` |
 | Los huecos, la rueda y soltar/coger | `scripts/inventario.gd` y `scripts/rueda_inventario.gd` |
 | La segunda herramienta | `scripts/hoz.gd` y `scenes/hoz.tscn` |
-| La zarza: raíz, enganches e inundación | `scripts/zarza.gd` |
-| Los montones de escombro y los trozos | `scripts/montes.gd` y `scripts/restos.gd` |
+| La zarza, que es el nivel 3 de la misma hoja | `scenes/vegetacion/zarza.tscn` |
+| Los trozos de escombro que quedan en el suelo | `scripts/restos.gd` |
 | Siembra y corte de hierba | `scripts/hierba.gd` |
 | Viento que mueve las hojas | `scripts/viento.gd` y `shaders/hierba.gdshader` |
 | Suelo plano temporal | `scenes/main.tscn`, nodo `Suelo` |

@@ -112,7 +112,7 @@ func radio_corte_actual() -> float:
 
 ## Anota el trabajo hecho. En la desbrozadora esto gasta el filo y echa humo; en
 ## una hoja de acero solo lleva la cuenta, que es lo que mira la prueba.
-func registrar_corte(tipo_vegetacion: int, cantidad: int, _dureza: float) -> void:
+func registrar_corte(tipo_vegetacion: int, cantidad: int) -> void:
 	if cantidad > 0 and cabezal_puede_cortar(tipo_vegetacion):
 		cortadas_ultimo += cantidad
 

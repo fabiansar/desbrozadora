@@ -149,8 +149,6 @@ func aviso_actual() -> String:
 	return _aviso_texto
 
 
-func ids_de_los_huecos() -> Array[StringName]:
-	return _huecos.duplicate()
 
 
 func _catalogo_de(id: StringName) -> Herramienta:

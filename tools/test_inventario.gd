@@ -161,7 +161,7 @@ func _corta_la_hoz() -> void:
 	_comprobar(not hoz.cabezal_puede_cortar(3),
 		"pero no entra en la zarza, que es lo de verdad")
 	# Se busca el campo de cesped y se mira cuanto tiene en pie delante.
-	var cesped := _mundo.get_node_or_null("Hierba") as Hierba
+	var cesped := _mundo.get_node_or_null("Cesped") as Hierba
 	if cesped == null:
 		_comprobar(false, "esta el campo de cesped en la escena")
 		return

@@ -110,8 +110,11 @@ Después elige una comprobación apropiada:
 | Sintaxis o escena | Abrir el proyecto en el editor y mirar Output; parseo headless |
 | Movimiento/cámara/herramienta | Recorrido manual y `test_movimiento_integrado.gd` |
 | Corte, hierba, viento o suelo plano | Prueba manual; suite `test_juego.gd` si quieres comprobar todo |
+| Reparto del corte, sectores o borde del disco | `test_corte_organico.gd` |
+| Los tres niveles de vegetacion y el escombro | `test_vegetacion_tier3.gd` |
+| Que se note la diferencia entre cabezales | `test_cabezales.gd` |
+| Que solo haya restos en el suelo, y de donde salen | `test_origen_restos.gd` |
 | Inventario, rueda, soltar o recoger | `test_inventario.gd` |
-| Raíz de zarza, enganches o caída | `test_zarza_conexion.gd` |
 | Modelo Blender | Abrir el GLB con ventana y luego ejecutar el juego |
 
 **Las pruebas focalizadas van mucho más rápido que la suite** y cubren una sola
@@ -123,12 +126,13 @@ flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --headless --path . --script tools/test_inventario.gd
 
 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
-  --headless --path . --script tools/test_zarza_conexion.gd
+  --headless --path . --script tools/test_corte_organico.gd
 ```
 
-Un aviso sobre la suite completa: **ahora mismo da seis fallos** y no son tu
-culpa. La maleza se bajó de 1,33 a 0,76 m para que no tapara el encuadre, y las
-comprobaciones de la suite siguen esperando la altura vieja. Si los ves, son esos.
+Un aviso sobre lo que **ninguna** prueba comprueba: el aspecto. Ni el del corte ni
+el de los restos. Es a proposito, porque el aspecto se juzga a ojo y a cuatro
+metros un trozo de 10 cm son unos pixeles. Para el de los restos esta
+`tools/ver_restos.gd`, que los pone a 40 cm.
 
 Parseo rápido, que carga el proyecto en modo editor sin interfaz:
 

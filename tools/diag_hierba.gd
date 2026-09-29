@@ -30,7 +30,7 @@ func _mirar() -> void:
 	# La hierba ya no es un MultiMeshInstance3D: es un gestor que reparte las
 	# hojas en cuadrados, cada uno con su propio MultiMesh. Por eso aqui se
 	# mira el primer cuadrado y no el nodo de la hierba.
-	var hierba := mundo.get_node_or_null("Hierba") as Node3D
+	var hierba := mundo.get_node_or_null("Cesped") as Node3D
 	if hierba == null:
 		print("NO HAY NODO Hierba")
 		quit(1)

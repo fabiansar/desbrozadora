@@ -251,10 +251,6 @@ func _angular(delta: float) -> void:
 	fov = lerpf(fov, objetivo, minf(1.0, delta * 4.5))
 
 
-## La desbrozadora se mira desde aqui: el modelo va colgado de este nodo.
-## Se exporta para que las pruebas puedan preguntar donde se ve el cabezal.
-func get_cabeza() -> Node3D:
-	return cabeza
 
 
 ## Solo el ladeo que viene del retraso de la mirada, en grados, sin el del

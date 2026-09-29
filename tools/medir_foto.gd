@@ -35,7 +35,7 @@ func _process(_delta: float) -> bool:
 			# partirlo. Si se busca el tipo equivocado, esto revienta con un
 			# "Nil" y la foto sale siempre igual, que es justo lo que hay que
 			# comprobar.
-			var h := mundo.get_node_or_null("Hierba") as Node3D
+			var h := mundo.get_node_or_null("Cesped") as Node3D
 			if h == null:
 				push_error("no esta el campo de hierba en la escena")
 				quit(1)

@@ -222,10 +222,4 @@ func fuerza_en(ix: int, iy: int) -> float:
 	return _datos[(iy * celdas + ix) * 4 + 2] / 255.0
 
 
-## Para las pruebas: la fuerza media del mapa ahora mismo.
-func fuerza_media() -> float:
-	var total := 0.0
-	var n := celdas * celdas
-	for i in n:
-		total += _datos[i * 4 + 2] / 255.0
-	return total / float(n)
+

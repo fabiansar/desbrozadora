@@ -398,8 +398,11 @@ func _cuadrantes_de_la_hierba(h: Hierba) -> void:
 	_ok_si(cortadas > 0 and h.total_de_pie() == antes - cortadas,
 		"cortar sigue bajando el recuento de las que quedan de pie (%d -> %d)"
 		% [antes, h.total_de_pie()])
-	_ok_si(h.de_pie(sitio, herramienta.radio_corte) == 0,
-		"y ya no queda ninguna de pie en el sitio")
+	# El interior del disco, no el disco entero: el borde es irregular a proposito
+	# (cada hoja tiene su propio radio), asi que hay hojas dentro del radio
+	# nominal que el cabezal todavia no ha tocado. Ver `BordeMinimo`.
+	_ok_si(h.de_pie(sitio, herramienta.radio_corte * Hierba.BORDE_MINIMO) == 0,
+		"y ya no queda ninguna de pie en el centro de la pasada")
 
 	# La caja de cada cuadrado. Con un solo MultiMesh para todo el campo la caja
 	# seria tan grande que el motor no podria descartar nada. Con los cuadrados,
@@ -434,7 +437,7 @@ func _cuadrantes_de_la_hierba(h: Hierba) -> void:
 
 func _hierba_prueba() -> void:
 	print("\n== hierba ==")
-	var hierba := mundo.get_node_or_null("Hierba") as Hierba
+	var hierba := mundo.get_node_or_null("Cesped") as Hierba
 	var maleza := mundo.get_node_or_null("MalezaAlta") as Hierba
 	_ok_si(hierba != null, "la hierba esta en la escena")
 	if hierba == null:
@@ -474,11 +477,15 @@ func _hierba_prueba() -> void:
 	_ok_si(tumbadas <= alrededor,
 		"y solo las de debajo suyo, no de mas (%d cortadas, y en el disco amplio habia %d)"
 		% [tumbadas, alrededor])
-	_ok_si(hierba.de_pie(sitio, herramienta.radio_corte) == 0,
-		"dentro del radio del cabezal no queda hierba de pie")
+	_ok_si(hierba.de_pie(sitio, herramienta.radio_corte * Hierba.BORDE_MINIMO) == 0,
+		"dentro del radio del cabezal no queda hierba de pie en el centro")
 	# Y que el ancho de corte sea el que dice el cabezal, ni mas ni menos. Se
 	# mide contra el valor del cabezal y no contra un numero repetido en la prueba.
-	var ancho := herramienta.radio_corte * 0.9
+	# El 0,78 es el borde minimo del disco, no un numero redondo: por debajo de
+	# eso el cabezal ya lo ha|English cortado todo, y por encima hay una orla de
+	# hoja que se queda a proposito, que es lo que hace que el claro no salga como
+	# un circulo con tijeras.
+	var ancho := herramienta.radio_corte * Hierba.BORDE_MINIMO
 	var dentro_ancho := hierba.de_pie(sitio, ancho)
 	_ok_si(dentro_ancho == 0,
 		"dentro del ancho del cabezal no queda ni una hoja de pie (radio %.2f m)"
@@ -654,7 +661,7 @@ func _maleza_prueba() -> void:
 	_ok_si(maleza != null, "el segundo tipo de hierba esta en la escena")
 	if maleza == null:
 		return
-	var cesped := mundo.get_node_or_null("Hierba") as Hierba
+	var cesped := mundo.get_node_or_null("Cesped") as Hierba
 	_ok_si(maleza.total() > 1000,
 		"la maleza se ha sembrado (%d hojas)" % maleza.total())
 	_ok_si(cesped != null and maleza != cesped,
@@ -773,14 +780,21 @@ func _maleza_prueba() -> void:
 	_ok_si(maleza.num_cuadrantes() < maleza.casillas_totales(),
 		"y algunos quadrantes salen vacios, que es lo de las matas")
 
-	# Y que el viento llega a los DOS materiales. Con la hierba partida en dos,
-	# si el viento se queda colgado del primero la maleza se queda tiesa como
-	# papel mientras el cesped ondea, y se nota muchísimo.
+	# Y que el viento llega a TODOS los campos. Con la hierba partida en varios,
+	# si el viento se queda colgado del primero los demas se quedan tiesos como
+	# papel mientras el primero ondea, y se nota muchisimo.
+	#
+	# El numero de campos ya no es dos: son siete (cesped, maleza y cinco zarzas).
+	# Y no se escribe aqui, porque un numero en un test es un numero que se queda
+	# viejo: se cuentan los nodos de vegetacion que hay, que es el invariante de
+	# verdad. Cuando se anada un campo nuevo, esto sigue valiendo.
 	var viento := _viento_de(mundo)
 	_ok_si(viento != null, "sigue habiendo un solo nodo de viento")
 	if viento != null:
-		_ok_si(viento.campos_conectados() == 2,
-			"el viento llega a los dos campos (%d)" % viento.campos_conectados())
+		var campos := mundo.find_children("*", "Hierba", true, false)
+		_ok_si(viento.campos_conectados() == campos.size(),
+			"el viento llega a los %d campos de vegetacion (%d)"
+			% [campos.size(), viento.campos_conectados()])
 		var m1 := maleza.material_compartido()
 		var m2 := cesped.material_compartido() if cesped != null else null
 		_ok_si(m1 != null and m2 != null and m1 != m2,
@@ -919,7 +933,7 @@ func _uv_prueba() -> void:
 
 func _regenerar_hierba() -> void:
 	print("\n== regenerar un campo de hierba ==")
-	var hierba := mundo.get_node_or_null("Hierba") as Hierba
+	var hierba := mundo.get_node_or_null("Cesped") as Hierba
 	_ok_si(hierba != null, "el campo de césped sigue disponible")
 	if hierba == null:
 		return

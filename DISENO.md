@@ -232,8 +232,11 @@ es la que hace que haya que bajar el morro.
       vale, y el juego lo ensena sin decir nada.
 - [x] **El enredo se paga.** Con `enredio` alto la copa aguanta los cortes de uno
       en uno y hay que dar varias pasadas. Un claro se tumba de una.
-- [x] **Los montones de escombro se quedan y hay que apartarlos.** Lo que cae no
-      desaparece: forma una pila que tapa lo de debajo.
+- [x] **El escombro se queda y hay que apartarlo.** Lo que cae no desaparece:
+      son trozos sueltos con peso que la maquina aparta al pasar.
+      *Revisado:* el "monton" que tapaba lo de debajo era un segundo sistema que
+      dibujaba cajas de 46 cm. Se borro; ahora solo hay trozos, que se apartan
+      con la maquina pero no llegan a tapar lo que hay debajo.
 - [x] **Inventario de nueve herramientas, con rueda y no con una tira de
       cuadrados.** La desbrozadora es un objeto, no un nodo de la escena: se
       suelta con `G`, se recoge con `E` mirando, y un hueco vacio son las manos
@@ -243,9 +246,11 @@ es la que hace que haya que bajar el morro.
       justo para que la desbrozadora deje de ser la unica respuesta.
 - [ ] **Que la zarza vuelva a brotar.** La regresion se decidio aplazar; sin ella,
       tumbar la raiz es el final del asunto y no hay nada que volver a hacer.
-- [ ] **Que los montones tengan que reducirse a mano.** La razon de verdad para
-      quitarlos es que una cana cortada en el suelo echa raquis, y esa razon
-      todavia no esta en el juego.
+- [ ] **Que el escombro tenga que reducirse a mano.** Habia una version de esto
+      cuando los montones eran un sistema aparte: la razon de verdad para
+      quitarlos es que una cana cortada en el suelo echa raquis. Con el sistema
+      borrado, esta todavia no esta en el juego y **no es solo un boton que
+      falte**: hay que decidir que hace la raquis.
 
 ### Fase 4 - Conduccion
 

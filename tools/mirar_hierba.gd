@@ -17,7 +17,7 @@ var hierba
 func _initialize() -> void:
 	mundo = load("res://scenes/main.tscn").instantiate()
 	root.add_child(mundo)
-	hierba = mundo.get_node_or_null("Hierba")
+	hierba = mundo.get_node_or_null("Cesped")
 
 
 func _process(_delta: float) -> bool:

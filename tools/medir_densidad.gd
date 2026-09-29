@@ -20,7 +20,7 @@ func _initialize() -> void:
 	var jugador := mundo.get_node_or_null("Player")
 	if jugador != null:
 		jugador.visible = false
-	var h := mundo.get_node_or_null("Hierba")
+	var h := mundo.get_node_or_null("Cesped")
 	if h != null:
 		densidad_juego = h.densidad
 		radio_juego = h.radio
@@ -37,7 +37,7 @@ func _medidas() -> Array:
 
 
 func _process(delta: float) -> bool:
-	var h := mundo.get_node_or_null("Hierba")
+	var h := mundo.get_node_or_null("Cesped")
 	match fase:
 		0:
 			var d: Array = _medidas()[config]

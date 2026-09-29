@@ -16,7 +16,7 @@ func _process(_delta: float) -> bool:
 	cuadros += 1
 	if cuadros < 12:
 		return false
-	var hierb := mundo.get_node_or_null("Hierba") as Hierba
+	var hierb := mundo.get_node_or_null("Cesped") as Hierba
 	if hierb == null:
 		push_error("no esta el campo de hierba en la escena")
 		quit(1)

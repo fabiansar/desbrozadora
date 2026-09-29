@@ -5,7 +5,7 @@ colgadas del arnés y lo que toca, se cae.
 
 Estado: **prototipo jugable del trabajo de desbroce**, version `v0.1.0`. Se anda,
 se corre, se salta, se mira, se acelera la desbrozadora, suena el motor, se corta
-hierba y maleza, y hay zarzas que hay que llegar a la raíz para tumbarlas. Para
+hierba, maleza y zarza, que es la misma planta mas dura. Para
 las pruebas el mundo vuelve temporalmente al suelo plano inicial; el terreno
 procedural y el layout de la aldea están retirados mientras se prepara el mapa
 artesanal definitivo. El mapa futuro será un valle; el plugin de terreno aún no
@@ -53,6 +53,69 @@ miras: el aviso sale cuando tienes algo delante, y si el inventario está lleno
 te lo dice en vez de dejarte pulsando. Lo que coges va al primer hueco libre y a
 la mano.
 
+### Los cuatro cabezales: no hay uno que gane siempre
+
+Con `Q` y el motor parado cambias de cabezal. Los cuatro cortan de todo, asi
+que la pregunta nunca es "puedo con esto", sino "cuanto me va a costar". Cada uno
+tiene dos numeros contra cada planta:
+
+- **Eficacia** (1 a 5): lo rápido que lo corta.
+- **Resistencia** (0 a 5): lo que la planta le hace al cabezal. Le come el filo
+  **y** frena el motor. Por eso una resistencia de 5 contra la zarza significa
+  que la estás cortando, pero el hilo se deshace y la máquina se ahoga.
+
+| cabezal | nivel | contra la hierba | contra la maleza | contra la zarza |
+| --- | :-: | --- | --- | --- |
+| **Hilo de nylon** | 1 | eficaz 5, res. 1 | eficaz 2, res. 3 | eficaz 1, res. 5 |
+| **Cuchilla de serie** | 2 | eficaz 3, res. 1 | eficaz 3, res. 2 | eficaz 3, res. 3 |
+| **Disco de dos puntas** | 2 | eficaz 3, res. 1 | eficaz 4, res. 2 | eficaz 2, res. 3 |
+| **Disco de tres puntas** | 3 | eficaz 1, res. 1 | eficaz 5, res. 1 | eficaz 4, res. 2 |
+
+La fila del nylon es la que resume el juego: **es el más rápido con la hierba y el
+peor con todo lo demás**. Contra la zarza la abre, porque si no no habría forma
+de entrar, pero es la peor opción: la cortas a mordiscos, se te come el hilo y la
+máchina se frena. Los discos hacen lo contrario, aguantan la maleza y la zarza,
+y a cambio se arrastran por el césped.
+
+Y fíjate en la esquina del disco de tres puntas: es el mejor con la maleza y con
+la zarza, y el **peor con la hierba** (eficacia 1 contra 5 del nylon). Subir de
+nivel no es mejor en todo, es **cambiar para qué trabajo**. Si el encargo es
+matar el césped, el mejor cabezal es el más barato, y eso también es una
+decisión.
+
+Lo que cuesta cada uno, en tiempo, sobre la misma pasada por una mata de zarza:
+
+| cabezal | fotogramas para abrir la misma pasada | hojas/s en césped |
+| --- | :-: | :-: |
+| Hilo de nylon | 106 (1,8 s) | 250 |
+| Disco de dos puntas | 57 | 150 |
+| Disco de tres puntas | 33 | 50 |
+
+Fíjate en la última columna al revés: **el mejor cabezal para la maleza es el
+peor para el césped**, y de eso va el juego. Andando a 2 m/s pisas unas 150 hojas
+por segundo, así que el nylon (250) va por delante de tus propios pies limpiando
+y el disco de tres puntas (50) **no llega**: dejas un reguero por delante y
+tienes que volver. Por eso en un encargo de maleza te compensa el disco aunque
+se arrastre, y en un encargo de césped te compensa el nylon aunque se gaste.
+
+Y el motor se entera. Medido con el jugador trabajando en la maleza alta:
+
+| cabezal | carga | vueltas |
+| --- | :-: | :-: |
+| Disco de tres puntas | 0,13 | 8.649 |
+| Hilo de nylon | 0,61 | 7.698 |
+| Cuchilla de serie | 0,75 | 7.433 |
+
+Parado en lo más espeso, el nylon se va a 0,95 de carga y 6.963 vueltas: se
+ahoga. El filo también se gasta y la barra del FILO se mueve mientras trabajas:
+entre el 0,1 % y el 0,6 % por segundo según cabezal y planta, o sea que un
+cabezal dura entre tres y diecisiete minutos de trabajo. Y la gasolina sube con
+la carga, de 0,5 a 0,7 ml/s: un cabezal malo en zarza sale más caro no solo
+porque tarda, sino porque el motor está más rato ahogado.
+
+Y el radio también cuenta: el disco de tres puntas barre 1,15 m y el nylon
+0,78, así que cada uno barre distinta anchura.
+
 ### Hasta donde llega el cabezal
 
 Con el motor echado, la altura del morro depende solo de hacia donde miras:
@@ -70,24 +133,126 @@ O sea que **cualquier mirada hacia abajo apoya el cabezal en el suelo**, y para
 motor echado el morro no se hunde: se queda a nueve centimetros aunque mires de
 narices, porque es el peso del trabajo lo que lo baja.
 
-### La zarza hay que tumbarla por la raiz
+### Como se abre el claro: ocho sectores
 
-La zarza no es un CESped mas alto. Cada mata tiene una **raíz** clavada en el
-suelo, y de raíz vuelve a brotar cada año. Por eso:
+El disco no corta las hojas **en orden aleatorio**, que es lo obvio y lo que hacia
+que un sector entero se limpiara mientras el de al lado conservaba todas sus hojas.
+El resultado eran manchurrones.
 
-- **Una pasada por arriba no arregla nada.** Abre paso y quita la copa, y la raíz
-  sigue ahí. Es el trabajo que no vale.
-- **Hay que bajar el morro a la base.** Cortando a ras de suelo (unos 2 cm) llega
-  a la raíz y entonces sí, la mata cae entera.
-- **Las cañas se sostienen unas a otras.** Si la parte de arriba está enganchada a
-  otra mata con su propia raíz, al cortarle el apoyo a una **no se cae**: se queda
-  de pie. Por eso hay que dar varias pasadas y no vale con un solo intento.
-- **Lo que cae se queda en un montón**, y hay que apartarlo con la máquina para
-  poder seguir trabajando debajo.
+Lo hace en **ocho sectores de 45 grados**. En cada fotograma:
 
-En el juego normal no se ve ni la raíz ni los enganches. En la escena de pruebas
-`scenes/pruebas_zarza.tscn` sí, en colores (caja roja = raíz, raya amarilla =
-enganche), y el panel de arriba a la derecha dice cuántas raíces quedan.
+1. Cada sector recoge **las mismas hojas**, las que caen dentro de su angulo.
+2. Cada sector recibe **la octava parte** del presupuesto, con su resto decimal
+   propio, que sobrevive de un fotograma a otro.
+3. Dentro del sector, las hojas se ordenan **de dentro hacia fuera**.
+
+Lo segundo es lo que hace que el frente sea un frente y no una corona de agujas.
+Lo tercero, que cada sector pierda lo mismo en el mismo tiempo. Medido sobre 60
+fotogramas con la partida de ejemplo:
+
+```
+hojas de partida por sector: [26, 24, 26, 21, 23, 25, 25, 23]
+cortadas: 144
+perdidas por sector:      [18, 18, 18, 18, 18, 18, 18, 18]
+```
+
+**Dieciocho en los ocho**, partiendo de cantidades distintas. El reparto no es
+igual de hojas por sector, que no puede ser porque las plantas no estan plantadas
+en circulos perfectos: es igual de **hojas perdidas** por sector, que es lo que se
+ve.
+
+El borde del disco tampoco es un circulo. Cada hoja tiene su propio umbral de
+distancia, fijo, que sale de **donde esta** y no del azar: unas quedan dentro
+antes que otras y el recorte sale con los dientes, como el cesped recien cortado.
+Y como el umbral es fijo, una hoja no entra y sale entre fotogramas, asi que el
+claro **no parpadea** mientras avanzas.
+
+Un numero lo tunea todo: `Hierba.SECTORES`. Con menos sectores el frente es mas
+suave y con mas se ve el rayado.
+
+### Los restos: hojas, no ladrillos
+
+Cuando se corta algo, el trozo sale despedido y cae al suelo. Tres cosas lo hacen
+que parezca una hoja y no un bloque verde:
+
+**Caen retorcidos, no tumbados.** La orientacion es libre en los tres ejes, asi que
+en el monton hay trozos de cara y trozos de canto, unos encima de otros en todas
+direcciones. Esto es lo mas importante: con los trozos horizontales, cincuenta
+planchas superpuestas son, literalmente, una pila de losas.
+
+**La malla esta curvada.** Cada trozo es una cinta de cinco tramos con un arco (el
+centro se levanta y las puntas se apoyan) y un retorcido. Un trozo de verdad nunca
+esta recto, y al quedar apoyado en dos puntos con el hueco por debajo se ve lo que
+es desde cualquier angulo. Y hay **cuatro siluetas distintas**, para que el monton
+no se vea repetido.
+
+**De diferentes tamanos y tonos.** Cada trozo va de 0,55 a 1,35 veces la escala de
+la planta, y uno de cada cinco se desatura hacia pajizo, como las hojas secas. Un
+monton donde todo es el mismo verde parece un charco de pintura.
+
+Lo que se ve al final es un **enredo de vegetacion troceada**. La prueba de
+`tools/test_vegetacion_tier3.gd` comprueba que el escombro pesa, salta, cae al
+suelo y que apartarlo lo mueve de sitio; el aspecto hay que mirarlo en el editor.
+
+### La zarza es el tier 3: la misma hoja, mas dura
+
+La zarza **no** es un cesped mas alto, pero tampoco es otra cosa. Es la **misma
+hoja** que el cesped y que la maleza, con otros numeros, y todo lo que hay que
+saber de ella se ve en una tabla:
+
+| | cesped (tier 1) | maleza (tier 2) | zarza (tier 3) |
+|---|---|---|---|
+| altura | 49 cm | 76 cm | 150 cm |
+| hojas por m2 | 60 | 60 | **20**, y gordas |
+| grosor de la hoja | 1 cm | 2,6 cm | **4 cm** |
+| se estrecha al subir | mucho (0,88) | algo (0,60) | **poco (0,30)**: arriba sigue siendo hoja |
+| se dobla | sí (0,09) | algo (0,06) | **casi nada (0,02)**: tiesa |
+| coste para el motor | 1,0 | 3,3 | **3,6** |
+| cobertura | todo el mapa | 40 % en matas | mata local de 9 m |
+
+Una zarza son **pocos caños gruesos**, no muchas briznas: por eso van a 20 por
+metro cuadrado y no a 60, y por eso la hoja es cuatro veces mas ancha. Con 60
+caños de metro y medio la carga se iba a tope con **cualquier** cabezal, y en la
+zarza daba igual lo que pusieras, que es justo donde mas deberia importar.
+
+**Y una cosa que cambia respecto a antes: una pasada y ya está.** El corte es un
+disco en el suelo, asi que el morro corta todo lo que pilla en el suelo, a la
+altura que esté. Y una hoja cortada ya no se vuelve a cortar. No hay raices, ni
+copas que haya que rematar, ni varias pasadas: **la dificultad del tier 3 no está
+en el número de pasadas, está en lo que cuesta**. Con la cuchilla de serie el
+motor se va a 7.147 vueltas y se ahoga; con el disco de tres puntas van 8.583 y
+ni se enteran. El hilo se gasta el doble de rápido, y la gasolina sube. Eso es
+lo que decides con el cabezal, no cuántas veces pasas.
+
+**Lo que suelta es escombro de verdad**: hojas planas que caen, se quedan en el
+suelo y **las apartas con la máquina** pasando por encima. Donde vas trabajando se
+queda una pila, y esa pila es lo que tapa el suelo.
+
+### Lo que queda en el suelo
+
+Cuando cortas, el escombro **se queda**: trozos sueltos de unos 10 cm, con peso,
+que caen de lado y de canto y se quedan tumbados donde caen. La maquina los **aparta
+al pasar** por encima, asi que trabajar un sitio lo deja limpio.
+
+Lo unico que hay en el suelo son esos trozos. Antes habia ademas un sistema de
+**montones** que guardaba el material acumulado y lo dibujaba con cajas de casi
+medio metro; salia como "pilas de rectangulos" y **esta borrado**. Se pierde una
+cosa: una pasada larga ya no levanta un monton que haya que rodear. A cambio, el
+suelo es siempre el mismo sitio y no hay dos sistemas diciendo cosas distintas.
+
+Para mirar los restos de cerca, que desde la camara no se pueden juzgar:
+
+```bash
+flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+    --path . --script tools/ver_restos.gd
+```
+
+Y para enumerar que hay en el suelo tras cortar cada planta:
+
+```bash
+flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+    --headless --path . --script tools/test_origen_restos.gd
+```
 
 ### La camara nunca pierde el cabezal
 
@@ -179,10 +344,22 @@ una sola cosa. Se ejecutan igual, con `--headless`:
 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --headless --path . --script tools/test_inventario.gd
 
-# La mecanica de la zarza: raiz, enganches y que cae lo que pierde el apoyo
+# El corte organico: los ocho sectores pierden lo mismo y el borde sale con dientes
 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
-  --headless --path . --script tools/test_zarza_conexion.gd
+  --headless --path . --script tools/test_corte_organico.gd
+
+# Que se nota el reparto entre los cuatro cabezales sobre el tier 3
+flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+  --headless --path . --script tools/test_cabezales.gd
+
+# El tier 3 entero: altura, corte, escombro que pesa, que cae y que se aparta
+flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
+  --headless --path . --script tools/test_vegetacion_tier3.gd
 ```
+
+Las tres comprueban numeros, no pictures. **El aspecto del corte y de los restos
+no lo mide ninguna prueba**: eso hay que mirarlo en el editor, y con la ventana
+abierta, que es como se juega.
 
 Para ver en foto lo que se esta midiendo (sin `--headless`):
 
@@ -191,9 +368,9 @@ Para ver en foto lo que se esta midiendo (sin `--headless`):
 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --path . --script tools/foto_inventario.gd
 
-# La zarza antes, con una pasada alta y con una pasada a la raiz
+# Los restos de cerca, que es la unica vista donde se pueden juzgar
 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
-  --path . --script tools/foto_pruebas_zarza.gd
+  --path . --script tools/ver_restos.gd
 ```
 
 Esa mide si la hierba se dibuja de verdad. La última medición registrada fue en
@@ -218,10 +395,14 @@ Cada cuadrado lleva una caja ajustada y se puede apagar por distancia.
 
 Hay **dos campos**, cada uno con su semilla y su material:
 
-| campo | tipo | altura base | densidad | radio de siembra | lado de cuadrante |
-|---|---|---|---|---|---|
-| `Hierba` | cesped | 49 cm | 60 por m2 | 90 m | 24 m |
-| `MalezaAlta` | maleza seca | 76 cm | 60 por m2 | 90 m | 12 m |
+| preset | tipo | altura | densidad | radio |
+|---|---|---|---|---|
+| `scenes/vegetacion/cesped.tscn` | cesped (tier 1) | 49 cm | 60 por m2 | 90 m |
+| `scenes/vegetacion/maleza_alta.tscn` | maleza seca (tier 2) | 76 cm | 60 por m2 | 90 m |
+| `scenes/vegetacion/zarza.tscn` | zarza (tier 3) | 150 cm | 60 por m2 | 9 m |
+
+Las tres son **el mismo script** con numeros distintos. `main.tscn` solo las
+instancia; los numeros viven en el preset, y se cambian ahi.
 
 Las dos alturas bajaron desde la version anterior (69 y 133 cm) porque con la
 maleza a 1,33 m tapaba la mitad del encuadre. Y la maleza se puso en matas de
@@ -229,13 +410,19 @@ verdad (`formacion` 0,70, antes 0,24): ocupa el 37 % del mapa en vez del 93 %, y
 se ven los claros por los que se anda. Un claro se trabaja mas rapido que un
 zarzal, y con la maleza en alfombra no habia forma de notarlo.
 
-La escena actual también agrupa el césped (`formacion = 0,70`); la maleza usa
-`formacion = 0,24` y `dureza = 3,3`. Ambos campos se siembran sobre el suelo plano
-de pruebas, sin exclusiones por terreno o parcelas. El recuento depende de la
-semilla y la formación. El radio de corte **no es propio de estos campos**:
-`Desbrozadora.radio_corte` vale 1,0 m y lo comparten césped y maleza. Es el
-radio efectivo de la pasada para que alcance suficientes hojas y deje un rastro
-visible, no el tamaño geométrico de la cuchilla.
+Las tres van con `formacion = 0,70`, o sea en matas y no en alfombra, y se siembran
+sobre el suelo plano de pruebas, sin exclusiones por terreno o parcelas. La
+maleza tiene `dureza = 3,3` y la zarza `dureza = 3,6`; el césped no lleva dureza
+propia porque es el tier 1. La zarza comparte la densidad de la maleza, 60 por m2,
+a proposito: su dificultad tiene que venir de la dureza y de la resistencia del
+cabezal, no de estar mas rala, que haria que el tier mas duro fuese el mas lento
+de barbechar. Lo que si es suyo es la altura (150 cm) y la distancia maxima
+(20 m, frente a los 16 m de la maleza y 80 del cesped), para que se vea desde
+lejos.
+
+El radio de corte **no es propio de estos campos**: `Desbrozadora.radio_corte` vale
+1,0 m y lo comparten las tres. Es el radio efectivo de la pasada para que alcance
+suficientes hojas y deje un rastro visible, no el tamaño geométrico de la cuchilla.
 
 La suite comprueba el reparto, las cajas, el recorte por distancia y el corte de
 ambos campos. Los valores efectivos están en `scenes/main.tscn`; el detalle está
