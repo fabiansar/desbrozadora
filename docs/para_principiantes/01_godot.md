@@ -49,7 +49,7 @@ propiedades. La pestaña **Script** abre el código asociado. El panel inferior
 | Los huecos, la rueda y soltar/coger | `scripts/inventario.gd` y `scripts/rueda_inventario.gd` |
 | La segunda herramienta | `scripts/hoz.gd` y `scenes/hoz.tscn` |
 | La zarza, que es el nivel 3 de la misma hoja | `scenes/vegetacion/zarza.tscn` |
-| Los trozos de escombro que quedan en el suelo | `scripts/restos.gd` |
+| Las rafagas de escombro al cortar (particulas) | `scripts/restos.gd` |
 | Siembra y corte de hierba | `scripts/hierba.gd` |
 | Viento que mueve las hojas | `scripts/viento.gd` y `shaders/hierba.gdshader` |
 | Suelo plano temporal | `scenes/main.tscn`, nodo `Suelo` |

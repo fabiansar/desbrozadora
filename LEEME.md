@@ -18,7 +18,7 @@ está decidido.
 | `W` `A` `S` `D` | Andar |
 | `Shift` | Correr |
 | `Espacio` | Saltar |
-| `Ctrl` / `C` | Agacharse |
+| `Ctrl` | Agacharse |
 | Raton | Mirar |
 | **Raton izq.** | **Acelerar la herramienta (y con ella se corta)** |
 | **Rueda del raton** | **Pasar por las nueve herramientas del inventario** |
@@ -26,6 +26,10 @@ está decidido.
 | `E` | Recoger lo que estás mirando |
 | `Q` | Cambiar de cabezal, con el motor parado |
 | `Esc` | Liberar el raton |
+
+Ojo: son **catorce** teclas y no hay mas. Las acciones `linea_guia` (F) y
+`ver_suelo` (4) estuvieron en el mapa de entrada hasta el 2026-09-30 y se
+quitaron: ningun script las consultaba.
 | Clic en la ventana | Volver a capturar el raton |
 
 **Para cortar, hay que acelerar.** Con el motor parado el cabezal no corta, y
@@ -92,8 +96,8 @@ Lo que cuesta cada uno, en tiempo, sobre la misma pasada por una mata de zarza:
 | Disco de tres puntas | 33 | 50 |
 
 Fíjate en la última columna al revés: **el mejor cabezal para la maleza es el
-peor para el césped**, y de eso va el juego. Andando a 2 m/s pisas unas 150 hojas
-por segundo, así que el nylon (250) va por delante de tus propios pies limpiando
+peor para el césped**, y de eso va el juego. Andando a 3 m/s (lo que trae el
+juego de verdad, `velocidad_andar = 3.0`) pisas del orden de 225 hojas por segundo, así que el nylon (250) va por delante de tus propios pies limpiando
 y el disco de tres puntas (50) **no llega**: dejas un reguero por delante y
 tienes que volver. Por eso en un encargo de maleza te compensa el disco aunque
 se arrastre, y en un encargo de césped te compensa el nylon aunque se gaste.
@@ -110,7 +114,8 @@ Parado en lo más espeso, el nylon se va a 0,95 de carga y 6.963 vueltas: se
 ahoga. El filo también se gasta y la barra del FILO se mueve mientras trabajas:
 entre el 0,1 % y el 0,6 % por segundo según cabezal y planta, o sea que un
 cabezal dura entre tres y diecisiete minutos de trabajo. Y la gasolina sube con
-la carga, de 0,5 a 0,7 ml/s: un cabezal malo en zarza sale más caro no solo
+la carga, de 0,24 a 0,39 ml/s (0,85 a 1,40 L/h, con `consumo_base_l_h` y
+`consumo_extra_carga_l_h`): un cabezal malo en zarza sale más caro no solo
 porque tarda, sino porque el motor está más rato ahogado.
 
 Y el radio también cuenta: el disco de tres puntas barre 1,15 m y el nylon
@@ -170,29 +175,33 @@ claro **no parpadea** mientras avanzas.
 Un numero lo tunea todo: `Hierba.SECTORES`. Con menos sectores el frente es mas
 suave y con mas se ve el rayado.
 
-### Los restos: hojas, no ladrillos
+### Los restos: rafagas, no montones
 
-Cuando se corta algo, el trozo sale despedido y cae al suelo. Tres cosas lo hacen
-que parezca una hoja y no un bloque verde:
+Cuando se corta algo salen trozos despedidos en una **rafaga de particulas**:
+nacen en el suelo del corte, saltan, caen y se apagan solos en unos dos
+segundos. Ya no hay cuerpo fisico, ni escombro que se queda, ni nada que
+apartar. **El suelo no recuerda el trabajo**: donde has pasado vuelve a estar
+limpio en cuanto la rafaga se apaga. Es un cambio deliberado; la historia
+completa esta en el `CHANGELOG.md` del 2026-09-30.
 
-**Caen retorcidos, no tumbados.** La orientacion es libre en los tres ejes, asi que
-en el monton hay trozos de cara y trozos de canto, unos encima de otros en todas
-direcciones. Esto es lo mas importante: con los trozos horizontales, cincuenta
-planchas superpuestas son, literalmente, una pila de losas.
+Tres cosas lo hacen parecer una hoja y no arena verde:
 
 **La malla esta curvada.** Cada trozo es una cinta de cinco tramos con un arco (el
-centro se levanta y las puntas se apoyan) y un retorcido. Un trozo de verdad nunca
-esta recto, y al quedar apoyado en dos puntos con el hueco por debajo se ve lo que
-es desde cualquier angulo. Y hay **cuatro siluetas distintas**, para que el monton
-no se vea repetido.
+centro se levanta y las puntas se apoyan) y un retorcido. Hay **cuatro siluetas
+distintas** repartidas entre los emisores, para que las rafagas no se vean
+copiadas.
 
-**De diferentes tamanos y tonos.** Cada trozo va de 0,55 a 1,35 veces la escala de
-la planta, y uno de cada cinco se desatura hacia pajizo, como las hojas secas. Un
-monton donde todo es el mismo verde parece un charco de pintura.
+**Orientacion y tamano libres.** Giro y bamboleo aleatorios, y tamano de 0,55 a
+1,35 veces la escala de la planta: en la misma rafaga hay finos y gruesos, que
+es lo que hay en un cesped recien cortado.
 
-Lo que se ve al final es un **enredo de vegetacion troceada**. La prueba de
-`tools/test_vegetacion_tier3.gd` comprueba que el escombro pesa, salta, cae al
-suelo y que apartarlo lo mueve de sitio; el aspecto hay que mirarlo en el editor.
+**Color de cada planta.** La rafaga sale del tono de la planta cortada, con
+varianza que aclara y oscurece cada trozo. Un escombro donde todo es el mismo
+verde parece un charco de pintura.
+
+La prueba de `tools/test_vegetacion_tier3.gd` comprueba que al cortar salte la
+rafaga y que no quede ningun cuerpo fisico suelto (la firma del sistema
+viejo); el aspecto hay que mirarlo en el editor.
 
 ### La zarza es el tier 3: la misma hoja, mas dura
 
@@ -203,17 +212,21 @@ saber de ella se ve en una tabla:
 | | cesped (tier 1) | maleza (tier 2) | zarza (tier 3) |
 |---|---|---|---|
 | altura | 49 cm | 76 cm | 150 cm |
-| hojas por m2 | 60 | 60 | **20**, y gordas |
-| grosor de la hoja | 1 cm | 2,6 cm | **4 cm** |
+| hojas por m2 | 60 | 60 | **60**, y gordas |
+| grosor de la hoja | 10 cm | 2,6 cm | **4 cm** |
 | se estrecha al subir | mucho (0,88) | algo (0,60) | **poco (0,30)**: arriba sigue siendo hoja |
 | se dobla | sí (0,09) | algo (0,06) | **casi nada (0,02)**: tiesa |
 | coste para el motor | 1,0 | 3,3 | **3,6** |
 | cobertura | todo el mapa | 40 % en matas | mata local de 9 m |
 
-Una zarza son **pocos caños gruesos**, no muchas briznas: por eso van a 20 por
-metro cuadrado y no a 60, y por eso la hoja es cuatro veces mas ancha. Con 60
-caños de metro y medio la carga se iba a tope con **cualquier** cabezal, y en la
-zarza daba igual lo que pusieras, que es justo donde mas deberia importar.
+Una zarza son **pocos caños gruesos**, no muchas briznas: por eso la hoja es
+cuatro veces mas ancha y va casi **tiesa** (curva 0,02 frente a los 0,09 del
+cesped), con lo que se lee como planta leñosa. Lo que la hace cara **no** es que
+lleven menos: `densidad` esta en 60, igual que las otras dos. Es la dureza (3,6,
+la mas alta del juego) y la hoja ancha. Antes se plantinga a 20 por metro
+cuadrado con la idea de que la carga se fuera a tope con cualquier cabezal; se
+subio a 60 al construir el tier 3 como hoja, porque con 20 el arbusto no se leia
+como tal.
 
 **Y una cosa que cambia respecto a antes: una pasada y ya está.** El corte es un
 disco en el suelo, asi que el morro corta todo lo que pilla en el suelo, a la
@@ -234,25 +247,15 @@ Cuando cortas, el escombro **se queda**: trozos sueltos de unos 10 cm, con peso,
 que caen de lado y de canto y se quedan tumbados donde caen. La maquina los **aparta
 al pasar** por encima, asi que trabajar un sitio lo deja limpio.
 
-Lo unico que hay en el suelo son esos trozos. Antes habia ademas un sistema de
-**montones** que guardaba el material acumulado y lo dibujaba con cajas de casi
-medio metro; salia como "pilas de rectangulos" y **esta borrado**. Se pierde una
-cosa: una pasada larga ya no levanta un monton que haya que rodear. A cambio, el
-suelo es siempre el mismo sitio y no hay dos sistemas diciendo cosas distintas.
-
-Para mirar los restos de cerca, que desde la camara no se pueden juzgar:
-
-```bash
-flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
-    --path . --script tools/ver_restos.gd
-```
-
-Y para enumerar que hay en el suelo tras cortar cada planta:
-
-```bash
-flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
-    --headless --path . --script tools/test_origen_restos.gd
-```
+En el suelo no queda nada. Antes habia un sistema de **montones** que guardaba
+el material acumulado y lo dibujaba con cajas de casi medio metro; salia como
+"pilas de rectangulos" y **esta borrado**. Despues lo sustituyo un pool de
+`RigidBody3D` que dejaba el escombro posado y la maquina lo empujaba; hacia
+justamente lo mismo que unas particulas vistos desde la camara, pagando cuerpos
+fisicos, contactos y aparcado a mano, y **tambien esta borrado** desde el
+2026-09-30. Se pierde una cosa, dicha en claro: el suelo ya no recuerda el
+trabajo hecho, no hay monticulo que rodear ni escombro que apartar. A cambio,
+cero bodies por fotograma y un sistema menos con el que liarse.
 
 ### La camara nunca pierde el cabezal
 
@@ -327,8 +330,11 @@ del ejecutable, para que no sea el clasico "lo he descargado y no me arranca"
 porque faltaba el `.pck` de al lado.
 
 **El tamano no dice lo que parece.** El binario de Linux ocupa unos 70 MB, y de
-eso **290 KB son el juego**: lo demas es la plantilla del motor con Vulkan, que
-ya pesa 71 MB antes de abrir el proyecto. Windows son 105 MB por lo mismo.
+eso **1,9 MB son el juego** (los `.glb` y el audio; el resto son shaders y
+recursos): lo demas es la plantilla del motor con Vulkan, que ya pesa 71 MB
+antes de abrir el proyecto. Windows son 105 MB por lo mismo. La cifra esta
+escrita tambien en `export_presets.cfg`, que es donde se decide: ahi estan los
+filtros que dejan fuera `capturas/`, `tools/`, `docs/`, los `.md` y la furgoneta.
 
 **Que se meta el ejecutable es un filtro, no un milagro.** Sin los filtros de
 `export_presets.cfg` el paquete lleva dentro 23 MB de `capturas/` (Godot importa
@@ -384,7 +390,7 @@ flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --headless --path . --script tools/test_vegetacion_tier3.gd
 ```
 
-Las tres comprueban numeros, no pictures. **El aspecto del corte y de los restos
+Las cuatro comprueban numeros, no pictures. **El aspecto del corte y de los restos
 no lo mide ninguna prueba**: eso hay que mirarlo en el editor, y con la ventana
 abierta, que es como se juega.
 
@@ -394,16 +400,23 @@ Para ver en foto lo que se esta midiendo (sin `--headless`):
 # La rueda del inventario, la hoz en la mano y el aviso de "E recoger"
 flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
   --path . --script tools/foto_inventario.gd
-
-# Los restos de cerca, que es la unica vista donde se pueden juzgar
-flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
-  --path . --script tools/ver_restos.gd
 ```
 
-Esa mide si la hierba se dibuja de verdad. La última medición registrada fue en
-la escena anterior con terreno procedural: **52,4 % de píxeles cambiados** al
-ocultar `Hierba` y **54,7 % de píxeles verdes**. El plano actual aún no se ha
-medido visualmente. Las capturas se guardan en `capturas/`.
+Los restos se juzgan ahora **en el juego**, durante el segundo y medio que dura
+la rafaga: `ver_restos.gd` se fue con los cuerpos fisicos. La que mide si la
+hierba se dibuja de verdad es
+`tools/medir_foto.gd`, y hay dos cifras sueltas que no hay que confundir:
+
+- **93,9 %** de pixeles cambian al ocultar la hierba. Es la medicion buena, la de
+  `medir_foto.gd` ya reparado (buscaba el campo como `MultiMeshInstance3D`
+  cuando es un `Node3D` con un `MultiMesh` por cuadrante, y como se rompia en
+  cada fotograma la foto salia siempre igual: no comprobaba nada).
+- **52,4 %** de pixeles cambiados y **54,7 %** verdes. Esta es de la escena
+  **anterior**, con terreno procedural, y por eso se queda como referencia y no
+  como medida.
+
+**El plano de pruebas actual no se ha medido visualmente**, asi que ninguna de las
+dos cifras es de hoy. Las capturas se guardan en `capturas/`.
 
 > **No repitas la suite entera con ventana.** Se puede, pero con la GPU por
 > software de esta maquina va a un fps y la suite tarda doce minutos. Para
@@ -420,7 +433,12 @@ El campo no es un solo MultiMesh: se reparte en cuadrados, cada uno con el suyo.
 El tamaño se configura por campo para equilibrar culling y llamadas de dibujo.
 Cada cuadrado lleva una caja ajustada y se puede apagar por distancia.
 
-Hay **dos campos**, cada uno con su semilla y su material:
+Hay **tres presets y tres campos**, todos hermanos al mismo nivel de `main.tscn`:
+`Cesped`, `MalezaAlta` y `Zarza`. **Uno por planta, con la misma logica y la
+misma estructura**: `Cesped` y `MalezaAlta` son campos de 90 m, `Zarza` es una
+mancha de 9 m, y lo unico que cambia entre los tres son los numeros del preset y
+el aspecto, nunca la forma del nodo. El codigo no distingue un tipo de otro salvo
+por el atributo `tipo`. Los tres presets son:
 
 | preset | tipo | altura | densidad | radio |
 |---|---|---|---|---|
@@ -433,8 +451,9 @@ instancia; los numeros viven en el preset, y se cambian ahi.
 
 Las dos alturas bajaron desde la version anterior (69 y 133 cm) porque con la
 maleza a 1,33 m tapaba la mitad del encuadre. Y la maleza se puso en matas de
-verdad (`formacion` 0,70, antes 0,24): ocupa el 37 % del mapa en vez del 93 %, y
-se ven los claros por los que se anda. Un claro se trabaja mas rapido que un
+verdad (`formacion` 0,70, antes 0,24): ocupa el **40 %** del mapa en vez del
+93 %, que es lo que dice el arranque del juego, y se ven los claros por los que
+se anda. Un claro se trabaja mas rapido que un
 zarzal, y con la maleza en alfombra no habia forma de notarlo.
 
 Las tres van con `formacion = 0,70`, o sea en matas y no en alfombra, y se siembran
@@ -459,8 +478,8 @@ en [DOCUMENTACION.md](DOCUMENTACION.md).
 
 La escena usa una superficie plana de 160 × 160 m con colisión que cubre un radio
 de 80 m. Su altura es `Y = 0`, igual que el suelo inicial del prototipo. No hay
-nodos ni scripts activos para `Terreno` o `Aldea`; el bosque y los dos campos de
-hierba se generan sobre el plano sin exclusiones por parcelas.
+nodos ni scripts activos para `Terreno` o `Aldea`; el bosque y los tres campos de
+vegetacion se generan sobre el plano sin exclusiones por parcelas.
 
 El valle, las carreteras y la aldea manual se diseñarán más adelante. La hoja de
 ruta está en [DISENO.md](DISENO.md).
@@ -486,19 +505,26 @@ Las fotos se guardan en `capturas/`.
 ## Donde esta cada cosa
 
 ```
-scenes/        main, jugador, desbrozadora, hoz, zarza, hierba, bosque, arbol
-               y las de pruebas: pruebas_zarza, capas_zarza
+scenes/        main, jugador, desbrozadora, hoz, bosque, arbol
+scenes/vegetacion/  los tres presets de planta: cesped, maleza_alta, zarza
+                    (mas la base, hierba, de la que salen los tres)
 scripts/       la logica de cada cosa, una por archivo
 shaders/       el de la hierba y el del suelo
 tools/         las pruebas, las herramientas de medicion y los generadores
                de modelo de Blender
 resources/     los cabezales y las herramientas, como recursos de Godot
 models/        la desbrozadora, la hoz, el personaje y los modelos auxiliares
-assets/        recursos auxiliares
 audio/         el motor y el sonido de corte
 capturas/      las fotos que dejan las herramientas de medicion
 docs/          la guia para quien empieza de cero
 ```
+
+No existe `assets/`. Cuando haga falta una carpeta asi, se crea; escribirla aqui
+antes de que exista es como acabado el proyecto lo que no esta.
+
+Las escenas de pruebas de la zarza (`pruebas_zarza`, `capas_zarza`) **ya no
+estan**: se borraron con el sistema de celdas y coronas, y `scripts/zarza.gd` con
+ellas. La zarza que si esta es `scenes/vegetacion/zarza.tscn`.
 
 Los detalle de cada archivo estan en [DOCUMENTACION.md](DOCUMENTACION.md), el
 analisis del estado del proyecto en [REVISION.md](REVISION.md), y **la vision

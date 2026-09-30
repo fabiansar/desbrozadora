@@ -146,11 +146,19 @@ def preparar(objetos=None, eje="Z", a_cero=True, colisiones=True, mover_hijos=Fa
     return informe
 
 
-def exportar(ruta, solo_seleccion=False):
-    """Exporta a .glb o .gltf, con los parametros que Godot entiende bien."""
+def exportar(ruta, solo_seleccion=False, colores_vertice=False):
+    """Exporta a .glb o .gltf, con los parametros que Godot entiende bien.
+
+    `colores_vertice` exporta el color de vertice activo como COLOR_0. Va
+    apagado por defecto para no cambiar lo que ya exportan los demas modelos;
+    lo enciende `crear_restos.py`, que es el unico que pinta por vertice.
+    """
     if bpy.context.object is not None and bpy.context.object.mode != "OBJECT":
         bpy.ops.object.mode_set(mode="OBJECT")
     formato = "GLB" if ruta.lower().endswith(".glb") else "GLTF_SEPARATE"
+    opciones = {}
+    if colores_vertice:
+        opciones["export_vertex_color"] = "ACTIVE"
     bpy.ops.export_scene.gltf(
         filepath=ruta,
         export_format=formato,
@@ -159,6 +167,7 @@ def exportar(ruta, solo_seleccion=False):
         export_apply=True,        # los modificadores van dentro de la malla
         export_extras=True,       # conserva la propiedad "colision"
         export_animations=False,  # este juego no usa animaciones de nodo
+        **opciones,
     )
     return ruta
 

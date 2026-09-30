@@ -1,29 +1,6 @@
-[gd_scene load_steps=2 format=3 uid="uid://brbuf8v1qvi42"]
+[gd_scene format=3 uid="uid://brbuf8v1qvi42"]
 
 [ext_resource type="Script" uid="uid://2b1lml08eyb4" path="res://scripts/hierba.gd" id="1_hierba"]
-
-; LA BASE. Aqui no hay nada de una planta en concreto: son los numeros que
-; comparten el cesped, la maleza alta y la zarza.
-;
-; Los tres presets que la heredan estan en este mismo directorio:
-;
-;     cesped.tscn        tipo 1   brizna verde y baja
-;     maleza_alta.tscn   tipo 2   seca, mas alta, hoja mas ancha
-;     zarza.tscn         tipo 3   verde muy oscuro, tiesa, hoja ancha
-;
-; Y esa es toda la diferencia entre las tres: `tipo` (el tier, que es lo que
-; consulta la tabla de los cabezales), los numeros de altura y densidad, los
-; colores, y los tres de la forma de la hoja. **No hay ni una linea de codigo
-; para una planta que no sea para las tres**, y por eso se pueden comparar entre
-; si sin ningun caso especial.
-;
-; Lo que se borro para llegar aqui: la zarza tenia su propio sistema de celdas,
-; raices, coronas, enredo e inundacion, y era un segundo juego dentro del juego.
-; Ahora es la misma hoja con otros numeros, y su travail es el mismo que el de
-; las otras dos: abrirla con el cabezal que toca, y peor con el que no.
-;
-; Para tener una planta nueva: copiar uno de los tres presets, cambiar `tipo` si
-; hace falta, tocar los numeros, y ya esta. No hay que escribir codigo.
 
 [node name="Hierba" type="Node3D" unique_id=162214835]
 script = ExtResource("1_hierba")

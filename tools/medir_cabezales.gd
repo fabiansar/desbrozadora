@@ -37,9 +37,16 @@ func _ejecutar() -> void:
 
 	var punto_maleza := _punto_mas_denso(2)
 	await _medir("maleza alta", punto_maleza, 2)
-	# La zarza es un Hierba de tipo 3, no una clase propia.
-	var zarza := _mundo.get_node_or_null("Zarzas/ZarzaCercana") as Hierba
-	if zarza != null and zarza.hojas_en_pie() > 0:
+	# La zarza es un Hierba de tipo 3, no una clase propia, y vive al mismo nivel
+	# que el cesped y la maleza en `main.tscn`.
+	var zarza := _mundo.get_node_or_null("Zarza") as Hierba
+	if zarza == null:
+		# Antes esto se saltaba en silencio. Con `get_node_or_null` un nombre mal
+		# escrito no da error: la medicion de la zarza simplemente no se hacia y
+		# el resultado parecia bueno sin haber medido el tier 3.
+		print("   AVISO: no encuentro el nodo Zarza en la escena. La fila de la "
+			+ "zarza no se ha medido.")
+	elif zarza.hojas_en_pie() > 0:
 		await _medir("zarza", zarza.global_position + Vector3(0.0, 0.9, 0.0), 3)
 
 	print("\n== la maqueta sigue cortando? (rpm_efectiva > 15%% de las maximas) ==")

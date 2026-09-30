@@ -65,7 +65,7 @@ func _probar_radio_corte_compartido() -> void:
 	_comprobar(_herramienta.radio_corte > 0.5,
 		"el radio efectivo deja un ancho de pasada visible (%.2f m)"
 		% _herramienta.radio_corte)
-	for nombre in ["Cesped", "MalezaAlta", "Zarzas/ZarzaCercana"]:
+	for nombre in ["Cesped", "MalezaAlta", "Zarza"]:
 		var campo := _mundo.get_node_or_null(nombre) as Hierba
 		_comprobar(campo != null, "%s está disponible para cortar" % nombre)
 		if campo == null or campo.total() == 0:
@@ -134,16 +134,7 @@ func _probar_cabezales_y_desgaste() -> void:
 
 ## La zarza ahora es el tier 3 de la misma hoja que el cesped, y esta prueba lo
 ## comprueba en la escena real: que hay matas, que se cortan a la altura del
-## cabezal, que sueltan restos con fisica que se quedan en el suelo y se pueden
-## apartar con la maquina.
-func _trozos(restos: Restos) -> Array[Node]:
-	var fuera: Array[Node] = []
-	for n in _descendientes(restos):
-		if n is RigidBody3D:
-			fuera.append(n)
-	return fuera
-
-
+## cabezal, y que al cortar sueltan rafagas de restos.
 func _descendientes(nodo: Node) -> Array[Node]:
 	var fuera: Array[Node] = []
 	if nodo == null:
@@ -156,9 +147,10 @@ func _descendientes(nodo: Node) -> Array[Node]:
 
 func _probar_tier3() -> void:
 	print("-- el tier 3 (zarza) es la misma hoja que el cesped --")
-	# Las matas viven bajo el nodo Zarzas, para que se puedan colocar varias
-	# repartidas por el campo. Ahora cada una es una instancia del preset.
-	var mata := _mundo.get_node_or_null("Zarzas/ZarzaCercana") as Hierba
+	# La zarza es un nodo mas al mismo nivel que `Cesped` y `MalezaAlta`: uno por
+	# planta, la misma estructura, y se distingue solo por su `tipo`. Es la que
+	# hay delante del jugador al arrancar.
+	var mata := _mundo.get_node_or_null("Zarza") as Hierba
 	_comprobar(mata != null, "la zarza de prueba esta en la escena")
 	if mata == null:
 		return
@@ -190,8 +182,10 @@ func _probar_tier3() -> void:
 	_comprobar(mata.hojas_en_pie() < mata.total(),
 		"una pasada deja el disco pelado")
 
-	# Y ahora lo que es nuevo: los restos tienen cuerpo, se quedan en el suelo y
-	# la maquina los aparta.
+	# Y los restos: al cortar sale una rafaga de particulas. Ya no tienen cuerpo,
+	# asi que aqui solo se puede comprobar lo que de verdad pasa: que se piden al
+	# cortar, y que **no queda ningun cuerpo fisico tirado por el suelo**, que era
+	# la firma del sistema viejo. Si alguien revive el pool de rigidos, esto lo caza.
 	var restos := Restos.obtener(_mundo.get_tree())
 	restos.limpiar()
 	# En un trozo donde no se ha cortado todavia: si se repite el disco de
@@ -200,98 +194,16 @@ func _probar_tier3() -> void:
 	var donde_resto := _punto_con_hoja(mata, 0.9) + Vector3(0.0, 0.4, 0.0)
 	mata.cortar_y_soltar(donde_resto, 1.2, 40.0)
 	_comprobar(int(restos.recuento()["soltados"]) > 0,
-		"al cortar saltan restos (%d)" % int(restos.recuento()["soltados"]))
-
-	# Se espera a que caigan, que es lo que no se podia hacer antes.
-	for _i in 90:
+		"al cortar salen rafagas de restos (%d trozos pedidos)"
+		% int(restos.recuento()["soltados"]))
+	for _i in 15:
 		await physics_frame
-	_comprobar(int(restos.recuento()["en_suelo"]) > 0,
-		"los restos se quedan en el suelo en vez de desaparecer (%d en el suelo)"
-		% int(restos.recuento()["en_suelo"]))
-	# Y se mide la DISTANCIA, no si salen de un circulo. La maquina no da un
-	# empujon y se acaba: empuja unas ocho veces por segundo mientras corta, y
-	# cada empujon mueve el escombro un poco. Pedirle que de un solo empujon
-	# saque seis trozos de un radio de un metro y medio es pedir un cosa que no
-	# pasa, y el fallo teaches a relajar la comprobacion justo cuando hacia falta
-	# endurecerla.
-	var antes := _distancia_media(restos, donde_resto)
-	var apartados := 0
-	for _i in 4:
-		apartados += restos.empujar(donde_resto, 1.2, Vector3.FORWARD, 1.0)
-		await physics_frame
-	var despues := _distancia_media(restos, donde_resto)
-	_comprobar(apartados > 0, "la maquina aparta los que pisa (%d empujones)" % apartados)
-	#
-	# En **centimetros absolutos**, y no en ratio. El ratio parecia la forma
-	# natural de decirlo, pero es la forma equivocada: dependia de lo juntos que
-	# nacieran los restos, y eso se cambio a proposito para que el amontonado
-	# saliera aireado en vez de en corona. Al abrir la salida, la media de partida
-	# subio de 0,33 a 0,63 m y el ratio se encogio **sin que el empujon cambiase**:
-	# el desplazamiento absoluto es el mismo, unos 11 cm en cuatro empujones.
-	#
-	# El umbral de 6 cm es el que codificaba el ratio viejo (0,33 x 0,2 = 6,6 cm)
-	# traducido tal cual. No es una comprobacion mas floja: es la misma, medida
-	# sobre lo que de verdad importa, que es cuanto se mueve el escombro.
-	var movido := despues - antes
-
-	# **El cableado, que es lo que faltaba.** Todo lo de arriba empuja llamando a
-	# `restos.empujar()` a mano, y eso **no comprueba que la maquina lo haga**. En
-	# el juego estaba desconectado: `_process` tenia un `pass  # DIAG` en vez de
-	# llamar a `_apartar_restos()`, y todo lo de aqui pasaba en verde mientras la
-	# maquina no movia ni un escombro. Una prueba que llama a la API suelta no
-	# puede cazar eso.
-	#
-	# Se comprueba **con el contador de empujones**, no midiendofisica, y se
-	# tardo tres intentos en dar con la forma correcta. Los tres fallos medidos:
-	#
-	#   - Distancia desde un punto fijo, con la maquina andando: de 48 a 1211 cm. No
-	#     era el escombro huyendo, era **la maquina alejandose** catorce metros.
-	#   - Distancia desde el cabezal, con la maquina andando: de 1274 a 135 cm. No
-	#     era el escombro acercandose, era **el cabezal yendo hacia el**.
-	#   - Distancia desde un punto fijo, con la maquina quieta, sobre los 6 trozos
-	#     frescos: de 45 a 686 cm. Seguia sin valer, porque al cortar la maquina
-	#     **recicla el pool** y los seis trozos reaparecen en el punto de corte
-	#     siguiente, a casi siete metros.
-	#
-	# El pool es compartido y se recicla, y eso hace que cualquier media de
-	# posiciones sea un numero sin significado. El contador no miente.
-	restos.limpiar()
-	mata.cortar_y_soltar(donde_resto, 1.2, 40.0)
-	for _i in 90:
-		await physics_frame
-	var antes_empujones := int(restos.recuento()["apartados"])
-	Input.action_press("acelerador")
-	for _i in 60:
-		await physics_frame
-	Input.action_release("acelerador")
-	var empujados_por_la_maquina := int(restos.recuento()["apartados"]) \
-			- antes_empujones
-	print("   la maquina ha empujado %d trozos sin que nadie llame a empujar()"
-		% empujados_por_la_maquina)
-	_comprobar(empujados_por_la_maquina > 0,
-		"y la maquina lo hace sola, sin que nadie llame a empujar()")
-	# Y el tope de velocidad, que se puede comprobar aqui de forma directa porque
-	# el que empuja se puede repetir las veces que haga falta. Sin tope, el empuje
-	# suma velocidad y la maquina llama unas ocho veces por segundo: son 7,2 m/s y
-	# el escombro salia a doce metros.
-	# Se mide **el pool entero**, no solo los trozos frescos: al reciclarse el pool
-	# ya no hay ninguna pieza de las de antes, y una comprobacion sobre un conjunto
-	# vacio pasa sin comprobar nada. El umbral es de 4 m/s, holgadamente por encima
-	# del tope de 2 y muy por debajo de los 7,2 a los que llegaba sin tope, asi que
-	# caza el fallo sin verse afectada por los trozos que estan cayendo.
-	var tope := 0.0
-	for _i in 20:
-		restos.empujar(donde_resto, 1.2, Vector3.FORWARD, 1.0)
-		await physics_frame
-	for n in _trozos(restos):
-		tope = maxf(tope, (n as RigidBody3D).linear_velocity.length())
-	print("   veinte empujones seguidos: el mas rapido va a %.1f m/s" % tope)
-	_comprobar(tope < 4.0,
-		"y veinte empujones seguidos no lo disparan (%.1f m/s, tope %.1f)"
-			% [tope, Restos.VELOCIDAD_APARTAR_MAX])
-	_comprobar(movido > 0.06,
-		"y el escombro se va de debajo (%.0f -> %.0f cm, %.0f movidos)"
-			% [antes * 100.0, despues * 100.0, movido * 100.0])
+	var cuerpos := 0
+	for n in _descendientes(restos):
+		if n is RigidBody3D:
+			cuerpos += 1
+	_comprobar(cuerpos == 0,
+		"y en el suelo no queda cuerpos de restos, que ya no los hay (%d)" % cuerpos)
 
 
 func _probar_paneo_y_barrido() -> void:
@@ -532,39 +444,6 @@ func _punto_con_hoja(mata: Hierba, r: float) -> Vector3:
 		if cuanta > 20:
 			break
 	return mejor
-
-
-## Los trozos que estan a menos de `metros` del punto, que son los que acaba de
-## soltar el corte.
-func _frescos(restos: Restos, punto: Vector3, metros: float) -> Array[Node]:
-	var fuera: Array[Node] = []
-	for n in _trozos(restos):
-		var p := (n as Node3D).global_position
-		if Vector2(p.x - punto.x, p.z - punto.z).length() < metros:
-			fuera.append(n)
-	return fuera
-
-
-## Distancia media al punto de SOLO los nodos dados.
-func _distancia_media_de(nodos: Array[Node], punto: Vector3) -> float:
-	var total := 0.0
-	var n := 0
-	for c in nodos:
-		if c == null or not is_instance_valid(c):
-			continue
-		var p := (c as Node3D).global_position
-		total += Vector2(p.x - punto.x, p.z - punto.z).length()
-		n += 1
-	return total / float(maxi(n, 1))
-
-
-func _distancia_media(restos: Restos, punto: Vector3) -> float:
-	var suma := 0.0
-	var vivos := restos.indices_vivos()
-	for k in vivos:
-		suma += Vector2(restos.posicion_de(k).x - punto.x,
-			restos.posicion_de(k).z - punto.z).length()
-	return suma / maxf(vivos.size(), 1.0)
 
 
 func _esperar_a_inclinacion(limite: float = 0.002, tope: float = 4.0) -> void:

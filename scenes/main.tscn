@@ -81,39 +81,23 @@ light_specular = 0.0
 
 [node name="MalezaAlta" parent="." instance=ExtResource("6_maleza")]
 
-; Las zarzas son el tier 3: la misma hoja, oscura, ancha y tiesa. Cada mancha es
-; una instancia con su altura y su semilla, y NO hay codigo de zarza en ninguna
-; parte: antes eran 888 lineas con celdas, coronas y raices, y ahora son estas
-; cinco lineas.
-[node name="Zarzas" type="Node3D" parent="."]
-
-[node name="ZarzaCercana" parent="Zarzas" instance=ExtResource("9_zarza")]
+; La zarza es el tier 3: la misma hoja, oscura, ancha y tiesa, con un
+; `radio` corto porque es una mancha local y no un campo. NO hay codigo de zarza
+; en ninguna parte: antes eran 888 lineas con celdas, coronas y raices, y ahora
+; es esta linea.
+;
+; **Un nodo por planta, exactamente igual que `Cesped` y `MalezaAlta`: la
+; diferencia esta en el preset (numeros y aspecto), no en la escena ni en la
+; estructura.** Antes habia cinco instancias de la zarza bajo un nodo contenedor
+; `Zarzas` que no hacia nada; se redujo a esta una y se aplanó el contenedor el
+; 2026-09-30, porque lo unico que aportaba era una excepcion en la jerarquia. El
+; codigo no depende de la estructura: todo se localiza por el grupo `vegetacion`.
+;
+; Si algun dia hace falta zarza en varios sitios, no es un problema de escena:
+; `radio` y `semilla` son `@export`, y colocar manchas es una decision de mapa
+; (fase del valle), no de esta escena.
+[node name="Zarza" parent="." instance=ExtResource("9_zarza")]
 position = Vector3(0, 0, -7.0)
-altura = 1.4
-semilla = 33031
-
-[node name="ZarzaIzquierda" parent="Zarzas" instance=ExtResource("9_zarza")]
-position = Vector3(-12, 0, -16.0)
-altura = 1.5
-semilla = 9387
-
-[node name="ZarzaDerecha" parent="Zarzas" instance=ExtResource("9_zarza")]
-position = Vector3(13, 0, -19.0)
-altura = 1.5
-radio = 9.0
-semilla = 50123
-
-[node name="ZarzaLejana" parent="Zarzas" instance=ExtResource("9_zarza")]
-position = Vector3(2, 0, -33.0)
-altura = 1.7
-radio = 11.0
-semilla = 1729
-
-[node name="ZarzaAislada" parent="Zarzas" instance=ExtResource("9_zarza")]
-position = Vector3(-19, 0, -38.0)
-altura = 1.6
-radio = 8.0
-semilla = 777
 
 [node name="Viento" type="Node3D" parent="." unique_id=701693324]
 script = ExtResource("7_viento")

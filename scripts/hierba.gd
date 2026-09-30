@@ -1091,27 +1091,19 @@ func cortar_y_soltar(centro: Vector3, radio: float, presupuesto: float = -1.0) -
 
 
 ## Al cortar no queda la planta en su sitio: aparecen restos sueltos que salen
-## despedidos y se posan en el suelo. Se sueltan en el punto de corte, no en el
-## suelo, para que el monticulo se vea caer y no aparezca de la nada.
+## despedidos y se apagan solos. Aqui solo se avisa a `Restos` de cuantas hojas
+## han caido, de donde y de que planta: la cuenta entera (trozos por hoja,
+## cuando se junta una rafaga, cuanto vive el trozo) vive en `scripts/restos.gd`,
+## que es el unico sitio donde se ajusta el escombro.
 func _soltar_restos(origen: Vector3, hojas: int) -> void:
 	if hojas <= 0:
-		return
-	# Un resto por cada pocas hojas: la hierba es finita y por fotograma caen
-	# cientos, asi que uno por hoja llenaria el grupo en dos segundos.
-	var cuantos := mini(int(round(float(hojas) / 4.0)), 12)
-	if cuantos <= 0:
 		return
 	var direccion := Vector3(randf_range(-0.3, 0.3), 0.0,
 		randf_range(-0.3, 0.3))
 	# El tamano del trozo va con el de la planta: una brizna de 4,5 mm deja un
-	# trozo pequeño y un cano de 26 cm deja un trozo grande. Con un tamano fijo
-	# el amontonado de la maleza parecía el de un cesped corto, que es justo lo
-	# que hay que evitar cuando las tres plantas son la misma hoja con otros
-	# numeros.
-	# Con 2,6 los trozos de la zarza salian de 36 cm: no eran hojas, eran losas.
-	# El tope va en 1,5, con lo que el trozo mayor mide 15 cm, que es una hoja de
-	# mata troceada y no un tablón. Y el minimo sube, para que el cesped no deje
-	# motas de un centimetro.
+	# trozo pequeño y un cano de 26 cm deja un trozo grande. El tope va en 1,5,
+	# con lo que el trozo mayor mide 15 cm, que es una hoja de mata troceada y
+	# no un tablón.
 	var escala := clampf(grosor / 0.12, 0.7, 1.5)
-	Restos.obtener(get_tree()).soltar(origen, cuantos, direccion,
-		tono_punta.lerp(tono_pie, randf() * 0.5), escala)
+	Restos.obtener(get_tree()).soltar(origen, hojas, direccion,
+		tono_punta.lerp(tono_pie, randf() * 0.5), escala, tipo)

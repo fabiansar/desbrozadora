@@ -113,7 +113,6 @@ Después elige una comprobación apropiada:
 | Reparto del corte, sectores o borde del disco | `test_corte_organico.gd` |
 | Los tres niveles de vegetacion y el escombro | `test_vegetacion_tier3.gd` |
 | Que se note la diferencia entre cabezales | `test_cabezales.gd` |
-| Que solo haya restos en el suelo, y de donde salen | `test_origen_restos.gd` |
 | Inventario, rueda, soltar o recoger | `test_inventario.gd` |
 | Modelo Blender | Abrir el GLB con ventana y luego ejecutar el juego |
 
@@ -130,9 +129,9 @@ flatpak run --filesystem=$HOME/Documentos org.godotengine.Godot \
 ```
 
 Un aviso sobre lo que **ninguna** prueba comprueba: el aspecto. Ni el del corte ni
-el de los restos. Es a proposito, porque el aspecto se juzga a ojo y a cuatro
-metros un trozo de 10 cm son unos pixeles. Para el de los restos esta
-`tools/ver_restos.gd`, que los pone a 40 cm.
+el de los restos. Es a proposito, porque el aspecto se juzga a ojo. Los restos son
+rafagas de particulas que duran dos segundos y no dejan nada en el suelo: se miran
+en el propio juego, cortando.
 
 Parseo rápido, que carga el proyecto en modo editor sin interfaz:
 

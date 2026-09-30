@@ -4,30 +4,40 @@ Analisis del estado del proyecto tal y como esta ahora, con lo que esta bien,
 lo que esta raro y lo que falta. Para decidir el siguiente paso.
 
 Ultima revision: **version `v0.1.0`**, con el inventario de nueve herramientas y
-la zarza con raiz. El terreno procedural y el layout de la aldea siguen
-retirados mientras se prepara un mapa manual; el plugin para esculpirlo desde el
-editor aún no está elegido.
+la zarza como tercer nivel de vegetacion. El terreno procedural y el layout de
+la aldea siguen retirados mientras se prepara un mapa manual; el plugin para
+esculpirlo desde el editor aún no está elegido.
 
-Estado de las pruebas (las siete que se ejecutan sin abrir nada):
+Estado de las pruebas (las ocho que se ejecutan sin abrir nada):
 
 | Prueba | Resultado |
 | --- | --- |
 | `tools/test_juego.gd` (suite principal) | **207 correctas, 0 fallos, 1 aviso** |
-| `tools/test_movimiento_integrado.gd` | 82/82 |
+| `tools/test_movimiento_integrado.gd` | 84/84 |
 | `tools/test_cabezales.gd` | 28/28 |
 | `tools/test_estacion_cabezal.gd` | OK |
 | `tools/test_vegetacion_tier3.gd` | OK |
 | `tools/test_corte_organico.gd` | OK |
 | `tools/test_inventario.gd` | OK |
-| `tools/test_origen_restos.gd` | OK (enumera, no comprueba) |
+| `tools/test_version_pantalla.gd` | OK |
+
+**Ojo con las cifras de arriba**: son de antes del cambio de los restos a
+particulas (2026-09-30). `test_origen_restos.gd` y `ver_restos.gd` se borraron,
+y los asertos de posado, masa y empuje de `test_movimiento_integrado.gd` y
+`test_vegetacion_tier3.gd` se recortaron: hay que volver a tomarlas.
+
+El aviso es el mismo en todas partes: la comprobacion de imagen no se puede hacer en
+headless, y se cierra aparte con `tools/medir_foto.gd`.
 
 **Todo en verde.** Mas medidores y miradores, que no son tests y no se ejecutan en
 la bateria: `medir_cabezales.gd`, `medir_densidad.gd`, `medir_foto.gd`,
-`ver_encuadre.gd`, `ver_restos.gd`.
+`ver_encuadre.gd`, `mirar_hierba.gd`, `diag_hierba.gd`, `foto.gd`,
+`foto_inventario.gd` y `foto_personaje.gd`.
 
 Lo que **ninguna** prueba mide, y es a proposito: el aspecto. Ni el del corte ni el
-de los restos. Se juzga a ojo, y a cuatro metros un trozo de 10 cm son unos
-pixeles. Para el de los restos esta `ver_restos.gd`, que los pone a 40 cm.
+de los restos. Se juzga a ojo, y desde el 2026-09-30 los restos duran lo que la
+rafaga: no hay estado que fotografiar por separado (`ver_restos.gd` se borró con
+los cuerpos fisicos).
 
 ### Lo que dejo escrito para que no se repita
 
@@ -79,10 +89,10 @@ raices, enredo e inundacion), `scenes/zarza.tscn`, `scenes/capas_zarza.tscn`,
 `scenes/pruebas_zarza.tscn`, `scripts/overlay_prueba_zarza.gd` y siete pruebas y
 utilidades. Ahora la zarza es un preset mas de la misma hoja:
 
-    scenes/vegetacion/hierba.tscn      la base, con TODOS los exports
-    scenes/vegetacion/cesped.tscn      tier 1
-    scenes/vegetacion/maleza_alta.tscn tier 2
-    scenes/vegetacion/zarza.tscn       tier 3
+	scenes/vegetacion/hierba.tscn      la base, con TODOS los exports
+	scenes/vegetacion/cesped.tscn      tier 1
+	scenes/vegetacion/maleza_alta.tscn tier 2
+	scenes/vegetacion/zarza.tscn       tier 3
 
 Un script, tres presets con nombre, y `main.tscn` instancia tres nodos sin
 bloques de quince lineas de numeros. La "otra skin" son color, grosor y tres
@@ -113,15 +123,21 @@ cuatro se habrian haber visto antes:
    sola**: cuanto mas trabajo habia, mas alto se quedaba el morro. Al reves. Lo
    que echa el peso del cuerpo eres tu pulsando el acelerador, asi que ahora hay
    `_apoyado`, que va con el acelerador. `_trabajando` se queda para el sonido.
-3. **La zarza iba a 60 caños por metro cuadrado.** Con 2,4 m de alto eso pesa
-   once veces mas que la maleza, y con el divisor de carga la carga se iba a
-   1,00 **topsada con cualquier cabezal**: en la zarza daba igual el cabezal. Con
-   20 caños gruesos la cosa es un matorral de verdad y el juego entre
-   cabezales se vuelve a ver (0,92 con la cuchilla, 0,17 con el disco de tres
-   puntas).
+3. **La zarza iba a 60 caños por metro cuadrado y 2,4 m de alto.** Con eso
+   pesaba once veces mas que la maleza y la carga se iba a 1,00 **topsada con
+   cualquier cabezal**: en la zarza daba igual el cabezal.
+   **Como esta hoy ya no es eso**, y conviene no razonar desde los numeros viejos:
+   `densidad` sigue en 60, pero la planta se hizo **tiesa y ancha** (curva 0,02,
+   `hoja_estrecha` 0,30) y se bajo a 1,5 m. La dificultad sale de la **dureza**
+   (3,6, la mas alta del juego) y de la resistencia del cabezal, no de estar mas
+   rala: si el tier mas duro fuese ademas el mas lento de barbechar, el cabezal
+   dejaria de importar justo en la zarza.
 4. **`formacion` esta al reves de lo que parece.** Es la parte de terreno que se
    deja BARE, no la que se planta: con 0,90 se siembra el 7 % y sale un ralo. La
-   zarza va en 0,12, que es lo contrario de lo que habia puesto al principio.
+   zarza va en **0,70, igual que el cesped y que la maleza**, y no en 0,12 como
+   se puso al principio: con 0,12 se sembraba casi todo y salia un fieltro, no un
+   arbusto. A 0,70 se siembra el 40 % del terreno y se ve el claro, que es lo que
+   hace que "pasar por la maleza" y "pasar por la zarza" se sienten distintos.
 
 ### La logica de los cabezales cambia de fondo
 
@@ -176,8 +192,15 @@ Cuatro cosas que hay que tener en cuenta al tocar esto:
    que se colgaba de ella, y eso no es el cabezal cortando mas rapido: es la
    zarza perdiendo el apoyo. Por eso un corte puede quitar mas celdas de las
    pedidas, y por eso el nylon tarda mas en tirar la mata abajo aunque arranque
-   el doble de ramas. Si alguna vez se queja de que el presupuesto no se
-   respeta, hay que mirar `_recalcular_apoyo` antes que el limite.
+   el doble de ramas.
+
+   Ojo con este parrafo, que **describe un sistema que ya no existe**: la caida
+   en cadena venia de las celdas y las coronas, que se borraron enteras. Hoy
+   `tasa_corte_base()` es la misma para los tres niveles, y
+   `_presupuesto_fraccion` (`hierba.gd`) es el unico sitio donde el presupuesto
+   se puede desobedecer. Si algun dia se queja de que el presupuesto no se
+   respeta, ese es el primer sitio donde mirar, y no uno que haya que buscar:
+   `_recalcular_apoyo` **no existe**.
 4. **La carga del motor** se multiplica por `frenado_para(tipo)`, la misma
    resistencia. Con la cuchilla de serie en la maleza el coste de motor cae al
    40 % de lo que era, porque el motor ya no pelea contra cada hoja. Es lo
@@ -192,14 +215,20 @@ que no se nota**. Medido con `tools/medir_cabezales.gd` (nuevo, no es un test):
 
 | | antes | despues | por que |
 | --- | --- | --- | --- |
-| base de corte del cesped | 200 hojas/s | 50 | 200 era mas rapido que andar |
-| base de corte de la zarza | 60 celdas/s | 30 | base de corte de la zarza | 60 celdas/s | 30 | las celdas de tallo pesan mas | |
+| base de corte (`tasa_corte_base`) | 200 hojas/s | **50** | 200 era mas rapido que andar |
 | desgaste por hoja | 0,000001 | 0,00005 | era 0,0000 por segundo |
 | `densidad_corte` (carga) | 110 | 75 | la carga no pasaba de 0,65 |
 
+**La base de corte es una sola, 50, y la comparten los tres niveles.**
+`tasa_corte_base()` esta en el contrato comun (`scripts/vegetacion.gd:65`) y
+`hierba.gd` **no** la sobreescribe: no existe una base de 30 para la zarza ni una
+de 60 para el cesped. Lo que hacia que un nivel costara mas es la **dureza**, que
+entra por la resistencia y por el desgaste, no por el ritmo del hilo.
+
 La del corte es la que mas cuesta entender y la mas importante. La base de 200
-hojas/s se eligio sin mirar contra que se compara, y **andar a 2 m/s con un
-cabezal de 0,78 m pisa unas 150 hojas por segundo**. O sea que con la base en 200,
+hojas/s se eligio sin mirar contra que se compara, y **andar a 3 m/s con un
+cabezal de 0,78 m pisa del orden de 225 hojas por segundo** (`velocidad_andar =
+3.0`; corriendo, 5,8, son casi 440). O sea que con la base en 200,
 incluso la eficacia 1 iba sobrada: los cuatro cabezales vaciaban el disco en
 siete fotogramas y se sentian exactamente igual. **La base tiene que estar por
 debajo de lo que pisas andando**, y ahi es donde la eficacia empieza a decidir
@@ -235,9 +264,9 @@ entero mientras el de al lado conservaba todas sus hojas.
 
 Hay dos formas de reparte y una esta descartada a proposito. La primera fue
 **barato y de dentro hacia fuera**: se coge la hoja mas cercana y se corta. Se ve
-mucho mejor, pero es untrue: en una mata pasa por encima, o faila a la base y se
-viene la corona entera de golpe. Con presupuesto del nylon, la zarza se vaciaba en
-**un fotograma**, mas rapido que con un disco de tres puntas que muerde cuatro
+mucho mejor, pero era untrue: en una mata pasaba por encima, o fallaba a la base y
+se venia la copa entera de golpe. Con presupuesto del nylon, la zarza se vaciaba
+en **un fotograma**, mas rapido que con un disco de tres puntas que muerde cuatro
 veces mas. Un cabezal lento derribando el zarzal mas rapido que uno rapido es
 justo lo contrario de lo que dice la tabla, y **no lo caza ninguna prueba** porque
 las pruebas miden el total, no el reparto. Eso no vuelve.
@@ -328,6 +357,11 @@ no dejar un reguero a tres metros.
 
 ### Los restos eran bloques, y era la orientacion
 
+> **Nota 2026-09-30:** este capitulo describe la epoca de los `RigidBody3D`, ya
+> borrados. Lo que sobrevive del analisis es **la malla curva, las cuatro
+> siluetas y la orientacion libre**, que se conservan tal cual en la rafaga de
+> particulas actual; lo que no existe ya es el posado, el pool y el empuje.
+
 El usuario reporto, con razon, "bloques apilados". No era una impresion, eran cuatro
 numeros:
 
@@ -343,10 +377,17 @@ suelo", convertia cincuenta planchas superpuestas en una pila de losas.
 
 Ahora: orientacion libre en los tres ejes (mitad de cara, mitad de canto), malla
 **curva** de cinco tramos con arco y retorcido, **cuatro siluetas** distintas,
-tamano de 0,55 a 1,35 por trozo, uno de cada cinco desaturado hacia pajizo, y
-trozos un 30 % mas pequenos con el tope de escala de la planta bajado a 1,5. El
-pool subio de 50 a 110 porque las piezas son mas pequenas; el coste esta en las
-que estan **despertando**, y aparcadas son un cuerpo congelado.
+tamano de 0,55 a 1,35 por trozo, y un **degradado** hacia el pajizo
+(`randf_range(0.0, 0.35)`), no "uno de cada cinco": un tercero se queda sin
+desaturar y el resto se aclara de forma continua. Trozos un 30 % mas pequenos con
+el tope de escala de la planta bajado a 1,5.
+
+**El pool bajo de 110 a 60, no subio.** Con 110 piezas entrando en un aro de 35 cm
+salia un donut cerrado, y con 60 en el mismo sitio ya se ve aireado: lo que hace
+un monton denso no es el numero de piezas, es **donde caen todas al mismo
+tiempo**. Subirlo sale caro ademas, porque el coste esta en las que estan
+**despertando** (cayendo y rodando) y aparcadas son un cuerpo congelado que no se
+calcula: de 110 habia seis o siete en movimiento, de 60, tres o cuatro.
 
 ### Los dos numeros que se tunean desde un solo sitio
 
@@ -355,8 +396,10 @@ Si hay que ajustar la sensacion, se tocan estos dos y nada mas:
 - `tasa_corte_base` en `vegetacion.gd`. **Las tres plantas son el mismo script**;
   ya no hay numeros de corte en ningun sitio mas.
 - `desgaste_por_hoja` y `densidad_corte` en `desbrozadora.gd`.
-- `Hierba.SECTORES` para el frente de corte, y `Restos.MAXIMO` para cuanto escombro
-  se ve en el suelo.
+- `Hierba.SECTORES` para el frente de corte, y `Restos.maximo` para cuanto escombro
+  se ve en el suelo. Ojo con el nombre: **`maximo` ya no es `const`**, es un
+  `@export` (`scripts/restos.gd:57`), asi que se escribe en minuscula. Con
+  mayuscula da error de parseo y el editor se queja al abrir el proyecto.
 
 `test_cabezales.gd` comprueba que la base siga por debajo de las 150 hojas/s, que
 es el numero de referencia. Si alguna vez se sube por encima, la eficacia deja de
@@ -387,17 +430,33 @@ Lo que hay que tener presente al tocarlo:
   equipped ahi va desde el suelo. Con offsets de decimetros, la hoz y las manos
   sueltas quedaban enterradas en la maleza.
 
-### Lo que se decidio aplazar
+### Cerrado: la zarza no vuelve a brotar (2026-09-29)
 
-La mecanica esta explicada en [LEEME.md](LEEME.md) y en
-[DOCUMENTACION.md](DOCUMENTACION.md). Dos cosas pendientes:
+**Decidido: la regresion no existe y no va a existir.** Antes estaba en "aplazar"
+y salia como pendiente en tres sitios. Se cierra como lo que es: una decision en
+contra, porque depende de lo que decia.
 
-1. **La zarza no vuelve a brotar.** Se decidio que la regresion se deja para mas
-   adelante, asi que ahora mismo tumbar la base es el final del asunto.
-2. **El escombro no se puede quitar de raiz.** Se aparta pasando la maquina, pero
-   no hay ninguna razon de juego que obligue a hacerlo. La razon de verdad (una
-   cana cortada en el suelo echa raquis) es la que le haria falta, y **no es solo
-   un boton que falte**: hay que decidir que hace la raquis antes.
+- **Motivo:** cortar y ya esta. No hay nada que volver a hacer sobre la misma
+  mata, y no se castiga al jugador por un trabajo que no le piden.
+- **No es "aun no":** el sistema de celdas y coronas que hacia posible la raiz
+  permanente **se borro entero**. No es que falte la logica de brotar, es que no
+  hay donde anclar el brote. Reconstruirlo seria inventar de nuevo el segundo
+  sistema de vegetacion que lazarza unica de planta.
+- **Con esto cae la raquis.** El unico motivo de juego que se habia apuntado
+  para obligar a quitar el escombro era "una cana cortada en el suelo echa
+  raquis". Si la zarza no rebrota, esa razon deja de existir. **El escombro se
+  queda como lo que es: el rastro de lo que has cortado.** Se aparta pasando la
+  maquina, y ya.
+
+Lo que sigue pendiente de este bloque:
+
+1. **Afilar la cuchilla** (`estacion_cabezal.gd:106`): `reiniciar_desgaste()`
+   existe y **solo la llaman las pruebas**, asi que en el juego el filo se gasta
+   y no se recupera nunca. Decidido: solo avisar, sin afilado. Con un aviso que
+   sea un "cambia de cabezal" claro, porque si no el jugador llega al final
+   sin salida.
+2. **Limpiar el escombro a mano**, si alguna vez hace falta, con una razon de
+   juego **nueva**. No esta la que habia.
 
 ---
 
@@ -413,8 +472,8 @@ La mecanica esta explicada en [LEEME.md](LEEME.md) y en
   el tono y el volumen correctos, y el cabezal baja al acelerar.
 - Hay bosque de prueba con colisión y un suelo plano de 160 × 160 m con collider.
 - **La hierba, el viento y el corte están implementados.** La escena conserva los
-  dos campos de vegetación sobre el plano; falta repetir la comprobación visual
-  Vulkan después de este cambio.
+  tres campos de vegetación sobre el plano; falta repetir la comprobación visual
+  Vulkan, que se hizo con la escena anterior.
 - El campo va **por cuadrantes**, con culling por caja y por distancia, asi que
   la densidad se puede subir sin que el motor dibuje las hojas enteras.
 - **Hay dos tipos de hierba.** `MalezaAlta`, alta y seca, sale en matas con
@@ -707,15 +766,16 @@ De paso se arreglo el propio ladeo, que estaba multiplicado por 6
 (`rad_to_deg(_barrido * 6.0)`): un barrido de 96 grados se traducía en un ladeo
 absurdo. Ahora la ganancia es de 0,07 y hay un tope de 8 grados.
 
-### 4.5 Los valores de la hierba estan en dos sitios, y ademas son dos campos
+### 4.5 Los valores de la hierba estan en dos sitios, y ademas son tres presets
 
 Los `@export` de `scripts/hierba.gd` son valores por defecto; los que se juegan
-son los de las dos instancias de `scenes/main.tscn`. Ahora `Hierba` esta a
-0,49 m de altura de referencia y `MalezaAlta` a 0,76 m, las dos con 60 hojas/m2 y
+son los de los presets de `scenes/vegetacion/*.tscn`. Ahora `cesped` esta a
+0,49 m de altura de referencia y `maleza_alta` a 0,76 m, las dos con 60 hojas/m2 y
 radio de siembra 90 m. Las dos bajaron respecto a la version anterior (0,69 y
-1,33 m) porque la maleza tapaba la mitad del encuadre. Ambas usan formación en matas, radios de corte
-diferentes y tamaños de cuadrante diferentes. La tabla exacta está en
-`DOCUMENTACION.md`; hay que mantenerla al cambiar `main.tscn`.
+1,33 m) porque la maleza tapaba la mitad del encuadre. Las tres usan formacion en
+matas, y los tres tienen su radio, su tamano de cuadrante y su recorte. La tabla exacta está en
+`DOCUMENTACION.md`; hay que mantenerla al cambiar los **presets**
+(`scenes/vegetacion/*.tscn`), no `main.tscn`, que solo instancia.
 
 El número total de hojas no se documenta como constante porque depende de los
 parámetros y la semilla. `medir_densidad.gd` lee la configuración de la escena al
@@ -726,9 +786,12 @@ arrancar y las pruebas evitan comparar con cantidades fijas.
 Las herramientas de medicion crean la carpeta. Las imagenes generadas
 (`paso1_de_pie.png` etc) son de diagnostico, no del juego.
 
-**Nota:** las tres capturas que hay ahora si estan versionadas, porque se
-guardaron a mano para comparar. Las que generan las herramientas
-(`comparada_con_hierba.png` etc) no deberian subirse. Si la carpeta llega a
+**Nota:** lo que hay ahora son **30 PNG versionados**, unos 23 MB, y pesan mas
+que todo el juego junto. Se guardaron a mano para comparar, asi que subirlos fue
+una decision, pero las que generan las herramientas (`comparada_con_hierba.png`,
+`comparada_sin_hierba.png`) **no deberian subirse**: se regeneran solas con
+`tools/medir_foto.gd`. El exportador las deja fuera por filtro
+(`export_presets.cfg`), pero en el repositorio siguen ocupando. Si la carpeta llega a
 ensuciarse, la solucion es un `capturas/*.png` en el `.gitignore` con las
 importantes sacadas antes a mano.
 
@@ -753,15 +816,23 @@ importantes sacadas antes a mano.
   asi que el color de lo cortado se podria reaprovechar.
 - **Que el jugador enseñe la hierba en las manos.** El modelo no lleva hierba
   encima todavia.
-- **Sonido de corte.** Ahora solo suena el motor.
-- **Colision con la hierba.** La capa 4 esta reservada pero vacia.
+- ~~**Sonido de corte.**~~ **Hecho.** `audio/corte.wav`, un `AudioStream3D`
+  (`SonidoCorte` en `desbrozadora.tscn`) y `_cortar_sonido()`, que lo dispara con
+  el `pitch_scale` y el volumen en funcion de cuantas hojas se cortaron.
+- **Colision con la hierba.** Las capas 5, 6, 7 y de la 9 en adelante estan libres.
+  La 4 la usa la herramienta suelta. La 8 estaba reservada a los restos y **ha
+  quedado libre** desde que son particulas (2026-09-30).
 - **Ciclo de dia.** La luz es fija.
 - **Mapa de valle y aldea manuales.** No hay terreno definitivo, layout de parcelas,
   edificios ni carreteras en la escena de pruebas.
 - **Conducción y furgoneta jugable.** Hay un modelo de furgoneta, pero no está
   integrada ni tiene punto de inicio en el mundo.
-- **Telemetría del motor en pantalla.** Hay una medida de RPM efectiva y de
-  resistencia, pero aún no existe una interfaz que las presente.
+- ~~**Telemetría del motor en pantalla.**~~ **Hecho.**
+  `scripts/interfaz_herramienta.gd` (un `CanvasLayer` dentro de la herramienta)
+  pinta revoluciones, revoluciones efectivas, carga, combustible, nombre del
+  cabezal y la barra del FILO, todo desde la senal `telemetria_actualizada` y sin
+  tocar nodos internos de la maquina. Lo que **no** hay es el aviso de "filo
+  gastado": la barra se mueve y ya.
 
 ## 6. Estado de los shaders
 
@@ -770,24 +841,33 @@ importantes sacadas antes a mano.
 | `shaders/hierba.gdshader` | correcto. Compila y se ve. Contrato de los 4 canales documentado |
 | `shaders/suelo.gdshader` | correcto. Ruido propio porque Godot 4.7 no trae `noise()` |
 
+Hubo un tercero, `shaders/piedra.gdshader`, de 117 lineas de granito para una
+aldea que no existe. No lo usaba ninguna escena ni ningun script y se borro el
+2026-09-30: un shader sin nada que sombrear no es una anticipacion, son 117 lineas
+que nadie lee ni prueba.
+
 Los dos compilan limpio. Se verifico a proposito rompiéndolos y mirando que
 saliera el error, porque el renderer headless **si** compila los shaders aunque
 no dibuje nada.
 
 ## 7. Medidas utiles para decidir
 
-Configuración efectiva, leída de `main.tscn` (los defaults de
-`scripts/hierba.gd` son distintos):
+Configuración efectiva, leída de los **presets** `scenes/vegetacion/*.tscn` (los
+defaults de `scripts/hierba.gd` son distintos, y `main.tscn` solo instancia, con
+`position` en la zarza:
 
 | Campo | Altura | Densidad | Formación | Radio de siembra | Cuadrante | Recorte | Tocon |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `Hierba` | 0,49 m | 60/m² | 0,70 | 90 m | 24 m | 80 m | 0,15 m |
-| `MalezaAlta` | 0,76 m | 60/m² | 0,70 | 90 m | 12 m | 16 m | 0,06 m |
+| `cesped.tscn` | 0,49 m | 60/m² | 0,70 | 90 m | 24 m | 80 m | 0,15 m |
+| `maleza_alta.tscn` | 0,76 m | 60/m² | 0,70 | 90 m | 12 m | 16 m | 0,06 m |
+| `zarza.tscn` | 1,50 m | 60/m² | 0,70 | 9 m | 12 m | 20 m | 0,12 m |
 
-Los dos campos llevan `densidad` 60/m² y formacion de matas. La maleza subio
-su formacion de 0,24 a 0,70 al arreglar la suite: con 0,24 ocupaba el 93 % del
-mapa y no habia por donde andar, y con 0,70 ocupa el 37 % y se ven los claros. La maleza tiene
-dureza 3,3 (el cesped 1,0) y es la que frena de verdad a la maquina.
+Los tres presets llevan `densidad` 60/m² y `formacion` 0,70. La maleza subio su
+formacion de 0,24 a 0,70 al arreglar la suite: con 0,24 ocupaba el 93 % del mapa
+y no habia por donde andar, y con 0,70 ocupa el **40 %** y se ven los claros. La
+zarza subio de `radio` 34 a 9 m por lo mismo, y subio a 0,70 tambien para que se
+vea tan cerrada como la maleza. La maleza tiene dureza 3,3 y la zarza 3,6 (el
+cesped 1,0), y son las que frenan de verdad a la maquina.
 
 La maleza tiene dureza 3,3. Ambos campos se siembran sobre el plano sin
 exclusiones por terreno o aldea. El radio efectivo de corte común es 1,0 m y lo
@@ -812,15 +892,20 @@ Estado del camino inmediato:
 4. ~~**Darle una version que se pueda instalar.**~~ **Hecho.** Ya estan
    `export_presets.cfg` (Linux y Windows x86_64), la linea `config/version` y
    `scripts/version_pantalla.gd`, que la enseña al arrancar. El ejecutable de
-   Linux ocupa 70 MB, de los cuales **290 KB son el juego**: el resto es la
+   Linux ocupa 70 MB, de los cuales **1,9 MB son el juego**: el resto es la
    plantilla del motor con Vulkan. Aun **no se ha probado jugando**; falta esa
-   comprobacion.
+   comprobacion, y es lo primero que habria que hacer.
 5. **Integrar la furgoneta y conducción básica.** Vehículo, controles y navegación
    siguen pendientes.
-6. **Continuar el bucle de trabajo:** que la zarza vuelva a brotar (la regresion
-   que se decidio aplazar), decidir que hace la raquis de las canas cortadas,
-   conectar la pendiente del terreno con la resistencia y afilar el filo.
+6. **Continuar el bucle de trabajo:** avisar del filo gastado (decidido: sin
+   afilado), conectar la pendiente del terreno con la resistencia, y —si
+   alguno de los dos anteriores cambia de opinion— lo que haga falta para que el
+   escombro obligue a limpiar.
 7. **Después:** encargos, NPCs y la aldea.
+
+Lo que **no** vuelve a salir como pendiente: la regresion de la zarza ni la
+raquis. Ambas se cerraron el 2026-09-29 como decision en contra, y el porque esta
+en "Cerrado: la zarza no vuelve a brotar" mas arriba.
 
 Lo que ya no esta pendiente, para que no se repita: la telemetria
 desacoplada esta en `interfaz_herramienta.gd` con la senal

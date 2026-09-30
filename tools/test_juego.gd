@@ -784,7 +784,8 @@ func _maleza_prueba() -> void:
 	# si el viento se queda colgado del primero los demas se quedan tiesos como
 	# papel mientras el primero ondea, y se nota muchisimo.
 	#
-	# El numero de campos ya no es dos: son siete (cesped, maleza y cinco zarzas).
+	# El numero de campos ya no es dos: son tres, uno por planta (cesped, maleza y
+# zarza).
 	# Y no se escribe aqui, porque un numero en un test es un numero que se queda
 	# viejo: se cuentan los nodos de vegetacion que hay, que es el invariante de
 	# verdad. Cuando se anada un campo nuevo, esto sigue valiendo.
@@ -1069,12 +1070,11 @@ func _cabezal_visible() -> void:
 		"el cabezal apoya en el collider del suelo (y = %.2f, suelo %.2f)"
 		% [corte_bajo.y, suelo_corte])
 	# Y que ese punto tan bajo es de verdad alcanzable, que es lo que permite
-	# rematar una raiz de zarza. Sin esto, el cabezal podria quedarse a un palmo
-	# del suelo y la mecanica de la zarza seria imposible de completar. La
-	# garantia de que una pasada de verdad tumba una raiz esta en
-	# `tools/test_zarza_raiz.gd`.
+	# rematar la base de una mata. Sin esto, el cabezal podria quedarse a un palmo
+	# del suelo y la maleza alta no se podria cortar de raiz. Que una pasada de
+	# verdad tumbase una mata esta en `tools/test_vegetacion_tier3.gd`.
 	_ok_si(corte_bajo.y < 0.06,
-		"y llega a la altura a la que hay que cortar la raiz de la zarza (%.3f m)"
+		"y llega a la altura a la que hay que cortar la base de la maleza (%.3f m)"
 		% corte_bajo.y)
 	Input.action_release("acelerador")
 	# Sin acelerar el cabezal sube: es el peso del cuerpo sobre el morro, y

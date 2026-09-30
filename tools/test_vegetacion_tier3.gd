@@ -105,9 +105,9 @@ func _alcance_del_morro() -> void:
 ##    Aqui hay que tener una cosa clara, porque cambia como se juega: el corte es
 ##    un **disco en el suelo** (`_dist2` mira solo x y z), asi que la altura del
 ##    morro NO decide que se corta. Y una hoja cortada se queda cortada: el
-##    tier 3 va con `dejar_tocon = false`, o sea que una pasada deja la planta a
-##    cero y no hay que volver a rematar. No existe el "corto la copa y luego bajo
-##    a la base" de la zarza con raiz que habia antes.
+##    tier 3 va con `dejar_tocon = true` y `altura_tocon = 0.12`, o sea que una
+##    pasada deja un tocón visible y no hay que volver a rematar. No existe el
+##    "corto la copa y luego bajo a la base" que tuvo la zarza con raíz.
 ##
 ##    Lo que queda del tier 3 es el COSTE, no el numero de pasadas: el motor se
 ##    ahoga, el filo se gasta mas rapido y la gasolina sube. Eso se mide en
@@ -115,7 +115,7 @@ func _alcance_del_morro() -> void:
 ##    con el jugador y la maquina, abre la mata y llega al suelo.
 func _la_zarza_se_corta() -> void:
 	print("\n== una pasada de verdad abre el tier 3 ==")
-	var mata := _mundo.get_node_or_null("Zarzas/ZarzaCercana") as Hierba
+	var mata := _mundo.get_node_or_null("Zarza") as Hierba
 	_comprobar(mata != null, "la zarza de prueba esta en la escena")
 	if mata == null:
 		return
@@ -178,75 +178,38 @@ func _la_zarza_se_corta() -> void:
 		% [por_aqui, disco])
 
 
-## 3. **El escombro**: que caiga al suelo, al lado, que pese, y que se pueda apartar.
+## 3. **El escombro**: que al cortar salga la rafaga y que no quede nada fisico
+## en el suelo. Desde el 2026-09-30 los restos son particulas: ya no pesan, no se
+## posan y no se empujan, asi que lo que se puede seguir exigiendo es que la
+## rafaga se dispare y que el sistema viejo no haya vuelto.
 func _el_escombro() -> void:
 	print("\n== el escombro ==")
 	var restos := Restos.obtener(self)
 	restos.limpiar()
-	var mata := _mundo.get_node_or_null("Zarzas/ZarzaCercana") as Hierba
+	var mata := _mundo.get_node_or_null("Zarza") as Hierba
 	if mata == null:
 		return
 	# Un punto limpio, para que lo que se mide sea el escombro y no lo que hubiera
 	# antes.
 	var corte: Vector3 = _punto_con_hoja(mata, 0.8) + Vector3(0.0, 0.5, 0.0)
 	mata.cortar_y_soltar(corte, 1.2, 60.0)
-	var cuenta := int(restos.recuento()["activos"])
-	print("   saltones %d" % cuenta)
-	_comprobar(cuenta > 0, "al cortar salta escombro (%d trozos)" % cuenta)
-
-	# **Pesan.** Con 40 gramos el amontonado temblaba con cada pasada y se
-	# empujaba solo. Es un numero de juego, no un detalle: el escombro tiene que
-	# quedarse donde cae.
-	_comprobar(restos.masa_de_un_trozo() >= 0.2,
-		"y pesa de verdad (%.2f kg por trozo)" % restos.masa_de_un_trozo())
-
-	await _esperar(90)
-	var alto := 0.0
-	for k in restos.indices_vivos():
-		alto = maxf(alto, restos.posicion_de(k).y)
-	print("   el mas alto esta a %.2f m" % alto)
-	# Si el escombro saliera a la altura del filo taparia el cabezal y pareceria
-	# que la maquina se levanta entre un monton. Tiene que estar en el suelo, y
-	# ser bajo de verdad.
-	_comprobar(alto < 0.25,
-		"y se queda en el suelo, no a la altura del cabezal (%.2f m)" % alto)
-	_comprobar(int(restos.recuento()["en_suelo"]) >= cuenta,
-		"y se quedan en el suelo (%d de %d)"
-		% [int(restos.recuento()["en_suelo"]), cuenta])
-
-	# Y que la maquina los aparte, como en el juego.
-	#
-	# **En centimetros absolutos, no en ratio**, y medido: seis ejecuciones seguidas
-	# mueven el escombro 0,35 -> 0,46, 0,33 -> 0,44, 0,62 -> 0,74, 0,62 -> 0,73,
-	# 0,45 -> 0,56 y 0,52 -> 0,64. **Once centimetros en las seis.** El empujon es
-	# igual de constante siempre; lo que varia es la media de partida, de 0,33 a
-	# 0,62, segun que trozos se reciclan y donde caen. Con un ratio de 1,2 esta
-	# comprobacion fallaba una de cada dos sin que cambiara nada: el mismo fallo que
-	# se corrigio en `test_movimiento_integrado.gd`, y aqui se habia olvidado.
-	var antes := _distancia_media(restos, corte)
-	for _i in 4:
-		restos.empujar(corte, 1.2, Vector3.FORWARD, 1.0)
-		await physics_frame
-	var despues := _distancia_media(restos, corte)
-	var movido := despues - antes
-	print("   el escombro se aparta de %.0f a %.0f cm, %.0f movidos"
-		% [antes * 100.0, despues * 100.0, movido * 100.0])
-	_comprobar(movido > 0.06, "y apartarlo lo mueve de sitio")
-
-	# Y que la pila crece: es lo que tapa el suelo por donde ya has pasado.
-	# Aqui antes se comprobaba que quedara un monton de material. **Ya no hay
-	# montones**: se borro el sistema entero y el suelo solo guarda los trozos
-	# sueltos. Lo que se comprueba ahora es que el material cae **cerca del
-	# corte**, que es lo que hacia util el monton: la pasada siguiente tiene que
-	# pisar donde acaba de cortar y no dejar un reguero de escombro a tres metros.
-	var cerca := 0
-	for n in _trozos_de(restos):
-		var p := (n as Node3D).global_position
-		if Vector2(p.x - corte.x, p.z - corte.z).length() < 1.2:
-			cerca += 1
-	_comprobar(cerca > 0,
-		"y el escombro cae junto al corte, no apartado (%d de %d a menos de 1,2 m)"
-			% [cerca, int(restos.recuento()["activos"])])
+	_comprobar(int(restos.recuento()["soltados"]) > 0,
+		"al cortar salta escombro (%d trozos pedidos)"
+		% int(restos.recuento()["soltados"]))
+	# Techo casado con el ritmo real: dos piezas por hoja, rafaga de hasta 24
+	# y drenaje cada 0,6 s. Con este corte de prueba no debe pasar de ahi.
+	_comprobar(int(restos.recuento()["soltados"]) <= 140,
+		"y el corte no pide una barbaridad de trozos (%d)"
+		% int(restos.recuento()["soltados"]))
+	await _esperar(30)
+	# La firma del sistema rigido era el `RigidBody3D`. Con particulas no puede
+	# quedar ni uno: si aparece, es que algo ha vuelto atras.
+	var cuerpos := 0
+	for n in _descendientes(restos):
+		if n is RigidBody3D:
+			cuerpos += 1
+	_comprobar(cuerpos == 0,
+		"y no queda cuerpos fisicos de escombro por el suelo (%d)" % cuerpos)
 
 
 ## Coloca al jugador para que el CABEZAL quede encima de `destino`, mirando con la
@@ -291,15 +254,6 @@ func _punto_con_hoja(mata: Hierba, r: float) -> Vector3:
 	return mejor
 
 
-func _distancia_media(restos: Restos, punto: Vector3) -> float:
-	var suma := 0.0
-	var vivos := restos.indices_vivos()
-	for k in vivos:
-		suma += Vector2(restos.posicion_de(k).x - punto.x,
-			restos.posicion_de(k).z - punto.z).length()
-	return suma / maxf(vivos.size(), 1.0)
-
-
 ## Espera a que la maqueta y la camara se queden quietas. Las dos van con retardo
 ## y sin esto se mide una pose que el jugador nunca ve.
 func _esperar_al_que_se_asiente(limite: float = 0.002, tope: float = 3.0) -> void:
@@ -315,15 +269,6 @@ func _esperar_al_que_se_asiente(limite: float = 0.002, tope: float = 3.0) -> voi
 		else:
 			quieto = 0
 		anterior = ahora
-
-
-## Todos los trozos sueltos que hay en el pool, los que esten donde esten.
-func _trozos_de(restos: Restos) -> Array[Node]:
-	var fuera: Array[Node] = []
-	for n in _descendientes(restos):
-		if n is RigidBody3D:
-			fuera.append(n)
-	return fuera
 
 
 func _descendientes(nodo: Node) -> Array[Node]:

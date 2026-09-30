@@ -4,6 +4,89 @@ Lo que se ha tocado y por que. Para el detalle de como esta cada cosa por dentro
 [DOCUMENTACION.md](DOCUMENTACION.md); para el estado y los problemas que quedan,
 [REVISION.md](REVISION.md).
 
+## Los restos ya son modelos de verdad: familia de 8 piezas y ajuste en un solo sitio — 2026-09-30
+
+El pool de particulas se queda, pero **los trozos dejan de ser una cinta
+construida a codigo con `SurfaceTool`**: ahora son ocho piezas low poly de
+`models/restos.glb`, generadas y medidas por `tools/crear_restos.py`, en tres
+familias que se piden con el tipo de planta (cesped: `HojaCesped1..3`; maleza:
+`TalloMaleza1..2`; zarza: `CanaZarza1..3`). La cinta se leia como losa y sus
+cuatro variantes eran casi la misma; el escombro bueno es un enredo.
+
+- **`tools/crear_restos.py`** (nuevo): construye la familia barriendo secciones
+  — laminas con arco, tuerce y punta doblada; canas de 6 lados con el **corte
+  aplastado**, que es la marca del hilo. Presupuesto: 28-30 triangulos por pieza
+  (max 40), 230 en total. Origen CENTRADO en cada pieza (las particulas rotan
+  sobre el origen), material unico mate `RestoVerde` (blanco verdoso, roughness
+  0,9, doble cara) y **color de vertice** de verde en el pie a pajizo en la
+  punta (viaja como COLOR_0 en el .glb). El informe comprueba medidas, tris,
+  centrado y el aplastado del corte pieza a pieza.
+- **`scripts/restos.gd` reescrito**: pool de 48 emisores (export) que carga las
+  piezas del .glb por familia; cada rafaga se reparte entre `piezas_por_rafaga`
+  emisores y a cada uno le toca una pieza al azar, que es lo que mezcla canas
+  distintas en la misma nube. La firma publica no cambia:
+  `soltar(origen, cantidad, direccion, tono, escala, tipo = -1)`, `recuento()`
+  con las claves de siempre, `limpiar()` y `obtener()`.
+- **TODO el ajuste en un solo sitio**: `densidad` (trozos por hoja),
+  `piezas_min_rafaga`, `max_por_rafaga`, `espera_max`, `vida`, `velocidad_saltar`,
+  `alza`, `gravedad`, amortiguacion, tamanos, dispersion, giro, bamboleo,
+  variacion de tono y el pool: todos `@export_range` y **leidos en cada rafaga**
+  (ajustables en caliente desde el arbol Remote). El encabezado del script lleva
+  la cuenta hecha: `rafagas/s = emisores / (piezas_por_rafaga * vida)`.
+- **`hierba.gd` adelgaza**: pierde el acumulador, el temporizador y las dos
+  constantes del escombro (se mudan a `restos.gd`); `_soltar_restos` queda en una
+  sola llamada con las hojas cortadas, el tono, la escala y el tipo de planta.
+- **`tools/exportar_blender.py`**: opcion `colores_vertice` (apagada por
+  defecto) para exportar COLOR_0; el resto de modelos no cambia.
+- **Pruebas**: `tools/test_restos.gd` (nuevo) comprueba en headless la carga de
+  las 3+2+3 piezas, la acumulacion, la rafaga de 24, el drenaje por tiempo y
+  `limpiar()`. `test_vegetacion_tier3.gd` y `test_movimiento_integrado.gd` siguen
+  en verde (24 trozos pedidos en el corte de prueba, sin cuerpos fisicos).
+- **Pendiente de juicio visual**: la familia se ha validado por medidas y por
+  render de control; el aspecto en el juego lo juzga el usuario.
+
+## Los restos vuelven a ser particulas: se borra la fisica del escombro — 2026-09-30
+
+Se revoca **a proposito** el diseno del dia 29. El pool de `RigidBody3D` se
+construyo para dos cosas —que el trozo **se quedara en el suelo** y que la
+maquina **lo pudiera apartar**— y esas dos cosas ya no se quieren. Y lo que
+quedaba en juego (saltar al cortar, caer, y verse como monton desde la camara
+de la maquina) es el trabajo de una particula, pagado en cuerpos rigidos,
+contactos, aparcado en frio y un sistema de empuje a mano.
+
+- **`scripts/restos.gd` reescrito**: pool de 10 `CPUParticles3D` `one_shot` que
+  se relanzan en rotatorio. La firma de entrada no cambia
+  (`soltar(origen, cantidad, direccion, tono, escala)` desde `hierba.gd`), y el
+  singleton con `obtener()` se queda igual, asi que nadie mas se entera.
+  - **CPU y no GPU**: el color va por rafaga (el de la planta cortada) y en CPU
+    es una propiedad; en GPU pide materiales con atributos custom duplicados por
+    emisor y no es comprobable en headless. Con 60 particulas el ahorro da igual.
+  - Se conserva la **malla curva** de cuatro siluetas: lo que hacia que el trozo
+    pareciera hoja y no losa sigue siendo de la malla, no de la fisica.
+  - `vida`, `velocidad_saltar` y `alza` siguen siendo `@export` **calientes**
+    (se leen por rafaga, se ajustan desde el arbol Remote). `rafagas`, `tamano`
+    y `variantes` se leen en `_ready`, igual que antes.
+- **Fuera la mecanica de empuje**: `empujar()` en `restos.gd` y
+  `_apartar_restos()` en `desbrozadora.gd`, con su acumulador. Era el unico
+  sitio donde la maquina interactuaba con lo del suelo.
+- **La capa 8 queda libre**: los restos ya no son cuerpos de fisica. Se conserva
+  el nombre en `project.godot` por no renumerar capas; ya no lo pone nadie.
+- **Pruebas y herramientas**: `test_vegetacion_tier3.gd` y
+  `test_movimiento_integrado.gd` pierden los asertos de posado, masa y empuje y
+  se quedan con "al cortar se pide la rafaga" y "no queda ningun `RigidBody3D`
+  suelto" (guardia contra revivir el sistema viejo). **Borrados**
+  `test_origen_restos.gd` y `ver_restos.gd`: vigilaban y fotografiaban cuerpos
+  en el suelo, y ya no hay cuerpos que vigilar ni estado que fotografiar.
+- **Lo que se pierde, dicho en claro**: **el suelo ya no recuerda el trabajo**.
+  Donde has pasado vuelve a estar limpio en cuanto la rafaga se apaga (~1,6 s);
+  no hay monticulo que rodear ni escombro que apartar. Es exactamente el
+  comportamiento que se rechazo en su dia y el que se vuelve a elegir ahora;
+  DOCUMENTACION §12 cuenta el vaiven entero (particulas → cuerpos → particulas)
+  para que nadie lo lea como un olvido.
+- **Pendiente de juicio visual**: nadie ha visto aun la rafaga en el editor a
+  la distancia de la camara. El aspecto de los restos no lo mide ninguna prueba,
+  hoy menos que nunca.
+
 ## Ya hay un ejecutable: se empaqueta el juego — 2026-09-29
 
 Hasta hoy `v0.1.0` era una etiqueta: el proyecto se abria con el editor y no

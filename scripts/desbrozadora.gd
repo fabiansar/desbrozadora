@@ -294,8 +294,6 @@ var desgaste_cabezal: float:
 		return _estacion.desgaste()
 
 var _girado := 0.0
-## Cuanto tiempo lleva acumulado el empuje de los restos. Ver `_apartar_restos`.
-var _acumulo := 0.0
 var _giro_carrete_acumulado := 0.0
 ## El barrido de la maquina, en radianes, ya con inercia. Este es el estado:
 ## el objetivo es lo que se le pide, esto es lo que hace de verdad.
@@ -397,31 +395,9 @@ func _process(delta: float) -> void:
 	_suavizar_resistencia(delta)
 	_mover_barrido(delta)
 	_colocar(delta)
-	_apartar_restos()
 	telemetria_actualizada.emit(rpm, rpm_efectiva(), rpm_maximas, _resistencia,
 		combustible_litros, combustible_maximo_litros, nombre_cabezal,
 		desgaste_cabezal)
-
-
-## **Aparta los restos que hay por donde pasa el cabezal.**
-##
-## Es el companion de que los restos tengan cuerpo: un `CharacterBody3D`, que es
-## lo que es el jugador, no empuja a los cuerpos rigidos en Godot 4. Se atraviesa
-## todo sin que se note. Asi que el empuje se hace aqui, a mano, y solo cuando se
-## esta cortando de verdad, que es cuando tiene sentido: pasar por encima de un
-## monticulo sin trabajar no lo mueve.
-##
-## Se hace con un acumulador y no cada fotograma porque el empuje es por trozo, no
-## por tiempo, y empujar 50 veces por segundo las haria volar.
-func _apartar_restos() -> void:
-	if not cortando or not is_inside_tree():
-		return
-	_acumulo += get_process_delta_time()
-	if _acumulo < 0.12:
-		return
-	_acumulo = 0.0
-	Restos.obtener(get_tree()).empujar(punto_de_corte(),
-		radio_corte_actual() + 0.3, _adelante(), 1.0)
 
 
 ## Se mide la maqueta una vez y se guarda el resultado.

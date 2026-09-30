@@ -15,22 +15,23 @@
 ; 0,09 y 12 del cesped). Con eso se lee como planta leñosa sin ser ni una malla
 ; ni un arbusto aparte.
 ;
-; Lo que cuesta: `dureza` 4,0 es lo mas alto del juego (el cesped es 1,0 y la
+; Lo que cuesta: `dureza` 3,6 es lo mas alto del juego (el cesped es 1,0 y la
 ; maleza 3,3), y con el nylon encima, que tiene resistencia 5 contra el tier 3, el
 ; motor se va al tope. Ese es el trabajo caro, y por eso las zarzas son las
 ; manchas donde se decide que cabezal se trae.
 ;
-; ALTURA: 1,6 m, y no mas. Medido: con el motor echado el morro llega a 1,34 m
+; ALTURA: 1,5 m, y no mas. Medido: con el motor echado el morro llega a 1,34 m
 ; mirando 55 grados arriba, asi que una zarza de 2,4 m **no se puede cortar**:
 ; la maquina no alcanza ni el primer palmo. Y ademas, al bajar la mirada, el morro
 ; se hunde y la parte alta se esquiva. Un matorral que hay que ir a buscar por
 ; encima con el cabezal no es un matorral, es un arbol.
 ;
-; Con 1,6 m la cosa se abre en tres pasadas: copa a la altura de la cabeza, cuerpo
+; Con 1,5 m la cosa se abre en tres pasadas: copa a la altura de la cabeza, cuerpo
 ; a media altura y base a ras. Ese es el trabajo, y es alcanzable.
 ;
-; Es una mancha local, no un campo: `radio` 9 m. Cada zarza de la partida es una
-; instancia de esta escena en un punto distinto, con su altura y su semilla.
+; Es una mancha local, no un campo: `radio` 9 m. En la escena va UNA, con los
+; numeros de este preset y sin excepciones: un nodo por planta, igual que el
+; cesped y la maleza. Repartir zarzas por el mapa sera cosa del valle.
 
 [node name="Zarza" instance=ExtResource("1_base")]
 tipo = 3
@@ -77,11 +78,13 @@ lado_cuadrante = 12.0
 distancia_maxima = 20.0
 ; TOCON. Esto es lo que hacia que la zarza pareciera que no se cortaba.
 ;
-; El corte ocurre, y se nota en los datos, pero con `dejar_tocon = false` la hoja
-; cortada se dibuja **a cero de alto**: desaparece. Dentro de un arbusto denso no
-; dejas ni rastro, porque no hay tocón que destaque. El cesped deja un palmo de
-; 15 cm y la maleza uno de 6, y los dos se ven a metro y medio; la zarza no
-; deixaba nada y parecia que la maquina no cortaba.
+; El corte ocurre, y se nota en los datos, pero **estaba** en `dejar_tocon = false`,
+; y con la hoja cortada dibujada **a cero de alto** la copa se seguia viendo
+; entera: no se notaba nada. `dejar_tocon` esta en `true` y lo de abajo es lo que
+; lo arregla. Dentro de un arbusto denso casi no se deja rastro, porque no hay
+; tocón que destaque; el cesped deja un palmo de 15 cm y la maleza uno de 6, y los
+; dos se ven a metro y medio. Con 12 cm la zarza pierde una franja de 12 cm que se
+; ve desde fuera, y con eso se nota que la maquina esta cortando.
 ;
 ; Ademas el canal rojo de la malla es la altura **en metros**, no una fraccion, y
 ; el shader lo lee como fraccion. Con 0,0 daba 0 exacto; con 0,12 el arbusto

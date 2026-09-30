@@ -42,7 +42,7 @@ La segunda herramienta, la **hoz** (`models/hoz.glb`, generada con
 `tools/crear_hoz_mesh.py`), sigue la misma regla: madera mate en el mango, acero
 en la virola y en la hoja, silueta de media luna con el filo por dentro y la punta
 por debajo de la mano, que es lo que la hace reconocible como una hoz y no como
-un cuchillo curvo. Va en 114 triangulos, que es lo que se ve en primera persona
+un cuchillo curvo. Va en 120 triangulos, que es lo que se ve en primera persona
 sin mirar de cerca.
 
 Esta es una primera calibración, no el resultado visual final. Hay que revisar en

@@ -142,7 +142,9 @@ Lo que hace que el nucleo se sienta bien antes de ponerle nada alrededor.
       escena actual son de 24 m para `Hierba` y 12 m para `MalezaAlta`.
 - [x] Limpiar el `Cube` que sobra en el modelo de la desbrozadora.
 - [x] Suite de pruebas que fija el comportamiento. Empezo en 131 comprobaciones
-      en headless; hoy son **200**.
+      en headless; hoy son **207 en la suite principal** y 84 en la de
+      movimiento, en nueve ficheros `tools/test_*.gd`. Los numeros exactos estan
+      en la tabla de `REVISION.md`.
 
 > La fase 1 se cierra con lo de la camara y el chunking, que no estaban
 > previstos aqui y salieron de jugar: el primero de mirar arriba y perder la
@@ -170,18 +172,30 @@ de nada si la maquina no nota que hay algo delante ni si llega a cortarlo.
       el cabezal no pasaba de 0,35 m y no habia forma de cortar nada por encima
       de la rodilla.
 - [x] **Discos y hilo.** Se cambian en caliente con `Q` y el motor parado. Cada
-      uno declara para que tipos de vegetacion vale y cuanto radio de pasada
-      tiene, asi que cambiar de cabezal cambia de verdad como se trabaja. El
-      desgaste y los limites por tipo todavia no.
+      uno declara su eficacia y su resistencia **contra cada nivel de planta**
+      (tres numeros de 1 a 5) y su radio de pasada, asi que cambiar de cabezal
+      cambia de verdad como se trabaja. El desgaste **si** esta.
 - [x] **Consumo de combustible.** El motor lleva deposito, se consume segun la
       demanda y sube con la carga, y el panel de la herramienta lo enseña.
-- [ ] **Desgaste y afilado.** La cuchilla pierde filo con lo que corta y hay que
-      revisarla, pero no hay forma de recuperarlo todavia.
+- [x] **Desgaste del filo.** Cada hoja cortada lo consume, el desgaste se guarda
+      **por cabezal** (cambiar a un repuesto y volver no rejuvenece el filo), el
+      radio de pasada baja con el y la barra del FILO se mueve mientras trabajas.
+- [ ] **Afilado.** Decidido el 2026-09-29: **no hay afilado**, solo un aviso. Un
+      afilado a medias se nota mucho y da una sensacion de bucle infinito sin
+      salida; avisar "cambia de cabezal" es una salida clara, y el jugador tiene
+      tres repuestos (`Q`). Falta el aviso.
 
-> **Lo que queda de esta fase y por que.** El afilado sigue pendiente: es un
-> sistema que se nota mucho cuando esta a medias, y ahora mismo el desgaste se
-> acumula y no hay manera de arreglarlo. Por ahora el suelo de pruebas
-> es plano; la futura pendiente del valle aún no influye en la resistencia.
+> **Lo que queda de esta fase y por que.** El desgaste ya se acumula y ya se ve
+> (`estacion_cabezal.gd`, con `registrar_corte()` y la barra del FILO); lo unico
+> que no hay es forma de recuperarlo, y se ha decidido que no la haya. Queda
+> ademas el **aviso** de filo gastado, que es de interfaz y no de simulacion. Por
+> ahora el suelo de pruebas es plano; la futura pendiente del valle aún no
+> influye en la resistencia.
+>
+> Y ojo con una cosa que se dio por hecha: `Herramienta.tipos_compatibles` existe
+> en el recurso y esta relleno, pero **`cabezal_puede_cortar()` no lo consulta**:
+> mira que haya un cabezal montado y ya. O sea que los "limites por tipo de
+> planta" existen como dato y **no se estan aplicando**.
 
 ### Entorno actual y mapa definitivo (por hacer)
 
@@ -193,9 +207,12 @@ de nada si la maquina no nota que hay algo delante ni si llega a cortarlo.
       como máximo.
 - [ ] Colocar manualmente la aldea y sus assets desde el editor; no habrá
       generador procedural de parcelas.
-- [x] Medición Vulkan del campo y comparación visual de `Hierba` con la
-      configuración actual. La mediana está limitada por VSync; no aísla el coste
-      de cada elemento de la escena.
+- [ ] Medición Vulkan del campo y comparación visual de `Hierba` con la
+      configuración **actual**. **Medido, pero no con esta escena**: la medición registrada es de la escena
+      anterior, con terreno procedural, y `medir_foto.gd` dio 93,9 % de pixeles
+      cambiados al ocultar la hierba. El plano de pruebas actual **no se ha
+      perfilado ni medido visualmente**. La mediana esta ademas limitada por
+      VSync, asi que no aisla el coste de cada elemento.
 - [ ] Validar visualmente el valle y las carreteras cuando se incorporen.
 
 ### Feedback de la sesión actual
@@ -203,9 +220,11 @@ de nada si la maquina no nota que hay algo delante ni si llega a cortarlo.
 - [x] Movimiento, herramienta y encuadre considerados correctos; el suelo queda
       temporalmente plano mientras se prepara el mapa definitivo.
 - [ ] Revisar la resistencia de la maleza y cómo la carga modifica el motor.
-- [ ] Antes de sumar combustible/desgaste, separar el componente de motor del
-      controlador físico de la desbrozadora; `telemetria_actualizada` define el
-      contrato para la interfaz futura.
+- [x] Separar el componente de motor del controlador físico de la desbrozadora.
+      **Hecho**: `scripts/motor_desbrozadora.gd` (un `RefCounted` con
+      `configurar()`, `avanzar()` y `repostar()`), y `telemetria_actualizada` es el
+      contrato de la interfaz. **Combustible y desgaste ya estan sumados** encima,
+      asi que esta casilla estaba puesta cuando ya no tenia nada que delante.
 - [x] Añadir una lectura de RPM en la interfaz, conectada a telemetría de la
       desbrozadora y no acoplada directamente a su nodo visual. **Ya estaba
       hecha** y la hoja de ruta no lo recogia: `scripts/interfaz_herramienta.gd`
@@ -222,19 +241,25 @@ de nada si la maquina no nota que hay algo delante ni si llega a cortarlo.
 ### Fase 3 - La zarza y las manos  _(hecho en v0.1.0)_
 
 Aqui el juego deja de ser "picar hierba" y pasa a ser **un trabajo con dos partes
-distintas**: abrirse paso, y quitar la cosa de raiz. La diferencia entre las dos
-es la que hace que haya que bajar el morro.
+distintas**: abrirse paso, y quitarse de delante lo que queda. La diferencia entre
+las dos es la que hace que haya que bajar el morro.
 
-- [x] **La zarza como maraña, no como columna de altura.** Cada celda guarda si
-      hay **corona** (raiz) y a que vecinos se agarra, y una inundacion desde las
-      coronas decide que se sostiene que. De ahi sale la regla central sin
-      escribirla: **cortar la base de una mata tumba lo que solo se sostenia con
-      ella, y lo de arriba sigue en pie si tiene otro enganche con corona**.
-- [x] **La raiz no muere.** Mientras quede una corona, la zarza vuelve. Por eso
-      una pasada por la copa abre paso y no arregla nada: es el trabajo que no
-      vale, y el juego lo ensena sin decir nada.
-- [x] **El enredo se paga.** Con `enredio` alto la copa aguanta los cortes de uno
-      en uno y hay que dar varias pasadas. Un claro se tumba de una.
+- [x] **La zarza es un tercer escalon, con los mismos numeros cambiados.** No es
+      un sistema aparte: es `scenes/vegetacion/zarza.tscn`, la misma hoja
+      `hierba.tscn` que el cesped y la maleza, con `tipo = 3`, `altura = 1.5`,
+      `dureza = 3.6` y una hoja ancha y tiesa. La diferencia entre los tres
+      niveles son **numeros**, y por eso ninguno de los tres necesita codigo
+      propio. *Hubo* una `scripts/zarza.gd` de 888 lineas con celdas, coronas y
+      enredo; se borro entera (ver el punto siguiente).
+- [x] **Lo que cuesta la zarza no es el numero de pasadas, es el motor.** Una
+      pasada la abre: el corte es un disco a ras de suelo, asi que da igual a que
+      altura este el morro. Lo que se paga es que con `dureza` 3.6 y el nylon
+      encima el motor se va al tope. Por eso las zarzas son las manchas donde se
+      decide que cabezal se trae.
+- [x] **La zarza se ve cortada.** Un tocón de 12 cm, entre los otros dos: el
+      cesped deja 15 y la maleza 6. Con el tocón el arbusto pierde una franja que
+      se ve desde fuera; sin él, la copa seguía ahí y parecía que la maquina no
+      cortaba.
 - [x] **El escombro se queda y hay que apartarlo.** Lo que cae no desaparece:
       son trozos sueltos con peso que la maquina aparta al pasar.
       *Revisado:* el "monton" que tapaba lo de debajo era un segundo sistema que
@@ -247,13 +272,22 @@ es la que hace que haya que bajar el morro.
 - [x] **Una segunda herramienta que se comporta de otra manera.** La hoz, a mano,
       rapida en la maleza y sin gastar, pero que no entra en la zarza. Existe
       justo para que la desbrozadora deje de ser la unica respuesta.
-- [ ] **Que la zarza vuelva a brotar.** La regresion se decidio aplazar; sin ella,
-      tumbar la raiz es el final del asunto y no hay nada que volver a hacer.
+- [x] **Que la zarza NO vuelva a brotar. Decidido el 2026-09-29: no lo hace.**
+      Se cerro la puerta a la regresion, y con ella a la mecanica de "bajar a
+      arrancarla". Cortar y ya esta; no hay nada que volver a hacer, y eso es lo
+      que se quiere. El juego es mas corto de aprender y no se castiga al
+      jugador por un trabajo que no le piden.
+      - No es una funcionalidad pendiente, es una **decision en contra**: el
+        sistema de celdas y coronas que lo hacia posible **se borro entero** y no
+        va a volver. Anotado aqui para que la hoja de ruta no lo siga
+        promendiendo.
 - [ ] **Que el escombro tenga que reducirse a mano.** Habia una version de esto
       cuando los montones eran un sistema aparte: la razon de verdad para
       quitarlos es que una cana cortada en el suelo echa raquis. Con el sistema
-      borrado, esta todavia no esta en el juego y **no es solo un boton que
-      falte**: hay que decidir que hace la raquis.
+      borrado, esta todavia no esta en el juego. **Y con la decision de arriba,
+      la raquis tampoco viene:** el escombro ya no es trabajo pendiente, es el
+      rastro de lo que has cortado. Si algun dia hace falta que obligue a
+      limpiar, habra que inventar otra razon de juego, no resurrecta esta.
 
 ### Fase 4 - Conduccion
 
@@ -295,7 +329,7 @@ Se dejan escritas para que no se rediscutan en cada cambio.
 | **El viento es un nodo del mundo, no de cada campo** | Con dos tipos de hierba, un `Viento` por campo significaba dos mapas peleandose por los mismos materiales. El viento es una cosa del prado, y por eso usa el radio mayor de todos los campos. |
 | La suite va en headless y es obligatoria antes de dar algo por bueno | Es lo que permite seguir tocando fisicas sin depender de que alguien mire. |
 | **La suite con ventana no se lanza con el juego abierto** | Godot se queda con el foco y la entrada, y salen fallos falsos de raton y de movimiento. En headless no hay ese problema. |
-| Los valores de la hierba del juego viven en `main.tscn`, no en el script | La hierba se ajusta a ojo en el Inspector mientras se juega; si estuvieran en el codigo habria que recompilar para cambiar la densidad. Ademas son **dos campos con valores distintos** (`Hierba` y `MalezaAlta`), no uno con parametros. |
+| Los valores de la hierba del juego viven en los **presets** `scenes/vegetacion/*.tscn`, no en el script ni en `main.tscn` | La hierba se ajusta a ojo en el Inspector mientras se juega; si estuvieran en el codigo habria que recompilar para cambiar la densidad. Ademas son **tres presets con valores distintos** (cesped, maleza_alta, zarza), y `main.tscn` instancia **uno por planta, sin grupos ni variantes**: la unica linea que escribe ahi es donde se planta la zarza. Antes habia cinco instancias suyas con `altura`/`radio`/`semilla` propios; se redujo a una el 2026-09-30, porque un nodo por planta es lo que hace que las tres se entiendan igual. |
 | Los valores de feltro van en el Inspector, no en el codigo | `max_left_angle`, `max_right_angle`, `sweep_speed`, `inertia_smoothness`, `masa_izquierda` y `rigidez_derecha` se ajustan sin recompilar. |
 
 ---

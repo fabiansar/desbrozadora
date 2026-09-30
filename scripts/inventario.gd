@@ -33,7 +33,12 @@ const HUECOS := 9
 ## Capa de colision de lo que esta suelto por el suelo. Va en la 4 a proposito:
 ## el jugador NO la lleva en su mascara, asi que se puede andar por encima de
 ## una herramienta sin que el suelo se le hunda ni se le falsee el apoyo.
-const CAPA_SUELTO := 8
+##
+## Esto es el **numero de capa**, y para ponerla se desplaza. Antes valia 8, que
+## es la mascara de bits de la capa 4 y parece la capa 8: la 8 la usan los restos
+## (`scripts/restos.gd`) y el confounderse daria una herramienta que el jugador
+## atraviesa y que la recogida no encuentra. Los dos scripts cuentan igual.
+const CAPA_SUELTO := 4
 ## A que distancia se coge algo del suelo, en metros.
 @export var alcance_recogida := 3.0
 
@@ -283,7 +288,7 @@ func soltar_en_mano() -> void:
 	# se suelta donde estaba y no aparece en otro sitio.
 	var cuerpo := RigidBody3D.new()
 	cuerpo.name = "Suelto_%s" % datos.nombre
-	cuerpo.collision_layer = CAPA_SUELTO
+	cuerpo.collision_layer = 1 << (CAPA_SUELTO - 1)
 	cuerpo.collision_mask = 1
 	cuerpo.mass = 4.0
 	cuerpo.add_to_group("suelto")
@@ -376,7 +381,7 @@ func _buscar_bajo_mirada() -> RigidBody3D:
 	var desde := camara.global_position
 	var consulta := PhysicsRayQueryParameters3D.create(desde,
 		desde - camara.global_transform.basis.z * alcance_recogida)
-	consulta.collision_mask = CAPA_SUELTO
+	consulta.collision_mask = 1 << (CAPA_SUELTO - 1)
 	consulta.collide_with_areas = false
 	consulta.collide_with_bodies = true
 	var golpe := espacio.intersect_ray(consulta)
